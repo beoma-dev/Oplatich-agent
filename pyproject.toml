@@ -1,0 +1,19 @@
+# Конфигурация инструментов. Зависимости ставятся из requirements.txt
+# (его же использует Dockerfile).
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    "E501",  # длинные строки: русские тексты сообщений бота
+    "B008",  # FastAPI-паттерн: Form(...)/File(...) в дефолтах аргументов
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["api", "bot", "services", "config"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

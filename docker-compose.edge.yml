@@ -1,0 +1,25 @@
+# Подключение к существующему Caddy (/opt/n8n) через сеть qadrant_network.
+# Собственный Caddy из docker-compose.yml не запускаем — порты 80/443 заняты.
+#
+# Запуск: docker compose -f docker-compose.yml -f docker-compose.edge.yml up -d --build
+services:
+  app:
+    container_name: invoice_bot
+    depends_on:
+      - warp
+    networks:
+      - default
+      - edge
+
+  warp:
+    networks:
+      - default
+
+  caddy:
+    profiles:
+      - never
+
+networks:
+  edge:
+    external: true
+    name: qadrant_network

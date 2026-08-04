@@ -1,0 +1,23 @@
+# Секреты и окружение
+.env
+secrets/
+*.json
+!requirements*.json
+
+# Данные (реестр, файлы счетов, справочник пользователей)
+data/
+storage/
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Логи и временные файлы
+*.log
+downloads/
+.DS_Store

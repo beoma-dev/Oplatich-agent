@@ -1,0 +1,30 @@
+# Вариант запуска без Docker: hardened systemd-юнит.
+# Установка:
+#   sudo cp deploy/invoice-bot.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now invoice-bot
+[Unit]
+Description=invoice-bot — Telegram-бот подачи счетов на оплату
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=invoicebot
+WorkingDirectory=/opt/invoice-bot
+ExecStart=/opt/invoice-bot/.venv/bin/python main.py
+Restart=always
+RestartSec=3
+
+# Hardening: минимум привилегий, запись только в каталоги данных.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/opt/invoice-bot/data /opt/invoice-bot/storage
+
+[Install]
+WantedBy=multi-user.target

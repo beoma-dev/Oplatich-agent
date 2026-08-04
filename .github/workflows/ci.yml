@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt ruff pytest pytest-asyncio
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Tests (pytest)
+        # Токен подставляет tests/conftest.py — внешний не нужен.
+        run: pytest -q
+
+      - name: JS tests (node --test)
+        # Именно глоб: аргумент-каталог node трактует как модуль и падает.
+        run: node --test "tests/js/*.test.cjs"
+
+      - name: Smoke imports
+        env:
+          TELEGRAM_BOT_TOKEN: "dummy:token"
+        run: python -c "import main, api.server, api.routes, bot.handlers, services.intake"
+
+      - name: Docker build
+        run: docker build -t invoice-bot:ci .

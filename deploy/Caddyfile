@@ -1,0 +1,9 @@
+# Реверс-прокси с автоматическим HTTPS (Let's Encrypt).
+# DOMAIN приходит из окружения (docker-compose.yml → .env).
+{$DOMAIN} {
+	# Файл счёта до 20 МБ + поля формы; с запасом.
+	request_body {
+		max_size 25MB
+	}
+	reverse_proxy app:8080
+}
