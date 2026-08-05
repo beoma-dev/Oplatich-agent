@@ -48,12 +48,13 @@ from services import (
 )
 from services import health as health_pulse
 from services import runtime_settings as rs
+from services.access_requests import request_access
 from services.deletion import delete_request as delete_request_service
 from services.intake import finalize_submission
 from services.local_storage import build_invoice_filename
 from services.reminders import run_reminders
 from services.status_change import apply_status
-from services.user_directory import resolve, username_for
+from services.user_directory import all_users, resolve, username_for
 from services.withdraw import withdraw_request
 
 log = logging.getLogger(__name__)
@@ -106,6 +107,42 @@ async def health() -> JSONResponse:
         {"ok": alive, "telegram_last_ok_age_s": None if age is None else int(age)},
         status_code=200 if alive else 503,
     )
+
+
+@router.get("/access")
+async def access_state(request: Request) -> dict:
+    """Есть ли у открывшего форму доступ к подаче и не висит ли его заявка.
+
+    Подпись initData обязательна, whitelist — нет: смысл ручки в том, чтобы
+    ответить тому, у кого доступа как раз и нет.
+    """
+    user = validate_init_data(
+        request.headers.get("X-Telegram-Init-Data", ""), settings.telegram_bot_token
+    )
+    return {
+        "allowed": is_allowed(user["id"]),
+        "pending": rs.access_request_pending(user["id"]),
+        "has_admins": bool(rs.effective_admin_ids()),
+    }
+
+
+@router.post("/access/request")
+async def access_request(request: Request) -> dict:
+    """Просьба открыть доступ: уходит всем админам с кнопками решения."""
+    user = validate_init_data(
+        request.headers.get("X-Telegram-Init-Data", ""), settings.telegram_bot_token
+    )
+    if is_allowed(user["id"]):
+        return {"ok": False, "message": "Доступ уже открыт."}
+    if _my_rate_limited(user["id"]):
+        raise HTTPException(status_code=429, detail="Слишком часто — подождите минуту.")
+    message = await request_access(
+        request.app.state.bot,
+        user["id"],
+        user.get("username") or "",
+        " ".join(filter(None, [user.get("first_name"), user.get("last_name")])),
+    )
+    return {"ok": True, "message": message}
 
 
 @router.get("/counterparties")
@@ -431,16 +468,30 @@ async def admin_settings(request: Request) -> dict:
         {"entry": x, "source": "dynamic" if x in dynamic else "env"}
         for x in rs.effective_finance_recipients()
     ]
+    disabled = set(rs.disabled_allowed())
     allowed = [
         {"id": i, "source": "env", "username": username_for(i)}
         for i in settings.allowed_user_ids
+        if i not in disabled
     ] + [
         {"id": i, "source": "dynamic", "username": username_for(i)}
         for i in rs.dynamic_allowed()
     ]
+    dyn_admins = set(rs.dynamic_admins())
+    admins = [
+        {"id": i, "source": "dynamic" if i in dyn_admins else "env",
+         "username": username_for(i)}
+        for i in rs.effective_admin_ids()
+    ]
     registry_url = (
         f"https://docs.google.com/spreadsheets/d/{settings.google_sheet_id}"
         if settings.storage_is_google and settings.google_sheet_id
+        else None
+    )
+    # Папка Диска, куда складываются файлы счетов, — рядом с реестром.
+    drive_url = (
+        f"https://drive.google.com/drive/folders/{settings.google_drive_folder_id}"
+        if settings.storage_is_google and settings.google_drive_folder_id
         else None
     )
     return {
@@ -451,10 +502,57 @@ async def admin_settings(request: Request) -> dict:
         "backup": rs.backup_config(),
         "reminders": rs.reminders_config(),
         "registry_url": registry_url,
+        "drive_url": drive_url,
+        "admins": admins,
     }
 
 
 _TIME_RE = re.compile(r"^([01]?\d|2[0-3]):[0-5]\d$")
+
+
+@router.get("/admin/users")
+async def admin_users(request: Request) -> dict:
+    """Кто уже пользуется ботом и у кого открыта подача заявок.
+
+    Собирается из справочника (всех, кто хоть раз обращался к боту) плюс id
+    из whitelist, которые справочнику ещё не попадались. Права админа здесь
+    определяются только по ADMIN_IDS: администраторы доверенных чатов
+    вычисляются запросом в Telegram на каждого, и перечислить их списком
+    нельзя — об этом сказано в подсказке карточки.
+    """
+    await _require_admin(request)
+    known = await asyncio.to_thread(all_users)
+    allowed = set(await asyncio.to_thread(rs.effective_allowed_ids))
+    dynamic = set(rs.dynamic_allowed())
+    admins = set(await asyncio.to_thread(rs.effective_admin_ids))
+    dyn_admins = set(rs.dynamic_admins())
+    fin_ids = await asyncio.to_thread(_finance_ids)
+
+    names = dict(known)
+    users = []
+    for uid in sorted({*names, *allowed, *admins, *fin_ids}):
+        # Отрицательный id — это чат (FINANCE_CHAT_IDS принимает и группы), а
+        # не человек; сам бот в справочник больше не попадает, но старые
+        # записи могли остаться — их тоже убираем.
+        if uid <= 0 or uid == settings.bot_id:
+            continue
+        users.append({
+            "id": uid,
+            "username": names.get(uid),
+            "admin": uid in admins,
+            "admin_source": ("dynamic" if uid in dyn_admins else "env") if uid in admins else None,
+            "financier": uid in fin_ids,
+            "access": ("dynamic" if uid in dynamic else "env") if uid in allowed else None,
+        })
+    # Пустой whitelist = подача закрыта всем, кроме админов (fail-closed).
+    return {"users": users, "whitelist_empty": not allowed}
+
+
+def _finance_ids() -> set[int]:
+    """id финансистов; импорт локальный — notifier тянет пол-сервисного слоя."""
+    from services.notifier import resolved_finance_ids
+
+    return set(resolved_finance_ids())
 
 
 @router.post("/admin/backup")
@@ -648,6 +746,54 @@ async def admin_allowed(request: Request) -> dict:
             f"Доступ закрыт (id {uid})." if changed
             else "Нет в динамическом whitelist (записи из .env правятся на сервере)."
         )
+    return {"ok": changed, "message": message}
+
+
+@router.post("/admin/admins")
+async def admin_admins(request: Request) -> dict:
+    """Назначить/снять админа: {"action": "add"|"remove", "entry": "@user"|"123"}.
+
+    Последнего админа снять нельзя: иначе настройками бота станет некому
+    управлять, а вернуть права можно будет только правкой .env на сервере.
+    """
+    actor = await _require_admin(request)
+    body = await request.json()
+    action, entry = body.get("action"), str(body.get("entry", "")).strip()
+    if action not in ("add", "remove") or not entry:
+        raise HTTPException(status_code=422, detail="Некорректный запрос.")
+
+    uid = int(entry) if entry.lstrip("-").isdigit() else resolve(entry)
+    if uid is None:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Не знаю id пользователя {entry}: пусть он напишет боту /start, "
+                "или укажите числовой id (команда /myid)."
+            ),
+        )
+    if action == "add":
+        changed = await asyncio.to_thread(rs.add_admin, uid)
+        message = f"Назначен админом (id {uid})." if changed else "Уже админ."
+    else:
+        if uid in settings.admin_ids:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Этот админ задан в .env на сервере — снять права можно "
+                    "только там. Так владелец не теряет контроль над ботом."
+                ),
+            )
+        if len(await asyncio.to_thread(rs.effective_admin_ids)) <= 1:
+            raise HTTPException(
+                status_code=409,
+                detail="Это последний админ — снять права будет некому вернуть.",
+            )
+        changed = await asyncio.to_thread(rs.remove_admin, uid)
+        message = f"Права админа сняты (id {uid})." if changed else "Этот человек не админ."
+    # Смена состава админов — событие для журнала безопасности.
+    await audit.log_event(
+        audit.ADMIN_ROLE, actor["id"], actor.get("username"), f"{action} {uid}"
+    )
     return {"ok": changed, "message": message}
 
 

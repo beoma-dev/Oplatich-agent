@@ -17,7 +17,7 @@ import time
 from telegram import Bot
 from telegram.constants import ParseMode
 
-from config import settings
+from services.runtime_settings import effective_admin_ids
 
 log = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ async def alert_admins(
     bot: Bot, title: str, details: str = "", *, signature: str | None = None
 ) -> int:
     """Шлёт алерт всем админам. Возвращает число доставленных сообщений."""
-    if not settings.admin_ids:
+    if not effective_admin_ids():
         log.warning("Алерт «%s» не отправлен: ADMIN_IDS пуст", title)
         return 0
 
@@ -67,7 +67,7 @@ async def alert_admins(
         text += f"\n<code>{e(details[:600])}</code>"
 
     delivered = 0
-    for admin_id in settings.admin_ids:
+    for admin_id in effective_admin_ids():
         try:
             await bot.send_message(chat_id=admin_id, text=text, parse_mode=ParseMode.HTML)
             delivered += 1

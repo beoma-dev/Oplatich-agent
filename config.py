@@ -126,6 +126,9 @@ class Settings(BaseSettings):
     # ---- Прочее ----
     # Название организации — печатается в шапке PDF-документа заявки.
     org_name: str = Field("DEVMOPS", alias="ORG_NAME")
+    # Реквизиты организации строкой — вторая строка шапки PDF. Пусто —
+    # печатается нейтральная подпись «Финансовый документ».
+    org_details: str = Field("", alias="ORG_DETAILS")
     # Напоминания о сроках: финансистам — что оплатить завтра, админам —
     # что просрочено. Раз в сутки в reminder_time (в TIMEZONE).
     reminders_enabled: bool = Field(True, alias="REMINDERS_ENABLED")
@@ -154,6 +157,16 @@ class Settings(BaseSettings):
     @cached_property
     def admin_ids(self) -> list[int]:
         return _parse_id_list(self.admin_ids_raw)
+
+    @cached_property
+    def bot_id(self) -> int:
+        """id самого бота — это числовая часть токена до двоеточия.
+
+        Нужен, чтобы не показывать бота в списке пользователей: он попадал
+        в справочник со своих же постов в канале.
+        """
+        head = self.telegram_bot_token.split(":", 1)[0]
+        return int(head) if head.isdigit() else 0
 
     @cached_property
     def employee_names(self) -> dict[int, str]:

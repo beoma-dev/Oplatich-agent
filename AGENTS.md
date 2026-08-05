@@ -4,7 +4,9 @@
 
 Telegram-бот подачи заявок на оплату счетов. Два канала ввода — форма Mini App
 (страница `webapp/` + API `api/`) и пошаговая чат-форма (`bot/handlers.py`);
-оба сходятся в `services/intake.py::finalize_submission`. Краткое описание
+оба сходятся в `services/intake.py::finalize_submission`. Бот называется
+**Оплатыч**, его марка — `webapp/logo.svg` (отдаётся статикой из `webapp/`,
+используется в шапке формы, favicon и пустых списках). Краткое описание
 архитектуры по пунктам ТЗ и стоимость реализации — в
 [ARCHITECTURE.md](ARCHITECTURE.md), полное описание решений и их причин — в
 [CONTEXT.md](CONTEXT.md), деплой — в [DEPLOY.md](DEPLOY.md).
@@ -55,6 +57,17 @@ TELEGRAM_BOT_TOKEN=dummy:token python -c "import main, api.server, bot.handlers,
   берут автора ТОЛЬКО из проверенного initData — никогда из тела запроса.
   `/api/finance/*` показывает чужие заявки — доступ строго через
   `is_financier()` или `is_bot_admin()`, отказ пишется в аудит.
+- **Состав финансистов, whitelist и админов — только через
+  `services/runtime_settings.py`**: `effective_*_ids()` = запись из `.env`
+  плюс добавленные из панели, минус отозванные (`*_off`). Читать
+  `settings.admin_ids`/`allowed_user_ids` напрямую там, где решается «есть ли
+  право», нельзя — назначенный из панели админ окажется бесправным.
+  Исключение по замыслу: у админов нет списка отключённых — запись из
+  `ADMIN_IDS` панелью не снимается, владелец сервера остаётся владельцем.
+- **Запрос доступа — один сервис `services/access_requests.py`**: и кнопка
+  в чате, и `/api/access/request` зовут `request_access`, решение админа —
+  `resolve_access`. Ручки `/api/access*` проверяют подпись initData, но НЕ
+  whitelist: они существуют ровно для того, у кого доступа ещё нет.
 - **Смена статуса — только через `services/status_change.apply_status`**:
   им пользуются и кнопки карточки в чате, и панель Mini App; иначе каналы
   разъедутся в поведении (карточки, причина, аудит, уведомление автору).

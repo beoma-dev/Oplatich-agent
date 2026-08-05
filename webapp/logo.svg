@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="64 74 384 404" width="384" height="404" role="img" aria-label="Оплатыч">
+  <defs>
+    <radialGradient id="fur" cx="40%" cy="30%" r="76%">
+      <stop offset="0%" stop-color="#F8DEA9"/>
+      <stop offset="60%" stop-color="#EABF74"/>
+      <stop offset="100%" stop-color="#D09C4E"/>
+    </radialGradient>
+    <linearGradient id="band" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#15C98C"/>
+      <stop offset="100%" stop-color="#0C8F63"/>
+    </linearGradient>
+    <linearGradient id="brim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#22DDA0"/>
+      <stop offset="100%" stop-color="#0FA976"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#EDF2EF"/>
+    </linearGradient>
+    <clipPath id="head">
+      <circle cx="256" cy="268" r="168"/>
+    </clipPath>
+    <radialGradient id="shade" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#0B3B2C" stop-opacity=".26"/>
+      <stop offset="100%" stop-color="#0B3B2C" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Уши держим ВЫШЕ козырька, иначе он их съедает. -->
+  <g stroke="#8A5F27" stroke-width="7">
+    <circle cx="132" cy="128" r="46" fill="url(#fur)"/>
+    <circle cx="380" cy="128" r="46" fill="url(#fur)"/>
+  </g>
+  <circle cx="132" cy="128" r="24" fill="#E9A0A6"/>
+  <circle cx="380" cy="128" r="24" fill="#E9A0A6"/>
+
+  <!-- Тело-шар. -->
+  <circle cx="256" cy="268" r="172" fill="url(#fur)" stroke="#8A5F27" stroke-width="8"/>
+
+  <!-- Светлое пузико. -->
+  <ellipse cx="256" cy="330" rx="104" ry="92" fill="#FCEFD3" opacity=".8"/>
+
+  <!-- Козырёк бухгалтера: узкая лента на лбу + короткий козырёк.
+       Не шапка — именно тот самый зелёный козырёк счетовода. -->
+  <!-- Ободок обрезан по голове, поэтому лежит на ней, а не парит. -->
+  <g clip-path="url(#head)">
+    <path d="M56 196Q256 146 456 196L456 228Q256 178 56 228Z" fill="url(#band)"/>
+  </g>
+  <!-- Козырёк выступает за силуэт головы — именно это читается как козырёк. -->
+  <path d="M78 222Q256 178 434 222L434 234Q256 266 78 234Z"
+        fill="url(#brim)" stroke="#0A7A55" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M136 226Q256 258 376 226" fill="none"
+        stroke="#7FF0C9" stroke-width="5" stroke-linecap="round" opacity=".45"/>
+
+  <!-- Глаза ниже козырька: между ними и краем козырька есть воздух. -->
+  <g>
+    <ellipse cx="216" cy="316" rx="50" ry="55" fill="#FFFFFF" stroke="#8A5F27" stroke-width="6"/>
+    <ellipse cx="296" cy="316" rx="50" ry="55" fill="#FFFFFF" stroke="#8A5F27" stroke-width="6"/>
+    <circle cx="228" cy="328" r="21" fill="#2A2018"/>
+    <circle cx="284" cy="328" r="21" fill="#2A2018"/>
+    <circle cx="235" cy="320" r="7.5" fill="#FFFFFF"/>
+    <circle cx="291" cy="320" r="7.5" fill="#FFFFFF"/>
+  </g>
+
+  <!-- Нос и улыбка. -->
+  <ellipse cx="256" cy="374" rx="18" ry="13" fill="#7A4A2C"/>
+  <path d="M234 396q22 24 44 0" fill="none" stroke="#7A4A2C" stroke-width="8" stroke-linecap="round"/>
+
+  <!-- Хомячьи щёки. -->
+  <circle cx="158" cy="366" r="32" fill="#E9A0A6" opacity=".5"/>
+  <circle cx="354" cy="366" r="32" fill="#E9A0A6" opacity=".5"/>
+
+  <!-- Лапки. -->
+  <ellipse cx="152" cy="418" rx="42" ry="30" fill="url(#fur)" stroke="#8A5F27" stroke-width="7"/>
+
+  <!-- Счёт: сперва бумага, поверх — лапа, поэтому читается «держит». -->
+  <g transform="rotate(-11 366 412)">
+    <rect x="322" y="358" width="88" height="112" rx="11" fill="url(#paper)"
+          stroke="#8A5F27" stroke-width="6"/>
+    <g stroke="#BCC8C2" stroke-width="6" stroke-linecap="round">
+      <path d="M342 384h48"/>
+      <path d="M342 405h48"/>
+      <path d="M342 426h30"/>
+    </g>
+    <circle cx="378" cy="444" r="17" fill="none" stroke="#10B981" stroke-width="5.5"/>
+    <path d="M369.5 444l6 6.5 11.5-13" fill="none" stroke="#10B981" stroke-width="6"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <ellipse cx="336" cy="424" rx="40" ry="29" fill="url(#fur)" stroke="#8A5F27" stroke-width="7"
+           transform="rotate(-14 336 424)"/>
+</svg>

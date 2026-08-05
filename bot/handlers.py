@@ -29,6 +29,7 @@ from telegram.ext import (
 )
 
 from bot.access import access_denied_message, is_allowed, is_bot_admin
+from bot.access_requests import ask_access_markup
 from bot.models import ARTICLES, CURRENCIES, InvoiceRequest, Urgency, new_request_id
 from bot.my_requests import CB_REPEAT, my_command
 from bot.scheduling import auto_planned_date
@@ -140,11 +141,11 @@ HELP_TEXT = (
     "<b>Полезное</b>\n"
     "• Черновик сохраняется сам — случайно закрытая форма ничего не теряет; "
     "сбросить его можно кнопкой «Очистить форму» в конце формы.\n"
-    "• Кнопка 🎨 в форме открывает оформление: тема (телеграмная или "
-    "неоновая) и живой фон; выбор запоминается.\n"
+    "• Кнопка ⚙️ в форме открывает настройки: там же вкладка оформления — "
+    "тема (телеграмная или неоновая) и живой фон; выбор запоминается.\n"
     "• /invoice — новая заявка, /my — мои заявки, /myid — ваш ID для доступа.\n"
-    "• Доступ по белому списку: если бот не пускает — обратитесь к "
-    "администратору."
+    "• Доступ по белому списку: если бот не пускает — нажмите «Запросить "
+    "доступ», админы получат заявку и решат."
 )
 
 
@@ -497,7 +498,9 @@ async def _begin_form(
                 f"@{user.username}" if user.username else user.full_name,
                 "чат-форма",
             )
-        await reply_to.reply_text(access_denied_message())
+        await reply_to.reply_text(
+            access_denied_message(), reply_markup=ask_access_markup()
+        )
         return ConversationHandler.END
 
     # С включённым Mini App вместо пошагового диалога отдаём кнопку-форму.
@@ -553,7 +556,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return ConversationHandler.END
 
     await update.message.reply_text(
-        "👋 Это бот подачи счетов на оплату.\n\n"
+        "👋 Привет! Я Оплатыч — принимаю счета на оплату.\n\n"
         "Нажмите кнопку ниже, чтобы заполнить заявку приватно.",
         reply_markup=build_menu_markup(),
     )
@@ -1018,7 +1021,9 @@ async def repeat_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     request_id = (query.data or "").split(":", 2)[-1]
 
     if user is None or not is_allowed(user.id):
-        await query.message.reply_text(access_denied_message())
+        await query.message.reply_text(
+            access_denied_message(), reply_markup=ask_access_markup()
+        )
         return ConversationHandler.END
 
     row = await storage.get_request(request_id)

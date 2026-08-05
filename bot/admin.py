@@ -46,7 +46,7 @@ async def _admin_gate(update: Update) -> bool:
         return False
     if await is_bot_admin(update.get_bot(), user.id):
         return True
-    if not settings.admin_ids and not rs.admin_chat_ids():
+    if not rs.effective_admin_ids() and not rs.admin_chat_ids():
         await message.reply_text(
             "Админы не настроены. Задайте ADMIN_IDS в .env (ваш id — /myid) "
             "или добавьте бота в канал/группу от имени админа — тогда права "

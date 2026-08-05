@@ -27,6 +27,7 @@ from telegram.ext import (
     filters,
 )
 
+from bot.access_requests import ask_access_callback, resolve_access_callback
 from bot.admin import (
     admin_command,
     allow_command,
@@ -55,6 +56,7 @@ from bot.handlers import (
 from bot.my_requests import CB_WITHDRAW, my_command, withdraw_callback
 from config import settings
 from services import alerts, backup, health, reminders
+from services.access_requests import CB_ASK
 from services.proxy import masked, pick_working_proxy
 from services.user_directory import remember
 
@@ -146,7 +148,9 @@ async def collect_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     Запись файла — в пуле потоков, чтобы не блокировать event loop.
     """
     user = update.effective_user
-    if user is not None:
+    # Ботов не запоминаем: свои же посты в канале приходят обратно апдейтом,
+    # и бот попадал в справочник наравне с людьми.
+    if user is not None and not user.is_bot:
         await asyncio.to_thread(remember, user.id, user.username)
 
 
@@ -209,6 +213,10 @@ def build_application(proxy_url: str | None = None) -> Application:
     app.add_handler(CallbackQueryHandler(reason_skip_callback, pattern=rf"^{CB_REASON_SKIP}$"))
     # Кнопка «🚫 Отозвать» в списке «Мои заявки» (повтор — вход в диалог формы).
     app.add_handler(CallbackQueryHandler(withdraw_callback, pattern=rf"^{CB_WITHDRAW}:"))
+    app.add_handler(CallbackQueryHandler(ask_access_callback, pattern=rf"^{CB_ASK}$"))
+    app.add_handler(
+        CallbackQueryHandler(resolve_access_callback, pattern=r"^ACQ:(ok|no):")
+    )
     # group=-2: причина от финансиста перехватывается ДО формы и fallback'а;
     # если причин не ждём — хендлер молчит, и апдейт идёт дальше.
     app.add_handler(

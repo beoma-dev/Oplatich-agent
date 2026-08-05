@@ -7,8 +7,11 @@ import time
 from telegram import Bot
 from telegram.constants import ChatMemberStatus
 
-from config import settings
-from services.runtime_settings import admin_chat_ids, effective_allowed_ids
+from services.runtime_settings import (
+    admin_chat_ids,
+    effective_admin_ids,
+    effective_allowed_ids,
+)
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +30,7 @@ def is_allowed(user_id: int) -> bool:
     настроить и проверить.
     """
     allowed = effective_allowed_ids()
-    if user_id in settings.admin_ids:
+    if user_id in effective_admin_ids():
         return True
     if not allowed:
         log.warning("Whitelist пуст — доступ закрыт (fail-closed), user_id=%s", user_id)
@@ -36,8 +39,8 @@ def is_allowed(user_id: int) -> bool:
 
 
 def is_admin(user_id: int) -> bool:
-    """Статическая часть прав админа: ADMIN_IDS из .env (корневые админы)."""
-    return user_id in settings.admin_ids
+    """Списочная часть прав админа: ADMIN_IDS из .env плюс назначенные в панели."""
+    return user_id in effective_admin_ids()
 
 
 def is_financier(user_id: int) -> bool:
@@ -84,6 +87,5 @@ async def is_bot_admin(bot: Bot, user_id: int) -> bool:
 def access_denied_message() -> str:
     return (
         "⛔ У вас нет доступа к подаче заявок на оплату.\n"
-        "Обратитесь к администратору, чтобы вас добавили в список сотрудников "
-        "(админ: ⚙️ в форме или /allow, ваш id — /myid)."
+        "Нажмите кнопку ниже — админы получат заявку и решат."
     )

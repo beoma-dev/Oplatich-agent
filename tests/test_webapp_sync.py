@@ -17,6 +17,23 @@ HTML = (Path(__file__).resolve().parent.parent / "webapp" / "index.html").read_t
 )
 
 
+def _media_blocks(query: str) -> list[str]:
+    """Все @media-блоки с таким условием — с телом, сбалансированным по скобкам."""
+    blocks = []
+    for m in re.finditer(rf"@media \({re.escape(query)}\) \{{", HTML):
+        depth, i = 0, m.end() - 1
+        while True:
+            if HTML[i] == "{":
+                depth += 1
+            elif HTML[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        blocks.append(HTML[m.end():i])
+    return blocks
+
+
 def _js_array(name: str) -> list[str]:
     m = re.search(rf"var {name} = (\[[^\]]*\])", HTML, re.S)
     assert m, f"var {name} = [...] не найден в webapp/index.html"
@@ -83,7 +100,7 @@ def test_popups_are_in_app_not_native():
 
 def test_icon_buttons_have_tooltips():
     """У кнопок-иконок видимая подсказка, а не только aria-label."""
-    for button_id in ("admin-btn", "my-btn", "fin-btn", "skin-btn", "help-btn", "req-eye", "file-remove"):
+    for button_id in ("admin-btn", "my-btn", "fin-btn", "help-btn", "req-eye", "file-remove"):
         m = re.search(rf'<button[^>]*id="{button_id}"[^>]*>', HTML, re.S)
         assert m, f"кнопка #{button_id} не найдена"
         tag = m.group(0)
@@ -96,7 +113,7 @@ def test_icon_buttons_have_tooltips():
 def test_hover_states_exist():
     """Наведение должно быть видно — и только на устройствах с курсором."""
     assert "@media (hover: hover)" in HTML
-    for selector in (".add-btn:hover", ".gear:hover", ".chip:hover"):
+    for selector in (".add-btn:hover", ".gear:hover", ".chip-wrap:hover"):
         assert selector in HTML, f"нет состояния наведения для {selector}"
     assert "button:focus-visible" in HTML
 
@@ -250,12 +267,23 @@ def test_skin_canvas_is_guarded_and_theme_aware():
     assert ':root[data-skin="neon"] #skin-field { opacity: .75; }' in HTML
 
 
-def test_skin_lives_in_its_own_settings_screen():
-    """Тема выбирается на отдельном экране, а не кнопкой-переключателем."""
-    assert 'id="skin-view"' in HTML
+def test_skin_lives_in_the_settings_screen():
+    """Тема выбирается вкладкой настроек, а не отдельной кнопкой в шапке.
+
+    Своя иконка в шапке съедала место у заголовка, а экран дублировал то,
+    чем уже стали настройки.
+    """
+    assert 'id="pane-skin"' in HTML
     assert 'data-skin-value="tg"' in HTML and 'data-skin-value="neon"' in HTML
     assert 'id="skin-anim-seg"' in HTML
-    assert '$("skin-btn").addEventListener("click", openSkin);' in HTML
+    # Старого экрана и кнопки не осталось — иначе будет два места с темой.
+    assert 'id="skin-view"' not in HTML
+    assert 'id="skin-btn"' not in HTML
+    assert "openSkin" not in HTML
+    # Оформление открывается вместе с настройками, до всякой проверки прав.
+    opener = HTML[HTML.index("function openAdmin("):]
+    assert "markSkinChoice();" in opener[:700]
+    assert 'setSeg("skin-anim-seg"' in opener[:700]
 
 
 def test_neon_does_not_kill_selected_button_contrast():
@@ -272,7 +300,7 @@ def test_header_survives_five_icons():
     Раскладка сжимает шаг и типографику по числу ВИДИМЫХ кнопок — проверено
     в браузере на 390 px: одна строка.
     """
-    assert "header.icons-5 h1" in HTML
+    assert "header.icons-5 .brand" in HTML
     assert "header.icons-4 .gear, header.icons-5 .gear" in HTML
     m = re.search(r"function layoutHeaderIcons\(\)\s*\{(.+?)\n  \}", HTML, re.S)
     assert m, "layoutHeaderIcons не найдена"
@@ -313,3 +341,313 @@ def test_draft_can_be_cleared_from_two_places():
     # следующем открытии формы.
     body = HTML[HTML.index("function resetForm("):]
     assert "clearDraft();" in body[:400]
+
+
+def test_local_assets_exist():
+    """Все локальные файлы, на которые ссылается страница, лежат в webapp/.
+
+    Mini App отдаётся StaticFiles из этого каталога: опечатка в пути или
+    забытый файл превращаются в битую картинку уже в проде, а не в тестах.
+    """
+    webapp = Path(__file__).resolve().parent.parent / "webapp"
+    refs = set(re.findall(r'(?:src|href)="(?!https?:|data:|#)([^"]+)"', HTML))
+    refs |= set(re.findall(r'\.src = "(?!https?:|data:)([^"]+)"', HTML))
+    assert refs, "ссылки на локальные файлы не найдены — сломался разбор"
+    missing = sorted(r for r in refs if not (webapp / r).exists())
+    assert not missing, f"нет файлов: {missing}"
+
+
+def test_brand_is_oplatych():
+    """Имя и марка бота стоят в шапке формы и в иконке вкладки."""
+    assert "<title>Оплатыч" in HTML
+    assert '<link rel="icon" href="logo.svg"' in HTML
+    assert '<h1 class="brand"><img src="logo.svg" class="mark"' in HTML
+    assert "<span>Оплатыч</span></h1>" in HTML
+    # Пустой список «Моих заявок» показывает персонажа, а не голую строку.
+    assert 'art.className = "empty-art";' in HTML
+    # Размер имени задаёт .brand — если правило вернуть на h1, шапка
+    # перестанет ужиматься под пять иконок и уедет на вторую строку.
+    assert "header.icons-5 .brand { font-size:" in HTML
+    assert "header.icons-4 .brand { font-size:" in HTML
+
+
+def test_bot_speaks_of_itself_by_name():
+    """Бот везде называет себя Оплатычем, а не «ботом»."""
+    assert "Оплатыч прочитал счёт" in HTML
+    assert "Бот прочитал счёт" not in HTML
+    assert "Оплатыч заодно прочитает счёт" in HTML
+
+
+def test_horizontal_lists_are_scrollable_by_mouse():
+    """Подсказки листались только пальцем: полоса спрятана, колесо не крутит.
+
+    Регрессия с десктопного Telegram — длинный список контрагентов упирался
+    в край, и добраться до остальных было нечем.
+    """
+    assert "function wireHScroll(" in HTML
+    assert "function updateFades(" in HTML
+    # Колесо разворачиваем вбок — для этого нужен неленивый обработчик.
+    body = HTML[HTML.index("function wireHScroll("):]
+    assert '{ passive: false }' in body[:900], "wheel должен уметь preventDefault"
+    assert "box.scrollLeft += d" in body[:900]
+    # Список подсказок обязан быть подключён, иначе фикс ни на что не влияет.
+    assert "wireHScroll(box);" in HTML
+    # На десктопе возвращаем тонкую полосу, на телефоне она не нужна.
+    assert "@media (pointer: fine)" in HTML
+    assert ".hscroll::-webkit-scrollbar { display: block;" in HTML
+    for cls in (".fade-r {", ".fade-l {", ".fade-l.fade-r {"):
+        assert cls in HTML, f"нет растушёвки {cls}"
+
+
+def test_main_button_follows_the_skin():
+    """Родная кнопка Telegram красится темой клиента и в неоне была синей."""
+    assert "function paintMainButton(" in HTML
+    assert "tg.MainButton.setParams({ color: color, text_color: textColor })" in HTML
+    # Цвет берём из тех же токенов, что и вся страница.
+    assert "color:var(--accent);background-color:var(--accent-text)" in HTML
+    assert "function cssHex(" in HTML, "setParams принимает только hex"
+    # Перекрашивать надо при каждой смене шкуры, а не один раз на старте.
+    skin = HTML[HTML.index("function applySkin("):]
+    assert "paintMainButton();" in skin[:900]
+
+
+def test_registry_card_opens_sheet_and_drive():
+    """В карточке реестра — и таблица, и папка Диска с файлами счетов."""
+    assert 'id="open-sheet"' in HTML
+    assert 'id="open-drive"' in HTML
+    assert "function wireOpenLink(" in HTML
+    assert 'wireOpenLink("open-sheet", d.registry_url)' in HTML
+    assert 'wireOpenLink("open-drive", d.drive_url)' in HTML
+    # Подсказка про /export остаётся только когда не видно ни одной кнопки.
+    assert 'toggle("hidden", hasSheet || hasDrive)' in HTML
+
+
+def test_admin_settings_are_split_into_tabs():
+    """Настройки разложены по вкладкам, каждая кнопка ведёт в свою панель."""
+    panes = re.findall(r'<button[^>]*class="tab[^"]*"[^>]*data-pane="(\w+)"', HTML)
+    assert panes == ["fin", "access", "data", "beta", "skin"], panes
+    for name in panes:
+        assert f'id="pane-{name}"' in HTML, f"нет панели для вкладки {name}"
+        assert f'id="tab-{name}"' in HTML
+    # Ровно одна панель открыта в разметке — остальные скрыты.
+    open_panes = re.findall(r'<div class="pane" id="pane-(\w+)"', HTML)
+    assert open_panes == ["skin"], open_panes
+    assert "function showAdminTab(" in HTML
+    # Настройки финансистов лежат вместе: список и напоминания им.
+    fin_pane = HTML[HTML.index('id="pane-fin"'):HTML.index('id="pane-access"')]
+    assert "💼 Финансисты" in fin_pane
+    assert "⏰ Напоминания финансистам" in fin_pane
+
+
+def test_tabs_fit_one_row():
+    """Вкладки должны стоять в одну строку — без переноса и без прокрутки."""
+    m = re.search(r"\n  \.tabs \{([^}]*)\}", HTML)
+    assert m, "нет стилей строки вкладок"
+    assert "flex-wrap: nowrap" in m.group(1)
+    assert "overflow-x" not in m.group(1), "прокрутка вместо того, чтобы поместиться"
+    # Кнопки не сжимаются — сжатая молча режет подпись.
+    tab = re.search(r"\n  \.tab \{([^}]*)\}", HTML)
+    assert tab and "flex: 0 0 auto" in tab.group(1)
+    # На узких экранах ужимаем кегль и поля, иначе пять вкладок не влезут.
+    for width in (460, 400, 340):
+        assert any(".tab {" in block for block in _media_blocks(f"max-width: {width}px")), width
+    # Самая длинная подпись разворачивается только там, где есть место.
+    assert '<span class="t-long">Оформление</span>' in HTML
+    assert '<span\n            class="t-short">Тема</span>' in HTML
+    assert "@media (min-width: 561px)" in HTML
+
+
+def test_settings_are_open_to_everyone_but_admin_tabs_are_not():
+    """Шестерёнка есть у всех — за ней «Оформление»; остальное по правам."""
+    m = re.search(r'<button[^>]*id="admin-btn"[^>]*>', HTML, re.S)
+    assert m and "hidden" not in re.search(r'class="([^"]*)"', m.group(0)).group(1)
+    admin_tabs = re.findall(r'data-pane="(\w+)" data-admin="1"', HTML)
+    assert admin_tabs == ["fin", "access", "data", "beta"], admin_tabs
+    assert '.tab[data-admin]' in HTML, "видимость админских вкладок не управляется"
+    # Настройки чужих заявок не тянем тому, кому сервер их всё равно не отдаст.
+    opener = HTML[HTML.index("function openAdmin("):]
+    assert "if (isBotAdmin) { loadAdminSettings(); loadUsers(); }" in opener[:900]
+
+
+def test_article_hints_scroll_below_the_field():
+    """Статьи расходов — такие же подсказки, как у контрагента: строкой под полем.
+
+    Сетка с переносом занимала пол-экрана; теперь один ряд, который листается
+    тем же механизмом, что и чипсы.
+    """
+    assert '<div class="seg seg-scroll" id="article-seg">' in HTML
+    # Поле ввода стоит ВЫШЕ подсказок — как в карточке контрагента.
+    card = HTML[HTML.index("📂 Статья расходов"):]
+    card = card[:card.index("</div>\n\n  <div class=\"card\">")]
+    assert card.index('id="article-custom"') < card.index('id="article-seg"')
+    # Два класса в селекторе: правила .seg идут ниже и иначе перебьют перенос.
+    m = re.search(r"\.seg\.seg-scroll \{([^}]*)\}", HTML)
+    assert m, "нет стилей листающегося ряда статей"
+    assert "flex-wrap: nowrap" in m.group(1) and "overflow-x: auto" in m.group(1)
+    assert ".seg.seg-scroll button { flex: 0 0 auto; }" in HTML
+    assert "wireHScroll(artSeg);" in HTML
+    # Выбранная статья могла остаться за обрезом — её подтягивают в кадр.
+    assert "function revealActive(" in HTML
+    assert "revealActive(box);" in HTML       # из setSeg: черновик и повтор
+    assert "revealActive(artSeg);" in HTML    # из перерисовки списка
+
+
+def test_scrollbar_is_hidden_on_the_row_itself():
+    """Регрессия: у статей расходов не появлялась полоса прокрутки.
+
+    Пряталась она правилами .chips и .seg.seg-scroll с разной
+    специфичностью, и десктопное правило .hscroll перебивалось вторым.
+    Теперь и прячет, и возвращает полосу один и тот же селектор.
+    """
+    assert ".hscroll { scrollbar-width: none; }" in HTML
+    assert ".hscroll::-webkit-scrollbar { display: none; }" in HTML
+    for gone in (".chips::-webkit-scrollbar", ".seg.seg-scroll::-webkit-scrollbar"):
+        assert gone not in HTML, f"{gone} снова перебьёт правило для десктопа"
+    fine = _media_blocks("pointer: fine")
+    assert fine and ".hscroll::-webkit-scrollbar { display: block;" in fine[0]
+
+
+def test_hint_crosses_highlight_the_same_way():
+    """Крестик под курсором краснеет одинаково у контрагента и у статьи."""
+    hover = [b for b in _media_blocks("hover: hover") if ".chip-x:hover" in b]
+    assert hover, "подсветка крестиков вне @media (hover: hover) — залипнет на тач-экране"
+    rule = re.search(
+        r"\.chip-wrap \.chip-x:hover, \.seg button \.seg-x:hover \{([^}]*)\}", hover[0])
+    assert rule, "крестики подсвечиваются разными правилами"
+    assert "var(--danger)" in rule.group(1)
+    # Правило пилюли (акцент на всю подсказку) идёт выше и при равной
+    # специфичности перебивало бы красный — красное должно быть длиннее и позже.
+    block = hover[0]
+    assert block.index(".chip-wrap:hover .chip,") < block.index(".chip-wrap .chip-x:hover"), (
+        "красное правило стоит раньше правила пилюли и будет перебито"
+    )
+    # Отдельного правила для .seg-x уже быть не должно — иначе разъедутся.
+    assert HTML.count(".seg-x:hover") == 1
+
+
+def test_access_tab_lists_who_uses_the_bot():
+    """В «Доступе» виден список пользователей с ролями и отзывом доступа."""
+    access = HTML[HTML.index('id="pane-access"'):HTML.index('id="pane-data"')]
+    assert 'id="users-list"' in access
+    assert 'id="users-reload"' in access
+    assert "function loadUsers(" in HTML
+    assert "function renderUsers(" in HTML
+    assert '"/api/admin/users"' in HTML
+    assert 'it.access === "env" || it.admin_source === "env"' in HTML
+    # Карточка — только обзор: отзыв доступа живёт в «Доступе к подаче», и
+    # две кнопки на одно действие в соседних блоках только путали.
+    body = HTML[HTML.index("function userRow("):]
+    body = body[:body.index("\n  }")]
+    assert "row-del" not in body, "в обзоре снова появилось действие"
+    assert "adminAction" not in body
+    # Список обновляется после любой правки доступа.
+    action = HTML[HTML.index("function adminAction("):]
+    assert "loadUsers();" in action[:1200]
+
+
+def test_env_admin_has_no_remove_button():
+    """Админа из .env панель не разжалует — кнопки у него нет."""
+    assert 'if (kind !== "adm" || it.source !== "env") {' in HTML
+
+
+def test_user_list_is_grouped_by_role():
+    """Роли вперемешку не читались — список разбит на секции."""
+    groups = re.findall(r'\{ key: "(\w+)", title: "([^"]+)"', HTML)
+    assert [g[0] for g in groups] == ["admin", "financier", "other"], groups
+    assert "function userRow(" in HTML
+    assert ".group-head {" in HTML
+    # Финансист-админ не должен попасть в две секции сразу.
+    assert "(it.financier && !it.admin)" in HTML
+    # «Может подавать» не отвечало на вопрос «что?».
+    assert '"может подавать заявки"' in HTML
+    assert '"не может подавать заявки"' in HTML
+    assert '"подаёт заявки как админ"' in HTML
+
+
+def test_admins_can_be_managed_from_the_access_tab():
+    """Состав админов правится там же, где доступ, — своим списком."""
+    access = HTML[HTML.index('id="pane-access"'):HTML.index('id="pane-data"')]
+    for element in ('id="adm-list"', 'id="adm-input"', 'id="adm-add"'):
+        assert element in access, element
+    assert 'kind === "adm" ? "/api/admin/admins"' in HTML
+    assert 'renderList("adm-list", d.admins || [], "adm");' in HTML
+    assert 'bindAdd("adm-add", "adm-input", "adm");' in HTML
+
+
+def test_header_icons_are_centred_against_the_title():
+    """Кнопки шапки стоят по центру строки с именем, а не над ней.
+
+    Вертикаль считается ПОСЛЕ класса плотности: он меняет кегль заголовка,
+    и посчитанное до него смещение промахивалось на несколько пикселей.
+    """
+    body = HTML[HTML.index("function layoutHeaderIcons("):]
+    body = body[:body.index("\n  }")]
+    assert "style.top" in body
+    assert body.index("icons-") < body.index("style.top"), (
+        "смещение считается до того, как заголовок ужат"
+    )
+    assert "getBoundingClientRect().height" in body
+
+
+def test_hint_hover_is_identical_everywhere():
+    """Регрессия: чипс контрагента обводился акцентом, кнопка статьи — нет.
+
+    Крестик — часть той же пилюли, поэтому подсвечивается вместе с ней,
+    иначе контур обрывался на середине.
+    """
+    hover = [b for b in _media_blocks("hover: hover") if ".chip-wrap:hover" in b]
+    assert hover, "подсветка подсказок вне @media (hover: hover)"
+    rule = re.search(
+        r"\.chip-wrap:hover \.chip, \.chip-wrap:hover \.chip-x,\s*"
+        r"\.seg button:hover:not\(\.active\) \{([^}]*)\}", hover[0])
+    assert rule, "подсказки подсвечиваются разными правилами"
+    assert "border-color: var(--accent)" in rule.group(1)
+    # Отдельного правила для чипса быть не должно — иначе снова разъедутся.
+    assert ".chip:hover {" not in HTML
+    # Правая граница чипса разрывала бы общий контур пилюли.
+    assert "border-right: none" in re.search(r"\.chip-wrap \.chip \{([^}]*)\}", HTML).group(1)
+
+
+def test_access_can_be_requested_from_the_form():
+    """Отказ по whitelist — не тупик: есть кнопка попросить доступ."""
+    assert 'id="access-gate"' in HTML
+    assert 'id="access-ask"' in HTML
+    assert "function checkAccess(" in HTML
+    assert '"/api/access"' in HTML
+    assert '"/api/access/request"' in HTML
+    # Повторно просить нечего — кнопка прячется, пока заявка висит.
+    assert "function markAccessPending(" in HTML
+    assert "d.pending" in HTML
+    # Без админов просьбу некому рассмотреть — говорим прямо, а не молчим.
+    assert "d.has_admins" in HTML
+
+
+def test_chip_halves_animate_together():
+    """Регрессия: при наведении пилюля подсказки распадалась на две части.
+
+    У крестика не было перехода border-color — его рамка вспыхивала сразу,
+    а у текста проявлялась за .15s, и на это время шов был виден.
+    """
+    chip = re.search(r"\n  \.chip \{([^}]*)\}", HTML).group(1)
+    cross = re.search(r"\n  \.chip-x \{([^}]*)\}", HTML).group(1)
+    for part in ("background .16s", "border-color .16s", "color .16s"):
+        assert part in chip, f"у чипса нет перехода {part}"
+        assert part in cross, f"у крестика нет перехода {part}"
+
+
+def test_username_inputs_suggest_known_people():
+    """Ввод @username подсказывает из тех, кого бот уже знает.
+
+    Bot API не умеет проверять существование произвольного @username, зато
+    справочник содержит ровно тех, кого сервер сможет резолвить в id, —
+    подсказки совпадают с тем, что реально примут.
+    """
+    for who in ("fin", "wl", "adm"):
+        assert f'id="{who}-suggest"' in HTML, who
+    assert "function wireSuggest(" in HTML
+    assert 'wireSuggest(who + "-input", who + "-suggest");' in HTML
+    # Список берём из уже загруженного реестра пользователей — без второй ручки.
+    assert "knownUsers = items || [];" in HTML
+    # mousedown, а не click: blur поля успевал закрыть список до выбора.
+    body = HTML[HTML.index("function wireSuggest("):]
+    assert 'addEventListener("mousedown"' in body[:2200]

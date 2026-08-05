@@ -274,6 +274,26 @@ class TestAdminEndpoints:
         resp = await client.get("/api/admin/settings", headers=_auth())
         assert resp.json()["registry_url"].endswith("/SHEET123")
 
+    async def test_settings_drive_url_in_google_mode(self, api, monkeypatch):
+        """Рядом с таблицей — папка Диска, куда складываются файлы счетов."""
+        client, _ = api
+        _admins(monkeypatch, "42")
+        monkeypatch.setattr(settings, "storage_backend", "google")
+        monkeypatch.setattr(settings, "google_drive_folder_id", "FOLDER123")
+        resp = await client.get("/api/admin/settings", headers=_auth())
+        assert resp.json()["drive_url"].endswith("/folders/FOLDER123")
+
+    async def test_settings_drive_url_absent_without_folder(self, api, monkeypatch):
+        """Папка не задана или хранилище локальное — ссылки нет, кнопка скрыта."""
+        client, _ = api
+        _admins(monkeypatch, "42")
+        assert (await client.get("/api/admin/settings", headers=_auth())
+                ).json()["drive_url"] is None
+        monkeypatch.setattr(settings, "storage_backend", "google")
+        monkeypatch.setattr(settings, "google_drive_folder_id", "")
+        assert (await client.get("/api/admin/settings", headers=_auth())
+                ).json()["drive_url"] is None
+
     async def test_backup_save_validation_and_roundtrip(self, api, monkeypatch):
         client, _ = api
         _admins(monkeypatch, "42")
@@ -882,3 +902,185 @@ class TestAutofillBeta:
             "/api/admin/autofill", json={"enabled": True}, headers=_auth()
         )
         assert on.json()["autofill"] is True
+
+
+class TestUsersRoster:
+    """Список «кто пользуется ботом» и управление админами."""
+
+    async def test_roster_marks_roles_and_access(self, api, monkeypatch):
+        from services import runtime_settings as rs
+
+        client, _ = api
+        _admins(monkeypatch, "42")
+        settings.__dict__.pop("allowed_user_ids", None)
+        monkeypatch.setattr(settings, "allowed_user_ids_raw", "7")
+        rs.add_allowed(8)
+        resp = await client.get("/api/admin/users", headers=_auth())
+        assert resp.status_code == 200
+        body = resp.json()
+        by_id = {u["id"]: u for u in body["users"]}
+        assert by_id[7]["access"] == "env"        # запись из .env, но отозвать можно
+        assert by_id[8]["access"] == "dynamic"    # добавлена из панели
+        assert by_id[42]["admin"] is True
+        assert by_id[42]["admin_source"] == "env"
+        assert by_id[42]["access"] is None        # админ подаёт и без whitelist
+        assert body["whitelist_empty"] is False
+
+    async def test_roster_hides_the_bot_and_chats(self, api, monkeypatch):
+        """В списке только люди: ни самого бота, ни групп-получателей."""
+        from services import runtime_settings as rs
+        from services import user_directory
+
+        client, _ = api
+        _admins(monkeypatch, "42")
+        user_directory._cache = {"self": settings.bot_id, "vasya": 55}
+        rs.add_financier("-1001234567890")     # группа финансистов, не человек
+        ids = {u["id"] for u in
+               (await client.get("/api/admin/users", headers=_auth())).json()["users"]}
+        assert 55 in ids
+        assert settings.bot_id not in ids
+        assert -1001234567890 not in ids
+
+    async def test_roster_reports_empty_whitelist(self, api, monkeypatch):
+        """Пустой whitelist — подача закрыта всем, кроме админов."""
+        client, _ = api
+        _admins(monkeypatch, "42")
+        settings.__dict__.pop("allowed_user_ids", None)
+        monkeypatch.setattr(settings, "allowed_user_ids_raw", "")
+        body = (await client.get("/api/admin/users", headers=_auth())).json()
+        assert body["whitelist_empty"] is True
+        assert all(u["access"] is None for u in body["users"])
+
+    async def test_roster_requires_admin(self, api, monkeypatch):
+        client, _ = api
+        _allow(monkeypatch)
+        resp = await client.get("/api/admin/users", headers=_auth())
+        assert resp.status_code == 403
+
+    async def test_env_access_can_be_revoked(self, api, monkeypatch):
+        """Отзыв записи из .env: человеку снова придётся просить доступ."""
+        from bot.access import is_allowed
+
+        client, _ = api
+        _admins(monkeypatch, "42")
+        settings.__dict__.pop("allowed_user_ids", None)
+        monkeypatch.setattr(settings, "allowed_user_ids_raw", "7")
+        assert is_allowed(7)
+        resp = await client.post(
+            "/api/admin/allowed", json={"action": "remove", "entry": "7"}, headers=_auth()
+        )
+        assert resp.json()["ok"] is True
+        assert not is_allowed(7)
+        # Возвращается обычным «добавить».
+        await client.post(
+            "/api/admin/allowed", json={"action": "add", "entry": "7"}, headers=_auth()
+        )
+        assert is_allowed(7)
+
+    async def test_admin_can_be_appointed_and_removed(self, api, monkeypatch):
+        from bot.access import is_admin
+
+        client, _ = api
+        _admins(monkeypatch, "42")
+        add = await client.post(
+            "/api/admin/admins", json={"action": "add", "entry": "77"}, headers=_auth()
+        )
+        assert add.json()["ok"] is True
+        assert is_admin(77)
+        drop = await client.post(
+            "/api/admin/admins", json={"action": "remove", "entry": "77"}, headers=_auth()
+        )
+        assert drop.json()["ok"] is True
+        assert not is_admin(77)
+
+    async def test_env_admin_cannot_be_demoted(self, api, monkeypatch):
+        """Владелец из .env остаётся владельцем — даже для другого админа."""
+        from bot.access import is_admin
+
+        client, _ = api
+        _admins(monkeypatch, "42")
+        await client.post(
+            "/api/admin/admins", json={"action": "add", "entry": "77"}, headers=_auth()
+        )
+        resp = await client.post(
+            "/api/admin/admins", json={"action": "remove", "entry": "42"}, headers=_auth()
+        )
+        assert resp.status_code == 409
+        assert ".env" in resp.json()["detail"]
+        assert is_admin(42)
+
+    async def test_admins_endpoint_requires_admin(self, api, monkeypatch):
+        client, _ = api
+        _allow(monkeypatch)
+        resp = await client.post(
+            "/api/admin/admins", json={"action": "add", "entry": "1"}, headers=_auth()
+        )
+        assert resp.status_code == 403
+
+
+class TestAccessRequests:
+    """Запрос доступа сотрудником и решение админа."""
+
+    async def test_state_reports_denied_and_pending(self, api, monkeypatch):
+        client, _ = api
+        _admins(monkeypatch, "1")
+        first = (await client.get("/api/access", headers=_auth())).json()
+        assert first == {"allowed": False, "pending": False, "has_admins": True}
+        await client.post("/api/access/request", headers=_auth())
+        assert (await client.get("/api/access", headers=_auth())).json()["pending"] is True
+
+    async def test_request_notifies_every_admin_once(self, api, monkeypatch):
+        client, bot = api
+        _admins(monkeypatch, "1,2")
+        resp = await client.post("/api/access/request", headers=_auth())
+        assert resp.status_code == 200
+        assert bot.send_message.await_count == 2
+        # Повторное нажатие админов больше не беспокоит.
+        again = await client.post("/api/access/request", headers=_auth())
+        assert "уже отправлена" in again.json()["message"]
+        assert bot.send_message.await_count == 2
+
+    async def test_request_without_admins_says_so(self, api, monkeypatch):
+        client, bot = api
+        _admins(monkeypatch, "")
+        resp = await client.post("/api/access/request", headers=_auth())
+        assert "не задан ни один админ" in resp.json()["message"]
+        bot.send_message.assert_not_awaited()
+
+    async def test_request_needs_signature(self, api):
+        client, _ = api
+        assert (await client.post("/api/access/request")).status_code == 401
+        assert (await client.get("/api/access")).status_code == 401
+
+    async def test_allowed_user_gets_no_request(self, api, monkeypatch):
+        client, bot = api
+        _allow(monkeypatch)
+        resp = await client.post("/api/access/request", headers=_auth())
+        assert resp.json()["ok"] is False
+        bot.send_message.assert_not_awaited()
+
+    async def test_approval_opens_access_and_answers_the_author(self, api, monkeypatch):
+        from bot.access import is_allowed
+        from services.access_requests import resolve_access
+
+        client, bot = api
+        _admins(monkeypatch, "1")
+        await client.post("/api/access/request", headers=_auth())
+        assert not is_allowed(42)
+        note = await resolve_access(bot, 42, True, actor_id=1, actor_name="@boss")
+        assert "Доступ открыт" in note
+        assert is_allowed(42)
+        # Заявка снята — повторная просьба снова дойдёт до админов.
+        assert (await client.get("/api/access", headers=_auth())).json()["pending"] is False
+        assert any("Доступ открыт" in str(c) for c in bot.send_message.await_args_list)
+
+    async def test_rejection_leaves_access_closed(self, api, monkeypatch):
+        from bot.access import is_allowed
+        from services.access_requests import resolve_access
+
+        client, bot = api
+        _admins(monkeypatch, "1")
+        await client.post("/api/access/request", headers=_auth())
+        await resolve_access(bot, 42, False, actor_id=1, actor_name="@boss")
+        assert not is_allowed(42)
+        assert (await client.get("/api/access", headers=_auth())).json()["pending"] is False

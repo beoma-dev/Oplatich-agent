@@ -68,6 +68,17 @@ def username_for(user_id: int) -> str | None:
     return None
 
 
+def all_users() -> list[tuple[int, str]]:
+    """Все, кого бот встречал: (id, @username), по алфавиту.
+
+    Справочник заполняется при любом обращении к боту, поэтому это список
+    тех, кто вообще с ним общался, — основа для админского списка доступа.
+    """
+    with _lock:
+        pairs = [(uid, f"@{name}") for name, uid in _load_locked().items()]
+    return sorted(pairs, key=lambda pair: pair[1].lower())
+
+
 def resolve(entry: str) -> int | None:
     """Резолвит запись получателя в chat_id.
 

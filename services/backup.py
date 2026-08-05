@@ -19,6 +19,7 @@ from telegram import Bot
 from config import settings
 from services import alerts
 from services import runtime_settings as rs
+from services.runtime_settings import effective_admin_ids
 
 log = logging.getLogger(__name__)
 
@@ -93,7 +94,7 @@ async def run_backup(bot: Bot) -> tuple[Path, int]:
 
     data = await asyncio.to_thread(path.read_bytes)
     delivered = 0
-    for admin_id in settings.admin_ids:
+    for admin_id in effective_admin_ids():
         try:
             await bot.send_document(
                 chat_id=admin_id,

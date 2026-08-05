@@ -31,6 +31,7 @@ from config import settings
 from services import runtime_settings as rs
 from services import storage
 from services.notifier import resolved_finance_ids
+from services.runtime_settings import effective_admin_ids
 
 log = logging.getLogger(__name__)
 
@@ -162,7 +163,7 @@ async def _send(bot: Bot, chat_ids: list[int], text: str) -> int:
 def overdue_recipients(target: str) -> list[int]:
     """Кому уходит сводка по просрочке — по настройке из админ-панели."""
     financiers = resolved_finance_ids()
-    admins = list(settings.admin_ids)
+    admins = list(effective_admin_ids())
     if target == "financiers":
         return financiers
     if target == "both":

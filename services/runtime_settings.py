@@ -25,7 +25,17 @@ _DEFAULTS: dict = {
     # выглядит как поломка, поэтому исключения храним здесь.
     "finance_off": [],
     "allowed": [],
+    # Whitelist из .env, отозванный через панель, — по той же причине: сам
+    # файл бот не правит, а отзыв должен работать сразу.
+    "allowed_off": [],
+    # Админы, назначенные из панели. Списка «отключённых» тут намеренно нет:
+    # запись из .env снять нельзя, иначе назначенный админ разжаловал бы
+    # того, кто его назначил.
+    "admins": [],
     "admin_chats": {},
+    # Заявки на доступ: {id: {"username": ..., "ts": ...}}. Живут здесь же,
+    # чтобы не заводить второй файл с блокировкой ради пары записей.
+    "access_requests": {},
     "backup": {},
     "reminders": {},
     "autofill": {},
@@ -43,9 +53,12 @@ def _load_locked() -> dict:
                     "finance": [str(x) for x in raw.get("finance", [])],
                     "finance_off": [str(x) for x in raw.get("finance_off", [])],
                     "allowed": [int(x) for x in raw.get("allowed", [])],
+                    "allowed_off": [int(x) for x in raw.get("allowed_off", [])],
+                    "admins": [int(x) for x in raw.get("admins", [])],
                     "admin_chats": {
                         str(k): str(v) for k, v in raw.get("admin_chats", {}).items()
                     },
+                    "access_requests": dict(raw.get("access_requests", {})),
                     "backup": dict(raw.get("backup", {})),
                     "reminders": dict(raw.get("reminders", {})),
                     "autofill": dict(raw.get("autofill", {})),
@@ -55,11 +68,18 @@ def _load_locked() -> dict:
                 _cache = {k: (dict(v) if isinstance(v, dict) else list(v)) for k, v in _DEFAULTS.items()}
         else:
             _cache = {
-                "finance": [], "finance_off": [], "allowed": [],
-                "admin_chats": {}, "backup": {}, "reminders": {}, "autofill": {},
+                "finance": [], "finance_off": [], "allowed": [], "allowed_off": [],
+                "admins": [],
+                "admin_chats": {},
+    # Заявки на доступ: {id: {"username": ..., "ts": ...}}. Живут здесь же,
+    # чтобы не заводить второй файл с блокировкой ради пары записей.
+    "access_requests": {}, "backup": {}, "reminders": {}, "autofill": {},
             }
     # Файл мог быть создан версией без этих ключей.
     _cache.setdefault("finance_off", [])
+    _cache.setdefault("allowed_off", [])
+    _cache.setdefault("admins", [])
+    _cache.setdefault("access_requests", {})
     _cache.setdefault("reminders", {})
     _cache.setdefault("autofill", {})
     return _cache
@@ -93,10 +113,12 @@ def effective_finance_recipients() -> list[str]:
 
 
 def effective_allowed_ids() -> list[int]:
-    """Whitelist: из .env плюс добавленные из Telegram (без дублей)."""
+    """Whitelist: из .env плюс добавленные из Telegram, минус отозванные."""
     with _lock:
-        dynamic = list(_load_locked()["allowed"])
-    out = list(settings.allowed_user_ids)
+        data = _load_locked()
+        dynamic = list(data["allowed"])
+        off = set(data["allowed_off"])
+    out = [uid for uid in settings.allowed_user_ids if uid not in off]
     for uid in dynamic:
         if uid not in out:
             out.append(uid)
@@ -108,9 +130,60 @@ def dynamic_finance() -> list[str]:
         return list(_load_locked()["finance"])
 
 
+def effective_admin_ids() -> list[int]:
+    """Админы бота: заданные в .env плюс назначенные из панели.
+
+    В отличие от финансистов и whitelist, запись из .env панелью НЕ снимается:
+    владелец сервера — последняя инстанция, иначе назначенный админ мог бы
+    разжаловать того, кто его назначил, и вернуть права было бы негде.
+    """
+    with _lock:
+        dynamic = list(_load_locked()["admins"])
+    out = list(settings.admin_ids)
+    for uid in dynamic:
+        if uid not in out:
+            out.append(uid)
+    return out
+
+
+def dynamic_admins() -> list[int]:
+    with _lock:
+        return list(_load_locked()["admins"])
+
+
+def add_admin(user_id: int) -> bool:
+    """Назначает админа из панели."""
+    with _lock:
+        data = _load_locked()
+        if user_id in data["admins"] or user_id in settings.admin_ids:
+            return False
+        data["admins"].append(user_id)
+        _save_locked()
+    log.info("Настройки: назначен админ %s", user_id)
+    return True
+
+
+def remove_admin(user_id: int) -> bool:
+    """Снимает права у назначенного из панели. Админа из .env — не трогает."""
+    with _lock:
+        data = _load_locked()
+        if user_id not in data["admins"]:
+            return False
+        data["admins"].remove(user_id)
+        _save_locked()
+    log.info("Настройки: снят админ %s", user_id)
+    return True
+
+
 def dynamic_allowed() -> list[int]:
     with _lock:
         return list(_load_locked()["allowed"])
+
+
+def disabled_allowed() -> list[int]:
+    """Записи whitelist из .env, отозванные из панели."""
+    with _lock:
+        return list(_load_locked()["allowed_off"])
 
 
 # ---------------------------------------------------------------------------
@@ -178,8 +251,14 @@ def remove_financier(entry: str) -> bool:
 
 
 def add_allowed(user_id: int) -> bool:
+    """Открывает доступ: снимает отзыв записи из .env либо добавляет свою."""
     with _lock:
         data = _load_locked()
+        if user_id in data["allowed_off"]:
+            data["allowed_off"].remove(user_id)
+            _save_locked()
+            log.info("Настройки: доступ из .env возвращён %s", user_id)
+            return True
         if user_id in data["allowed"] or user_id in settings.allowed_user_ids:
             return False
         data["allowed"].append(user_id)
@@ -189,14 +268,59 @@ def add_allowed(user_id: int) -> bool:
 
 
 def remove_allowed(user_id: int) -> bool:
-    """Убирает id из динамического whitelist. Записи из .env отсюда не убрать."""
+    """Закрывает доступ — и добавленному из Telegram, и заданному в .env.
+
+    Строку в .env бот не правит (файл вне его полномочий), поэтому запись
+    из .env заносится в список отозванных: эффективный whitelist её больше
+    не содержит. Вернуть — тем же «добавить». Так же устроены финансисты.
+    """
     with _lock:
         data = _load_locked()
-        if user_id not in data["allowed"]:
+        if user_id in data["allowed"]:
+            data["allowed"].remove(user_id)
+            _save_locked()
+            log.info("Настройки: из whitelist удалён %s", user_id)
+            return True
+        if user_id in settings.allowed_user_ids and user_id not in data["allowed_off"]:
+            data["allowed_off"].append(user_id)
+            _save_locked()
+            log.info("Настройки: доступ из .env отозван — %s", user_id)
+            return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Заявки на доступ к подаче
+# ---------------------------------------------------------------------------
+def add_access_request(user_id: int, username: str, when: float) -> bool:
+    """Регистрирует просьбу о доступе. False — такая уже висит.
+
+    Повторные нажатия не должны заваливать админов уведомлениями, поэтому
+    вторая заявка от того же человека молча игнорируется.
+    """
+    with _lock:
+        data = _load_locked()
+        key = str(user_id)
+        if key in data["access_requests"]:
             return False
-        data["allowed"].remove(user_id)
+        data["access_requests"][key] = {"username": username, "ts": when}
         _save_locked()
-    log.info("Настройки: из whitelist удалён %s", user_id)
+    log.info("Доступ: поступила заявка от %s", user_id)
+    return True
+
+
+def access_request_pending(user_id: int) -> bool:
+    with _lock:
+        return str(user_id) in _load_locked()["access_requests"]
+
+
+def clear_access_request(user_id: int) -> bool:
+    """Снимает заявку — после решения админа или выданного доступа."""
+    with _lock:
+        data = _load_locked()
+        if data["access_requests"].pop(str(user_id), None) is None:
+            return False
+        _save_locked()
     return True
 
 
