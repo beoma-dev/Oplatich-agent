@@ -722,11 +722,16 @@ def test_form_is_hidden_without_access_and_revives_by_itself():
     # буднично, как выдают, и человек должен это увидеть сразу.
     assert "function watchAccess(" in JS and "function pollAccess(" in JS
     assert "stopAccessWatch" not in JS, "опрос снова выключается при доступе"
-    assert 'document.addEventListener("visibilitychange"' in JS
+    # На телефоне приложение уходит в фон, а на десктопе Mini App — окно:
+    # оно остаётся видимым и только теряет фокус. Нужны оба события.
+    assert 'document.addEventListener("visibilitychange", refreshOnReturn);' in JS
+    assert 'window.addEventListener("focus", refreshOnReturn);' in JS
     # Вернувшись из чата, админ должен видеть свежие списки.
-    vis = JS[JS.index('document.addEventListener("visibilitychange"'):]
-    vis = vis[:vis.index("\n  });")]
-    assert "loadAdminSettings();" in vis and "loadUsers();" in vis
+    ret = JS[JS.index("function refreshOnReturn("):]
+    ret = ret[:ret.index("\n  }")]
+    assert "loadAdminSettings();" in ret and "loadUsers();" in ret
+    # И не затирать поле, которое правят прямо сейчас.
+    assert "document.activeElement" in ret
     # Свёрнутое приложение не опрашиваем.
     watch = JS[JS.index("function watchAccess("):]
     assert "document.hidden" in watch[:600]

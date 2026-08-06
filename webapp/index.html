@@ -53,48 +53,6 @@
   </div>
 
   <div class="card">
-    <div class="card-title">💰 Платёж</div>
-    <label class="field-label" for="amount">Сумма</label>
-    <input type="text" id="amount" inputmode="decimal" placeholder="125 000,50" autocomplete="off">
-    <label class="field-label">Валюта</label>
-    <div class="seg" id="currency-seg"></div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">🏢 Получатель</div>
-    <label class="field-label" for="counterparty">Контрагент (кому платим)</label>
-    <input type="text" id="counterparty" maxlength="200" placeholder="ООО «Ромашка»" autocomplete="off">
-    <div class="chips hidden" id="cp-chips"></div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">📂 Статья расходов</div>
-    <input type="text" id="article-custom" maxlength="100"
-           placeholder="Своя статья или выберите ниже" autocomplete="off">
-    <div class="seg seg-scroll" id="article-seg"></div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">⏱ Срочность и дата оплаты</div>
-    <div class="seg" id="urgency-seg">
-      <button type="button" data-value="URGENT">🔴 Срочно</button>
-      <button type="button" data-value="NORMAL" class="active">🟢 Обычная</button>
-      <button type="button" data-value="CUSTOM">🗓 Настраиваемая</button>
-    </div>
-    <div class="pay-date-note" id="pay-date-note"></div>
-    <div id="planned-block" class="hidden" style="margin-top:10px">
-      <label class="field-label" for="planned">Плановая дата оплаты</label>
-      <input type="date" id="planned">
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">💬 Комментарий <span class="optional-mark">необязательно</span></div>
-    <textarea id="comment" maxlength="500" placeholder="Например: аренда офиса за июль, договор №А-42"></textarea>
-    <div class="counter"><span id="comment-count">0</span>/500</div>
-  </div>
-
-  <div class="card">
     <div class="card-title">📎 Счёт</div>
     <div id="file-warn" class="hidden" role="alert"></div>
     <div id="autofill" class="autofill hidden">
@@ -141,6 +99,48 @@
     </div>
   </div>
 
+  <div class="card">
+    <div class="card-title">💰 Платёж</div>
+    <label class="field-label" for="amount">Сумма</label>
+    <input type="text" id="amount" inputmode="decimal" placeholder="125 000,50" autocomplete="off">
+    <label class="field-label">Валюта</label>
+    <div class="seg" id="currency-seg"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🏢 Получатель</div>
+    <label class="field-label" for="counterparty">Контрагент (кому платим)</label>
+    <input type="text" id="counterparty" maxlength="200" placeholder="ООО «Ромашка»" autocomplete="off">
+    <div class="chips hidden" id="cp-chips"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📂 Статья расходов</div>
+    <input type="text" id="article-custom" maxlength="100"
+           placeholder="Своя статья или выберите ниже" autocomplete="off">
+    <div class="seg seg-scroll" id="article-seg"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">⏱ Срочность и дата оплаты</div>
+    <div class="seg" id="urgency-seg">
+      <button type="button" data-value="URGENT">🔴 Срочно</button>
+      <button type="button" data-value="NORMAL" class="active">🟢 Обычная</button>
+      <button type="button" data-value="CUSTOM">🗓 Настраиваемая</button>
+    </div>
+    <div class="pay-date-note" id="pay-date-note"></div>
+    <div id="planned-block" class="hidden" style="margin-top:10px">
+      <label class="field-label" for="planned">Плановая дата оплаты</label>
+      <input type="date" id="planned">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">💬 Комментарий <span class="optional-mark">необязательно</span></div>
+    <textarea id="comment" maxlength="500" placeholder="Например: аренда офиса за июль, договор №А-42"></textarea>
+    <div class="counter"><span id="comment-count">0</span>/500</div>
+  </div>
+
   <button type="button" id="form-reset">Очистить форму</button>
 
   <button id="submit-fallback" type="button">Отправить заявку</button>
@@ -154,21 +154,7 @@
   </header>
 
   <div class="card">
-    <div class="card-title">1️⃣ Заполните форму</div>
-    <div class="help-text">
-      <b>Сумма и валюта</b> — «125 000,50» тоже поймёт.<br>
-      <b>Контрагент</b> — с подсказками из прошлых заявок: подставляются
-      вместе с реквизитами, набирать их заново не нужно.<br>
-      <b>Статья расходов</b> — выбор из списка или своя.<br>
-      <b>Срочность и дата оплаты</b>: 🔴 Срочно — оплата сегодня,
-      🟢 Обычная — следующий рабочий день, 🗓 Настраиваемая — своя дата
-      в календаре.<br>
-      <b>Комментарий</b> — по желанию.
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">2️⃣ Счёт или реквизиты</div>
+    <div class="card-title">1️⃣ Счёт или реквизиты</div>
     <div class="help-text">
       Приложите <b>файл счёта</b> (PDF, JPG, PNG или XLSX до 20 МБ) —
       форма сразу проверит, что файл похож на счёт, и предупредит,
@@ -184,6 +170,20 @@
       Счёта нет — введите <b>реквизиты</b>: получатель, ИНН/КПП, расчётный
       счёт, банк и БИК. Поле прячется глазком 👁, у финансиста реквизиты
       под спойлером. ИНН, БИК и счета проверяются по контрольным суммам.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">2️⃣ Заполните форму</div>
+    <div class="help-text">
+      <b>Сумма и валюта</b> — «125 000,50» тоже поймёт.<br>
+      <b>Контрагент</b> — с подсказками из прошлых заявок: подставляются
+      вместе с реквизитами, набирать их заново не нужно.<br>
+      <b>Статья расходов</b> — выбор из списка или своя.<br>
+      <b>Срочность и дата оплаты</b>: 🔴 Срочно — оплата сегодня,
+      🟢 Обычная — следующий рабочий день, 🗓 Настраиваемая — своя дата
+      в календаре.<br>
+      <b>Комментарий</b> — по желанию.
     </div>
   </div>
 

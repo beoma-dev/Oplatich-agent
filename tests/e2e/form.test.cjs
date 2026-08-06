@@ -137,3 +137,16 @@ test("родная кнопка Telegram красится акцентом шк�
     [{ color: "#10b981", text_color: "#04140d" }]);
   await neon.close();
 });
+
+test("счёт стоит первым блоком формы", async () => {
+  // Бета читает приложенный файл и предлагает заполнить сумму, контрагента
+  // и реквизиты, но только ПУСТЫЕ поля. Стоя последним, блок счёта делал
+  // распознавание бесполезным: к нему доходили с уже заполненной формой.
+  const page = await openApp(browser, { skin: "neon", width: 430, routes: HINTS });
+  const order = await page.evaluate(() =>
+    [...document.querySelectorAll("#form-view .card .card-title")]
+      .map((t) => t.textContent.trim().split(" ")[1]));
+  assert.equal(order[0], "Счёт", `первым идёт «${order[0]}», а не счёт`);
+  assert.deepEqual(order.slice(0, 3), ["Счёт", "Платёж", "Получатель"]);
+  await page.close();
+});

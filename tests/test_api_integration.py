@@ -1025,7 +1025,8 @@ class TestAccessRequests:
         client, _ = api
         _admins(monkeypatch, "1")
         first = (await client.get("/api/access", headers=_auth())).json()
-        assert first == {"allowed": False, "pending": False, "has_admins": True}
+        assert first == {"allowed": False, "financier": False,
+                         "pending": False, "has_admins": True}
         await client.post("/api/access/request", headers=_auth())
         assert (await client.get("/api/access", headers=_auth())).json()["pending"] is True
 
