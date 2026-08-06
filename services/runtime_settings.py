@@ -474,7 +474,11 @@ def personal_reminders(user_id: int) -> dict:
         "enabled": bool(own.get("enabled", base["enabled"])),
         "time": str(own.get("time") or base["time"]),
         "days_before": max(0, min(days_before, 14)),
+        # Два потока раздельно: кому-то нужна только просрочка.
+        "due_enabled": bool(own.get("due_enabled", True)),
         "overdue_enabled": bool(own.get("overdue_enabled", base["overdue_enabled"])),
+        # По выходным платежей обычно нет — незачем и напоминать.
+        "weekdays_only": bool(own.get("weekdays_only", False)),
         # True — человек настроил себе сам, а не идёт по общему умолчанию.
         "custom": bool(own),
         # True — он ЯВНО отписался. Общий выключатель — это расписание, его
@@ -489,7 +493,9 @@ def set_personal_reminders(
     enabled: bool | None = None,
     time: str | None = None,
     days_before: int | None = None,
+    due_enabled: bool | None = None,
     overdue_enabled: bool | None = None,
+    weekdays_only: bool | None = None,
 ) -> dict:
     """Сохраняет личные настройки получателя. Возвращает эффективные."""
     with _lock:
@@ -501,8 +507,12 @@ def set_personal_reminders(
             own["time"] = time
         if days_before is not None:
             own["days_before"] = int(days_before)
+        if due_enabled is not None:
+            own["due_enabled"] = bool(due_enabled)
         if overdue_enabled is not None:
             own["overdue_enabled"] = bool(overdue_enabled)
+        if weekdays_only is not None:
+            own["weekdays_only"] = bool(weekdays_only)
         _save_locked()
     log.info("Напоминания: личные настройки %s обновлены", user_id)
     return personal_reminders(user_id)

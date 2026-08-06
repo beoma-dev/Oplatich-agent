@@ -253,7 +253,8 @@ test("финансист настраивает напоминания себе,
                          overdue_enabled: false, custom: true } }) });
         }
         return Promise.resolve({ ok: true, json: () => Promise.resolve({
-          enabled: true, time: "09:30", days_before: 1, overdue_enabled: true,
+          enabled: true, time: "09:30", days_before: 1, due_enabled: true,
+          overdue_enabled: true, weekdays_only: false,
           custom: false, financier: true }) });
       }
       let body = { ok: true, items: [] };
@@ -286,12 +287,20 @@ test("финансист настраивает напоминания себе,
 
   await page.fill("#my-rem-time", "07:15");
   await page.fill("#my-rem-days", "3");
-  await page.click("#my-rem-overdue-seg button[data-value='off']");
+  // Только просрочка, и не по выходным — типичная настройка финансиста.
+  await page.click("#my-rem-due-seg button[data-value='off']");
+  await page.click("#my-rem-weekdays-seg button[data-value='on']");
   await page.click("#my-rem-save");
   await page.waitForTimeout(400);
-  assert.deepEqual(await page.evaluate(() => window.__saved),
-    { enabled: true, time: "07:15", days_before: "3", overdue_enabled: false });
+  assert.deepEqual(await page.evaluate(() => window.__saved), {
+    enabled: true, time: "07:15", days_before: "3",
+    due_enabled: false, overdue_enabled: true, weekdays_only: true,
+  });
   assert.match(await page.evaluate(() =>
     document.getElementById("my-rem-note").textContent), /ваши настройки/);
+  // Прогон на себе: приходит только нажавшему и не ждёт расписания.
+  await page.click("#my-rem-test");
+  await page.waitForTimeout(300);
+  assert.deepEqual(await page.evaluate(() => window.__saved), { action: "test" });
   await page.close();
 });

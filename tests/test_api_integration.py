@@ -724,91 +724,20 @@ class TestFinanceStatusEndpoint:
 
 
 class TestReminderSettings:
-    """Блок «Напоминания финансистам» в админ-панели."""
+    """Общих настроек напоминаний больше нет: расписание у каждого своё.
 
-    async def test_settings_include_reminders(self, api, monkeypatch):
+    Ручка админа удалена вместе с карточкой — иначе осталась бы точка,
+    которая молча меняет расписание всем сразу.
+    """
+
+    async def test_shared_endpoint_is_gone(self, api, monkeypatch):
         client, _ = api
-        _allow(monkeypatch)
         _admins(monkeypatch, "42")
-        cfg = (await client.get("/api/admin/settings", headers=_auth())).json()["reminders"]
-        assert set(cfg) == {
-            "enabled", "time", "days_before", "overdue_enabled", "overdue_to"
-        }
-
-    async def test_save_round_trip(self, api, monkeypatch):
-        client, _ = api
-        _allow(monkeypatch)
-        _admins(monkeypatch, "42")
-        resp = await client.post(
-            "/api/admin/reminders",
-            json={
-                "action": "save", "enabled": True, "time": "07:15",
-                "days_before": "3", "overdue_enabled": False, "overdue_to": "both",
-            },
-            headers=_auth(),
-        )
-        assert resp.status_code == 200
-        assert resp.json()["reminders"] == {
-            "enabled": True, "time": "07:15", "days_before": 3,
-            "overdue_enabled": False, "overdue_to": "both",
-        }
-        again = (await client.get("/api/admin/settings", headers=_auth())).json()
-        assert again["reminders"]["time"] == "07:15"
-
-    @pytest.mark.parametrize(
-        "payload",
-        [
-            {"time": "25:00"},
-            {"days_before": "99"},
-            {"days_before": "-1"},
-            {"overdue_to": "everyone"},
-        ],
-    )
-    async def test_validation(self, api, monkeypatch, payload):
-        client, _ = api
-        _allow(monkeypatch)
-        _admins(monkeypatch, "42")
-        body = {"action": "save", "enabled": True}
-        body.update(payload)
-        resp = await client.post("/api/admin/reminders", json=body, headers=_auth())
-        assert resp.status_code == 422
-
-    async def test_run_now_reports_counts(self, api, monkeypatch):
-        client, bot = api
-        _allow(monkeypatch)
-        _admins(monkeypatch, "42")
-        settings.__dict__.pop("finance_recipients", None)
-        monkeypatch.setattr(settings, "finance_chat_ids_raw", "42")
-
-        empty = await client.post(
-            "/api/admin/reminders", json={"action": "run"}, headers=_auth()
-        )
-        assert empty.json()["message"].startswith("Напоминать не о чем")
-
-        # Заявка со сроком «завтра» — попадает в сводку.
-        from bot.scheduling import auto_planned_date
-
-        tomorrow = auto_planned_date(False).strftime("%d.%m.%Y")
-        await client.post(
-            "/api/invoice", data=_form(planned_date=tomorrow), headers=_auth()
-        )
-        bot.send_message.reset_mock()
         resp = await client.post(
             "/api/admin/reminders", json={"action": "run"}, headers=_auth()
         )
-        assert resp.json()["ok"] is True
-
-    async def test_only_admins(self, api, monkeypatch):
-        client, _ = api
-        _allow(monkeypatch)
-        _admins(monkeypatch, "999")
-        resp = await client.post(
-            "/api/admin/reminders", json={"action": "run"}, headers=_auth()
-        )
-        assert resp.status_code == 403
-        assert (
-            await client.post("/api/admin/reminders", json={"action": "run"})
-        ).status_code == 401
+        # 404 или 405 — важно, что ручка больше ничего не делает.
+        assert resp.status_code in (404, 405), resp.status_code
 
 
 class TestAutofillBeta:

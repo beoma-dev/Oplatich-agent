@@ -196,9 +196,12 @@ async def send_to(bot: Bot, user_id: int, rows: list[dict[str, str]],
     cfg = rs.personal_reminders(user_id)
     if cfg["muted"] or (not cfg["enabled"] and not force):
         return 0, 0
+    # Выходные: платежей нет, напоминать не о чем — но ручной прогон делаем.
+    if cfg["weekdays_only"] and today.weekday() >= 5 and not force:
+        return 0, 0
     due, overdue = split_by_deadline(rows, today, cfg["days_before"])
     sent_due = sent_overdue = 0
-    if due and user_id in resolved_finance_ids():
+    if due and cfg["due_enabled"] and user_id in resolved_finance_ids():
         sent_due = len(due) if await _send(
             bot, [user_id], build_due_message(due, cfg["days_before"])) else 0
     wants_overdue = cfg["overdue_enabled"] and rs.reminders_config()["overdue_enabled"]

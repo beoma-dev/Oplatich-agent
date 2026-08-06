@@ -52,7 +52,8 @@ from services.access_requests import request_access
 from services.deletion import delete_request as delete_request_service
 from services.intake import finalize_submission
 from services.local_storage import build_invoice_filename
-from services.reminders import run_reminders
+from services.reminders import SCAN_LIMIT as REMINDER_SCAN_LIMIT
+from services.reminders import send_to as send_reminder_to
 from services.status_change import apply_status
 from services.user_directory import all_users, resolve, username_for
 from services.withdraw import withdraw_request
@@ -644,7 +645,20 @@ async def save_my_reminders(request: Request) -> dict:
     body = await request.json()
     if body.get("action") == "reset":
         cfg = await asyncio.to_thread(rs.clear_personal_reminders, uid)
-        return {"ok": True, "message": "Вернул общие настройки.", "reminders": cfg}
+        return {"ok": True, "message": "Вернул настройки по умолчанию.", "reminders": cfg}
+
+    if body.get("action") == "test":
+        # Прогон на себе: приходит только тому, кто нажал, и не ждёт расписания.
+        rows = await storage.recent_requests(limit=REMINDER_SCAN_LIMIT)
+        today = datetime.now(ZoneInfo(settings.timezone)).date()
+        due, overdue = await send_reminder_to(
+            request.app.state.bot, uid, rows, today, force=True
+        )
+        if not due and not overdue:
+            message = "Напоминать не о чем: ни ближайших, ни просроченных заявок."
+        else:
+            message = f"Прислал вам: к оплате {due}, просрочено {overdue}."
+        return {"ok": True, "message": message}
 
     time_value = str(body.get("time", "")).strip()
     if time_value and not _TIME_RE.fullmatch(time_value):
@@ -661,77 +675,11 @@ async def save_my_reminders(request: Request) -> dict:
         enabled=bool(body.get("enabled", True)),
         time=time_value or None,
         days_before=days,
+        due_enabled=bool(body.get("due_enabled", True)),
         overdue_enabled=bool(body.get("overdue_enabled", True)),
+        weekdays_only=bool(body.get("weekdays_only", False)),
     )
     return {"ok": True, "message": "Настройки сохранены.", "reminders": cfg}
-
-
-@router.post("/admin/reminders")
-async def admin_reminders(request: Request) -> dict:
-    """Напоминания финансистам: {"action": "save"|"run", …}.
-
-    «run» — прогнать рассылку прямо сейчас: удобно проверить, что финансист
-    настроен и сообщение доходит, не дожидаясь утра.
-    """
-    user = await _require_admin(request)
-    body = await request.json()
-    action = body.get("action")
-
-    if action == "run":
-        try:
-            due, overdue = await run_reminders(request.app.state.bot)
-        except Exception as exc:  # noqa: BLE001
-            log.exception("Сбой ручного прогона напоминаний")
-            raise HTTPException(
-                status_code=500, detail="Не удалось разослать напоминания."
-            ) from exc
-        if not due and not overdue:
-            message = "Напоминать не о чем: нет ни ближайших, ни просроченных заявок."
-        else:
-            message = f"Разослано: к оплате {due}, просрочено {overdue}."
-        return {"ok": True, "message": message, "due": due, "overdue": overdue}
-
-    if action == "save":
-        time_value = str(body.get("time", "")).strip()
-        if time_value and not _TIME_RE.fullmatch(time_value):
-            raise HTTPException(status_code=422, detail="Время — в формате ЧЧ:ММ.")
-
-        days_raw = str(body.get("days_before", "")).strip()
-        days_value: int | None = None
-        if days_raw:
-            if not days_raw.isdigit() or not 0 <= int(days_raw) <= 14:
-                raise HTTPException(
-                    status_code=422, detail="Предупреждать за 0–14 дней."
-                )
-            days_value = int(days_raw)
-
-        target = str(body.get("overdue_to", "")).strip()
-        if target and target not in rs.OVERDUE_TARGETS:
-            raise HTTPException(status_code=422, detail="Некорректный получатель.")
-
-        cfg = await asyncio.to_thread(
-            rs.set_reminders_config,
-            enabled=bool(body.get("enabled")),
-            time=time_value or None,
-            days_before=days_value,
-            overdue_enabled=bool(body.get("overdue_enabled")),
-            overdue_to=target or None,
-        )
-        await audit.log_event(
-            audit.REMINDER_SETTINGS,
-            user["id"],
-            user.get("username"),
-            f"enabled={cfg['enabled']} time={cfg['time']} days={cfg['days_before']} "
-            f"overdue={cfg['overdue_enabled']}→{cfg['overdue_to']}",
-        )
-        state = "включены" if cfg["enabled"] else "выключены"
-        return {
-            "ok": True,
-            "message": f"Напоминания {state}: ежедневно в {cfg['time']}.",
-            "reminders": cfg,
-        }
-
-    raise HTTPException(status_code=422, detail="Некорректный запрос.")
 
 
 @router.post("/admin/autofill")

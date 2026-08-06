@@ -2215,7 +2215,6 @@
         renderList("adm-list", d.admins || [], "adm");
         renderList("wl-list", d.allowed || [], "wl");
         if (d.backup) fillBackup(d.backup);
-        if (d.reminders) fillReminders(d.reminders);
         setSeg("autofill-seg", d.autofill === false ? "off" : "on");
         // Google-режим: прямые ссылки на живую таблицу и на папку Диска с
         // файлами счетов; локальный режим — обе кнопки прячем, остаётся /export.
@@ -2267,54 +2266,6 @@
       .catch(function () { showAdminMsg("Сеть недоступна.", true); })
       .then(function () { btn.disabled = false; btn.style.opacity = ""; });
   }
-  // --- Настройки напоминаний ---------------------------------------------------
-  var remEnabled = true;
-  var remOverdue = true;
-  var remTarget = "admins";
-
-  function fillReminders(cfg) {
-    remEnabled = !!cfg.enabled;
-    remOverdue = !!cfg.overdue_enabled;
-    remTarget = cfg.overdue_to || "admins";
-    setSeg("rem-seg", remEnabled ? "on" : "off");
-    setSeg("rem-overdue-seg", remOverdue ? "on" : "off");
-    setSeg("rem-target-seg", remTarget);
-    $("rem-time").value = cfg.time || "09:30";
-    $("rem-days").value = cfg.days_before === undefined ? 1 : cfg.days_before;
-    $("rem-opts").style.opacity = remEnabled ? "" : ".45";
-  }
-
-  bindFilterSeg("rem-seg", function (v) {
-    remEnabled = v === "on";
-    $("rem-opts").style.opacity = remEnabled ? "" : ".45";
-  });
-  bindFilterSeg("rem-overdue-seg", function (v) { remOverdue = v === "on"; });
-  bindFilterSeg("rem-target-seg", function (v) { remTarget = v || "admins"; });
-
-  function reminderRequest(body, btn) {
-    btn.disabled = true;
-    btn.style.opacity = ".6";
-    fetch("/api/admin/reminders", {
-      method: "POST",
-      headers: {
-        "X-Telegram-Init-Data": tg.initData,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body)
-    })
-      .then(function (r) {
-        return r.json().catch(function () { return {}; }).then(function (d) {
-          showAdminMsg(d.message || d.detail || "Готово.", !r.ok);
-          if (r.ok && d.reminders) fillReminders(d.reminders);
-          if (tg && tg.HapticFeedback) {
-            tg.HapticFeedback.notificationOccurred(r.ok ? "success" : "error");
-          }
-        });
-      })
-      .catch(function () { showAdminMsg("Сеть недоступна.", true); })
-      .then(function () { btn.disabled = false; btn.style.opacity = ""; });
-  }
-
   // --- Мои напоминания: настройки конкретного получателя ---------------------
   var myRem = { enabled: true, overdue: true };
 
@@ -2329,8 +2280,8 @@
     // Финансист получает и «скоро к оплате», и просрочку; остальные — только
     // просрочку, если админ так настроил маршрут.
     $("my-rem-note").textContent = cfg.custom
-      ? "Это ваши настройки. «Как у всех» вернёт общие."
-      : "Сейчас действуют общие настройки бота — измените, чтобы задать свои.";
+      ? "Это ваши настройки — на других они не влияют."
+      : "Пока действуют настройки по умолчанию. Измените — станут вашими.";
   }
 
   function loadMyReminders() {
@@ -2369,13 +2320,21 @@
     $("my-rem-opts").style.opacity = myRem.enabled ? "" : ".45";
   });
   bindFilterSeg("my-rem-overdue-seg", function (v) { myRem.overdue = v === "on"; });
+  bindFilterSeg("my-rem-due-seg", function (v) { myRem.due = v === "on"; });
+  bindFilterSeg("my-rem-weekdays-seg", function (v) { myRem.weekdays = v === "on"; });
   $("my-rem-save").addEventListener("click", function () {
     myReminderRequest({
       enabled: myRem.enabled,
       time: $("my-rem-time").value,
       days_before: $("my-rem-days").value.trim(),
-      overdue_enabled: myRem.overdue
+      due_enabled: myRem.due,
+      overdue_enabled: myRem.overdue,
+      weekdays_only: myRem.weekdays
     }, this);
+  });
+  // Прогон на себе: приходит только нажавшему и по его настройкам.
+  $("my-rem-test").addEventListener("click", function () {
+    myReminderRequest({ action: "test" }, this);
   });
   $("my-rem-reset").addEventListener("click", function () {
     myReminderRequest({ action: "reset" }, this);
@@ -2396,20 +2355,6 @@
         });
       })
       .catch(function () { showAdminMsg("Сеть недоступна.", true); });
-  });
-
-  $("rem-save").addEventListener("click", function () {
-    reminderRequest({
-      action: "save",
-      enabled: remEnabled,
-      time: $("rem-time").value,
-      days_before: $("rem-days").value,
-      overdue_enabled: remOverdue,
-      overdue_to: remTarget
-    }, this);
-  });
-  $("rem-run").addEventListener("click", function () {
-    reminderRequest({ action: "run" }, this);
   });
 
   $("backup-save").addEventListener("click", function () {

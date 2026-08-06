@@ -250,7 +250,7 @@
 <div id="admin-view" class="hidden">
   <header>
     <h1>⚙️ Настройки</h1>
-    <p>Оформление доступно всем, остальные вкладки — админам</p>
+    <p>Напоминания настраивает каждый себе; остальное — админам</p>
   </header>
 
   <div id="admin-msg"></div>
@@ -272,60 +272,54 @@
 
   <div class="pane hidden" id="pane-fin" role="tabpanel" aria-labelledby="tab-fin">
     <div class="card" id="my-rem-card">
-      <div class="card-title">⏰ Мои напоминания <button type="button" class="help-q" data-help-title="Мои напоминания" data-help="Это ВАШИ настройки: время рассылки и окно «за сколько дней» у каждого получателя своё. Пока вы ничего не меняли, действуют общие настройки бота. «Как у всех» возвращает их обратно.">?</button></div>
-      <div class="seg" id="my-rem-seg">
-        <button type="button" data-value="on" class="active">Получать</button>
-        <button type="button" data-value="off">Не получать</button>
+      <div class="card-title">⏰ Мои напоминания о заявках <button type="button" class="help-q" data-help-title="Мои напоминания" data-help="Это ВАШИ настройки, они ни на кого больше не влияют: во сколько присылать, за сколько дней предупреждать о сроке и слать ли сводку по просроченным. «Проверить на себе» пришлёт напоминание прямо сейчас — по вашим настройкам и только вам.">?</button></div>
+      <div class="counter" style="text-align:left; margin-bottom:10px">
+        Бот раз в сутки присылает, что скоро оплачивать и что уже просрочено.
+        Ниже — только ваши настройки.
       </div>
+
+      <label class="field-label">Присылать напоминания</label>
+      <div class="seg" id="my-rem-seg">
+        <button type="button" data-value="on" class="active">Да</button>
+        <button type="button" data-value="off">Нет</button>
+      </div>
+
       <div id="my-rem-opts">
-        <label class="field-label" for="my-rem-time">Время рассылки (ежедневно)</label>
+        <label class="field-label" for="my-rem-time">Во сколько присылать</label>
         <input type="time" id="my-rem-time" value="09:30">
+
+        <label class="field-label">Что присылать</label>
+        <div class="seg" id="my-rem-due-seg">
+          <button type="button" data-value="on" class="active">📅 Скоро к оплате</button>
+          <button type="button" data-value="off">Не нужно</button>
+        </div>
+        <div class="seg" id="my-rem-overdue-seg" style="margin-top:6px">
+          <button type="button" data-value="on" class="active">⚠️ Просроченные</button>
+          <button type="button" data-value="off">Не нужно</button>
+        </div>
+
         <label class="field-label" for="my-rem-days">Предупреждать за, дней (0–14)</label>
         <input type="text" id="my-rem-days" inputmode="numeric" maxlength="2" value="1">
-        <label class="field-label">Сводка по просрочке</label>
-        <div class="seg" id="my-rem-overdue-seg">
-          <button type="button" data-value="on" class="active">Слать</button>
-          <button type="button" data-value="off">Не слать</button>
+        <div class="counter" style="text-align:left; margin-top:4px">
+          1 — «завтра к оплате», 0 — только в день оплаты, 7 — на неделю вперёд.
+        </div>
+
+        <label class="field-label">Выходные</label>
+        <div class="seg" id="my-rem-weekdays-seg">
+          <button type="button" data-value="off" class="active">Присылать</button>
+          <button type="button" data-value="on">Только по будням</button>
         </div>
       </div>
+
       <div class="add-row">
         <button type="button" class="add-btn" id="my-rem-save" style="flex:1">Сохранить</button>
-        <button type="button" class="add-btn btn-ghost" id="my-rem-reset">Как у всех</button>
-      </div>
-      <div class="counter" style="text-align:left; margin-top:6px" id="my-rem-note"></div>
-    </div>
-
-    <div class="card hidden" id="rem-card" data-admin="1">
-      <div class="card-title">⏰ Напоминания по умолчанию <button type="button" class="help-q" data-help-title="Напоминания" data-help="Раз в сутки бот присылает финансистам список заявок, которые скоро оплачивать, и отдельно — сводку по просроченным (срок прошёл, а заявка не оплачена). «Отложена» считается просрочкой, «Оплачена» и «Отклонена» — нет. «Проверить сейчас» рассылает немедленно: удобно убедиться, что финансист настроен и сообщение доходит.">?</button></div>
-      <div class="seg" id="rem-seg">
-        <button type="button" data-value="on" class="active">Включены</button>
-        <button type="button" data-value="off">Выключены</button>
-      </div>
-      <div id="rem-opts">
-        <label class="field-label" for="rem-time">Время рассылки (ежедневно)</label>
-        <input type="time" id="rem-time" value="09:30">
-        <label class="field-label" for="rem-days">Предупреждать за, дней (0–14)</label>
-        <input type="text" id="rem-days" inputmode="numeric" maxlength="2" value="1">
-        <label class="field-label">Сводка по просрочке</label>
-        <div class="seg" id="rem-overdue-seg">
-          <button type="button" data-value="on" class="active">Слать</button>
-          <button type="button" data-value="off">Не слать</button>
-        </div>
-        <label class="field-label">Кому слать просрочку</label>
-        <div class="seg seg-wrap" id="rem-target-seg">
-          <button type="button" data-value="admins" class="active">Админам</button>
-          <button type="button" data-value="financiers">Финансистам</button>
-          <button type="button" data-value="both">И тем, и другим</button>
-        </div>
+        <button type="button" class="add-btn btn-ghost" id="my-rem-test">⏰ Проверить на себе</button>
       </div>
       <div class="add-row">
-        <button type="button" class="add-btn" id="rem-save" style="flex:1">Сохранить</button>
-        <button type="button" class="add-btn btn-ghost" id="rem-run">⏰ Проверить сейчас</button>
+        <button type="button" class="add-btn btn-ghost" id="my-rem-reset"
+                style="width:100%">Вернуть настройки по умолчанию</button>
       </div>
-      <div class="counter" style="text-align:left; margin-top:6px">
-        «За 1 день» — классическое «завтра к оплате»; 0 — только в день оплаты.
-        Настройки применяются без рестарта.
-      </div>
+      <div class="counter" style="text-align:left; margin-top:6px" id="my-rem-note"></div>
     </div>
   </div>
 

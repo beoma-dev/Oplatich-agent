@@ -255,3 +255,81 @@ class TestAmountsFromSheets:
         assert "0.00 RUB" not in text
         assert "157 450.50 RUB" in text
         assert "300.00 USD" in text
+
+
+class TestPersonalSchedules:
+    """Каждый получатель — со своим расписанием и своим набором сводок."""
+
+    async def test_each_recipient_gets_their_own_window(self, tmp_paths, monkeypatch):
+        from services import runtime_settings as rs
+
+        settings.__dict__.pop("finance_recipients", None)
+        monkeypatch.setattr(settings, "finance_chat_ids_raw", "111,222")
+        # Одному — «завтра к оплате», другому — на неделю вперёд.
+        rs.set_personal_reminders(111, days_before=0)
+        rs.set_personal_reminders(222, days_before=7)
+
+        await storage.append_invoice(make_request(
+            planned_date=date(2026, 8, 9), request_id="INV-20260804-100011-0011"
+        ))
+        bot = MagicMock()
+        bot.send_message = AsyncMock()
+        rows = await storage.recent_requests(limit=50)
+        near = await reminders.send_to(bot, 111, rows, TODAY)
+        far = await reminders.send_to(bot, 222, rows, TODAY)
+        assert near == (0, 0), "заявка на 9-е не должна попасть в окно «сегодня»"
+        assert far[0] == 1, "в окно «на неделю» она попасть обязана"
+
+    async def test_personal_opt_out_survives_manual_run(self, tmp_paths, monkeypatch):
+        """Личный отказ — решение человека, ручной прогон его не обходит."""
+        from services import runtime_settings as rs
+
+        settings.__dict__.pop("finance_recipients", None)
+        monkeypatch.setattr(settings, "finance_chat_ids_raw", "111")
+        rs.set_personal_reminders(111, enabled=False)
+
+        await storage.append_invoice(make_request(
+            planned_date=date(2026, 8, 5), request_id="INV-20260804-100012-0012"
+        ))
+        bot = MagicMock()
+        bot.send_message = AsyncMock()
+        rows = await storage.recent_requests(limit=50)
+        assert await reminders.send_to(bot, 111, rows, TODAY, force=True) == (0, 0)
+        bot.send_message.assert_not_awaited()
+
+    async def test_weekends_are_skipped_when_asked(self, tmp_paths, monkeypatch):
+        from services import runtime_settings as rs
+
+        settings.__dict__.pop("finance_recipients", None)
+        monkeypatch.setattr(settings, "finance_chat_ids_raw", "111")
+        rs.set_personal_reminders(111, weekdays_only=True, days_before=14)
+
+        # Не «на сегодня»: такие намеренно не дублируются — их анонсировали
+        # накануне (см. split_by_deadline).
+        await storage.append_invoice(make_request(
+            planned_date=date(2026, 8, 12), request_id="INV-20260804-100013-0013"
+        ))
+        bot = MagicMock()
+        bot.send_message = AsyncMock()
+        rows = await storage.recent_requests(limit=50)
+        saturday = date(2026, 8, 8)
+        assert await reminders.send_to(bot, 111, rows, saturday) == (0, 0)
+        monday = date(2026, 8, 10)
+        assert (await reminders.send_to(bot, 111, rows, monday))[0] >= 1
+
+    async def test_due_stream_can_be_switched_off_alone(self, tmp_paths, monkeypatch):
+        """«Только просрочка» — частый запрос: сроки шлют без меня."""
+        from services import runtime_settings as rs
+
+        settings.__dict__.pop("finance_recipients", None)
+        monkeypatch.setattr(settings, "finance_chat_ids_raw", "111")
+        rs.set_personal_reminders(111, due_enabled=False, days_before=7)
+
+        await storage.append_invoice(make_request(
+            planned_date=date(2026, 8, 5), request_id="INV-20260804-100014-0014"
+        ))
+        bot = MagicMock()
+        bot.send_message = AsyncMock()
+        rows = await storage.recent_requests(limit=50)
+        due, _ = await reminders.send_to(bot, 111, rows, TODAY)
+        assert due == 0
