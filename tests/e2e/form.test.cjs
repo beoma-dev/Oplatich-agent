@@ -150,3 +150,48 @@ test("счёт стоит первым блоком формы", async () => {
   assert.deepEqual(order.slice(0, 3), ["Счёт", "Платёж", "Получатель"]);
   await page.close();
 });
+
+test("козырёк Оплатыча берёт цвет темы", async () => {
+  // В телеграмной шкуре акцент — кнопочный цвет клиента (по умолчанию синий),
+  // в неоне — изумруд. Марка должна следовать за ним, а не быть зашитой.
+  const seen = {};
+  for (const skin of ["tg", "neon"]) {
+    const page = await openApp(browser, { skin, width: 430, routes: HINTS });
+    seen[skin] = await page.evaluate(() => {
+      const brim = document.querySelector("#brand-mark path[fill^='url(#mk-brim']");
+      const check = document.querySelector("#brand-mark circle[stroke='var(--accent)']");
+      const accent = getComputedStyle(document.documentElement)
+        .getPropertyValue("--accent").trim();
+      return { accent, brim: getComputedStyle(brim).stroke,
+               check: getComputedStyle(check).stroke };
+    });
+    await page.close();
+  }
+  assert.notEqual(seen.tg.brim, seen.neon.brim, "козырёк одинаков в обеих шкурах");
+  assert.notEqual(seen.tg.check, seen.neon.check);
+  assert.match(seen.neon.accent, /10B981/i, "в неоне акцент — изумруд");
+  await Promise.resolve();
+});
+
+test("марка в пустом списке рисуется полностью", async () => {
+  // Клон берёт градиенты из общего блока: пока они лежали в скрытой шапке,
+  // у персонажа пропадали и шерсть, и бумага.
+  const page = await openApp(browser, { skin: "tg", width: 430, routes: {
+    "/api/access": { allowed: true, financier: false, admin: false,
+                     pending: false, has_admins: true },
+    "/api/my-requests": { items: [] },
+  } });
+  await page.click("#my-btn");
+  await page.waitForTimeout(500);
+  const art = await page.evaluate(() => {
+    const el = document.querySelector("#my-list .empty-art");
+    if (!el) return null;
+    const box = el.getBoundingClientRect();
+    return { width: Math.round(box.width), height: Math.round(box.height),
+             fur: !!el.querySelector("[fill='url(#mk-fur)']") };
+  });
+  assert.ok(art, "персонажа в пустом списке нет");
+  assert.ok(art.width > 40 && art.height > 40, "марка схлопнулась");
+  assert.ok(art.fur, "клон потерял заливку шерсти");
+  await page.close();
+});

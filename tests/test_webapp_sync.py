@@ -381,10 +381,10 @@ def test_brand_is_oplatych():
     """Имя и марка бота стоят в шапке формы и в иконке вкладки."""
     assert "<title>Оплатыч" in HTML
     assert '<link rel="icon" href="logo.svg"' in HTML
-    assert '<h1 class="brand"><img src="logo.svg" class="mark"' in HTML
-    assert "<span>Оплатыч</span></h1>" in HTML
+    assert '<h1 class="brand"><svg id="brand-mark" class="mark"' in MARKUP
+    assert "<span>Оплатыч</span></h1>" in MARKUP
     # Пустой список «Моих заявок» показывает персонажа, а не голую строку.
-    assert 'art.className = "empty-art";' in HTML
+    assert 'art.setAttribute("class", "empty-art");' in JS
     # Размер имени задаёт .brand — если правило вернуть на h1, шапка
     # перестанет ужиматься под пять иконок и уедет на вторую строку.
     assert "header.icons-5 .brand { font-size:" in HTML
@@ -746,3 +746,22 @@ def test_form_is_hidden_without_access_and_revives_by_itself():
     assert "document.hidden" in watch[:600]
     # Кнопка отправки без доступа не должна быть видна.
     assert "if (canSubmit === false) { tg.MainButton.hide(); return; }" in JS
+
+
+def test_mark_takes_the_theme_accent():
+    """Козырёк Оплатыча красится акцентом темы: в телеграмной шкуре — синий.
+
+    Ради этого марка лежит инлайном: внешний svg внутри <img> к переменным
+    страницы доступа не имеет, и цвет остался бы зашитым.
+    """
+    mark = MARKUP[MARKUP.index('<svg id="brand-mark"'):]
+    mark = mark[:mark.index("</svg>")]
+    assert "var(--accent)" in mark, "марка не берёт цвет из темы"
+    assert "#10B981" not in mark, "изумруд снова зашит в разметку"
+    # Градиенты — в общем блоке вне #form-view: из скрытого предка браузер
+    # заливки не отдаёт, и клон в пустом списке терял и шерсть, и бумагу.
+    assert '<svg class="svg-defs"' in MARKUP
+    assert MARKUP.index('class="svg-defs"') < MARKUP.index('id="form-view"')
+    for gradient in ("mk-band", "mk-brim", "mk-fur", "mk-paper"):
+        assert f'id="{gradient}"' in MARKUP, gradient
+    assert ".svg-defs {" in CSS

@@ -19,6 +19,32 @@
 </head>
 <body>
 
+<!-- Палитра марки Оплатыча: общая для шапки и пустых списков.
+     Держим вне #form-view — скрытый предок не отрисовывает градиенты. -->
+<svg class="svg-defs" aria-hidden="true">
+  <defs>
+      <radialGradient id="mk-fur" cx="40%" cy="30%" r="76%">
+        <stop offset="0%" stop-color="#F8DEA9"/><stop offset="60%" stop-color="#EABF74"/>
+        <stop offset="100%" stop-color="#D09C4E"/>
+      </radialGradient>
+      <!-- Козырёк красится акцентом ТЕМЫ: в телеграмной шкуре он синий, как
+           её кнопки, в неоне — изумрудный. Ради этого марка и лежит инлайном:
+           внешний svg в <img> к переменным страницы доступа не имеет. -->
+      <linearGradient id="mk-band" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="color-mix(in srgb, var(--accent) 88%, #ffffff)"/>
+        <stop offset="100%" stop-color="color-mix(in srgb, var(--accent) 74%, #000000)"/>
+      </linearGradient>
+      <linearGradient id="mk-brim" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="color-mix(in srgb, var(--accent) 76%, #ffffff)"/>
+        <stop offset="100%" stop-color="color-mix(in srgb, var(--accent) 88%, #000000)"/>
+      </linearGradient>
+      <linearGradient id="mk-paper" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#FFFFFF"/><stop offset="100%" stop-color="#EDF2EF"/>
+      </linearGradient>
+      <clipPath id="mk-head"><circle cx="256" cy="268" r="168"/></clipPath>
+    </defs>
+</svg>
+
 <canvas id="skin-field" aria-hidden="true"></canvas>
 <div class="bg" aria-hidden="true">
   <i class="blob b1"></i>
@@ -28,7 +54,50 @@
 
 <div id="form-view">
   <header>
-    <h1 class="brand"><img src="logo.svg" class="mark" alt="" aria-hidden="true"><span>Оплатыч</span></h1>
+    <h1 class="brand"><svg id="brand-mark" class="mark" viewBox="64 74 384 404" aria-hidden="true">
+    <g stroke="#8A5F27" stroke-width="7">
+      <circle cx="132" cy="128" r="46" fill="url(#mk-fur)"/>
+      <circle cx="380" cy="128" r="46" fill="url(#mk-fur)"/>
+    </g>
+    <circle cx="132" cy="128" r="24" fill="#E9A0A6"/>
+    <circle cx="380" cy="128" r="24" fill="#E9A0A6"/>
+    <circle cx="256" cy="268" r="172" fill="url(#mk-fur)" stroke="#8A5F27" stroke-width="8"/>
+    <ellipse cx="256" cy="330" rx="104" ry="92" fill="#FCEFD3" opacity=".8"/>
+    <g clip-path="url(#mk-head)">
+      <path d="M56 196Q256 146 456 196L456 228Q256 178 56 228Z" fill="url(#mk-band)"/>
+    </g>
+    <path d="M78 222Q256 178 434 222L434 234Q256 266 78 234Z" fill="url(#mk-brim)"
+          stroke="color-mix(in srgb, var(--accent) 62%, #000000)" stroke-width="6"
+          stroke-linejoin="round"/>
+    <path d="M136 226Q256 258 376 226" fill="none" stroke-width="5" stroke-linecap="round"
+          stroke="color-mix(in srgb, var(--accent) 40%, #ffffff)" opacity=".45"/>
+    <g>
+      <ellipse cx="216" cy="316" rx="50" ry="55" fill="#FFFFFF" stroke="#8A5F27" stroke-width="6"/>
+      <ellipse cx="296" cy="316" rx="50" ry="55" fill="#FFFFFF" stroke="#8A5F27" stroke-width="6"/>
+      <circle cx="228" cy="328" r="21" fill="#2A2018"/>
+      <circle cx="284" cy="328" r="21" fill="#2A2018"/>
+      <circle cx="235" cy="320" r="7.5" fill="#FFFFFF"/>
+      <circle cx="291" cy="320" r="7.5" fill="#FFFFFF"/>
+    </g>
+    <ellipse cx="256" cy="374" rx="18" ry="13" fill="#7A4A2C"/>
+    <path d="M234 396q22 24 44 0" fill="none" stroke="#7A4A2C" stroke-width="8"
+          stroke-linecap="round"/>
+    <circle cx="158" cy="366" r="32" fill="#E9A0A6" opacity=".5"/>
+    <circle cx="354" cy="366" r="32" fill="#E9A0A6" opacity=".5"/>
+    <ellipse cx="152" cy="418" rx="42" ry="30" fill="url(#mk-fur)" stroke="#8A5F27" stroke-width="7"/>
+    <g transform="rotate(-11 366 412)">
+      <rect x="322" y="358" width="88" height="112" rx="11" fill="url(#mk-paper)"
+            stroke="#8A5F27" stroke-width="6"/>
+      <g stroke="#BCC8C2" stroke-width="6" stroke-linecap="round">
+        <path d="M342 384h48"/><path d="M342 405h48"/><path d="M342 426h30"/>
+      </g>
+      <circle cx="378" cy="444" r="17" fill="none" stroke="var(--accent)" stroke-width="5.5"/>
+      <path d="M369.5 444l6 6.5 11.5-13" fill="none" stroke="var(--accent)" stroke-width="6"
+            stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <ellipse cx="336" cy="424" rx="40" ry="29" fill="url(#mk-fur)" stroke="#8A5F27" stroke-width="7"
+             transform="rotate(-14 336 424)"/>
+  </svg><span>Оплатыч</span></h1>
     <p>Заявка на оплату — финансист получит всё необходимое</p>
     <button type="button" id="admin-btn" class="gear tip" aria-label="Настройки"
             data-tip="Настройки: оформление и всё остальное">⚙️</button>

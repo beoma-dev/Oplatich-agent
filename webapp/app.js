@@ -1145,11 +1145,11 @@
     var box = $("my-list");
     box.innerHTML = "";
     if (!items.length) {
-      var art = document.createElement("img");
-      art.className = "empty-art";
-      art.src = "logo.svg";
-      art.alt = "";
-      art.setAttribute("aria-hidden", "true");
+      // Клонируем марку из шапки, а не грузим файл: так персонаж в пустом
+      // списке красится темой заодно с ней.
+      var art = $("brand-mark").cloneNode(true);
+      art.removeAttribute("id");
+      art.setAttribute("class", "empty-art");
       box.appendChild(art);
       var empty = document.createElement("div");
       empty.className = "empty-note";
