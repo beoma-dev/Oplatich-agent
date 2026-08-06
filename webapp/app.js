@@ -1201,7 +1201,6 @@
 
       var actions = document.createElement("div");
       actions.className = "my-actions";
-      actions.appendChild(detailButton(it));
       var repeat = document.createElement("button");
       repeat.type = "button";
       repeat.className = "add-btn btn-ghost";
@@ -1380,16 +1379,6 @@
       if (ev.target.closest("button")) return;
       showRequestDetail(item);
     });
-  }
-
-  /** Кнопка «Подробнее» — на случай, если по строке нажать не догадались. */
-  function detailButton(item) {
-    var btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "add-btn btn-ghost";
-    btn.textContent = "ℹ️ Подробнее";
-    btn.addEventListener("click", function () { showRequestDetail(item); });
-    return btn;
   }
 
   /** Кнопка «Удалить»: необратимо, поэтому всегда через подтверждение. */
@@ -1699,7 +1688,6 @@
 
       var actions = document.createElement("div");
       actions.className = "my-actions";
-      actions.appendChild(detailButton(it));
       // Статус меняется прямо здесь — то же действие, что кнопки на карточке
       // в чате. Отозванную заявку не трогаем: её автор забрал.
       if (it.status !== "Отозвана") {

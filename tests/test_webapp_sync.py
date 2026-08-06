@@ -186,11 +186,19 @@ def test_gear_press_does_not_rotate_tooltip():
     assert "rotate" not in m.group(1)
 
 
-def test_lists_offer_explicit_detail_and_delete():
-    """Кроме нажатия на строку есть явные кнопки — так надёжнее."""
-    assert "function detailButton(" in HTML
+def test_details_open_by_tapping_the_row_only():
+    """Подробности открывает сама строка — отдельной кнопки нет.
+
+    «Подробнее» дублировало нажатие по карточке и занимало место в ряду
+    действий, где каждая кнопка что-то МЕНЯЕТ.
+    """
+    assert "function makeTappable(" in HTML
+    assert HTML.count("makeTappable(row, it)") == 2, "не в обоих списках"
+    assert "detailButton" not in JS, "кнопка «Подробнее» вернулась"
+    # Подсказка «нажмите, чтобы открыть» стоит у обоих списков.
+    assert MARKUP.count('<span class="tap-hint">нажмите, чтобы открыть</span>') == 2
+    # Удаление — по-прежнему отдельной кнопкой: оно необратимо.
     assert "function deleteButton(" in HTML
-    assert HTML.count("actions.appendChild(detailButton(it))") == 2
     assert "/api/requests/delete" in HTML
 
 
