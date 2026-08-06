@@ -221,3 +221,77 @@ test("панель админа обновляется после решения
   assert.equal(after.empty, false);
   await page.close();
 });
+
+test("финансист настраивает напоминания себе, общие ему не показываем", async () => {
+  const page = await browser.newPage({ viewport: { width: 430, height: 820 } });
+  await page.route("**/telegram-web-app.js", (r) => r.abort());
+  await page.addInitScript(() => {
+    window.__saved = null;
+    window.Telegram = { WebApp: {
+      initData: "signed", initDataUnsafe: {}, themeParams: {}, colorScheme: "light",
+      ready() {}, expand() {}, close() {}, openLink() {},
+      MainButton: { isVisible: false, show() { this.isVisible = true; },
+        hide() { this.isVisible = false; }, setText() {}, showProgress() {},
+        hideProgress() {}, onClick() {}, offClick() {}, setParams() {},
+        enable() {}, disable() {} },
+      BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} },
+      HapticFeedback: { selectionChanged() {}, impactOccurred() {}, notificationOccurred() {} },
+      onEvent() {}, offEvent() {},
+    } };
+    window.fetch = (u, opt) => {
+      const s = String(u);
+      // Финансист, но не админ: /api/admin/* ему закрыт.
+      if (s.indexOf("/api/admin/") !== -1) {
+        return Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({}) });
+      }
+      if (s.indexOf("/api/reminders/me") !== -1) {
+        if (opt && opt.method === "POST") {
+          window.__saved = JSON.parse(opt.body);
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({
+            ok: true, message: "Настройки сохранены.",
+            reminders: { enabled: true, time: "07:15", days_before: 3,
+                         overdue_enabled: false, custom: true } }) });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({
+          enabled: true, time: "09:30", days_before: 1, overdue_enabled: true,
+          custom: false, financier: true }) });
+      }
+      let body = { ok: true, items: [] };
+      if (s.endsWith("/api/access")) {
+        body = { allowed: true, financier: true, pending: false, has_admins: true };
+      }
+      if (s.indexOf("/api/finance/access") !== -1) body = { ok: true };
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+    };
+  });
+  await page.goto(require("./helpers.cjs").PAGE_URL, { waitUntil: "load" });
+  await page.waitForTimeout(600);
+  await page.click("#admin-btn");
+  await page.waitForTimeout(350);
+
+  const tabs = await page.evaluate(() =>
+    [...document.querySelectorAll("#admin-tabs .tab")]
+      .filter((t) => !t.classList.contains("hidden")).map((t) => t.dataset.pane));
+  assert.deepEqual(tabs, ["fin", "skin"], "финансисту видны только его вкладки");
+
+  await page.click("#tab-fin");
+  await page.waitForTimeout(250);
+  const cards = await page.evaluate(() =>
+    [...document.querySelectorAll("#pane-fin .card")]
+      .filter((c) => getComputedStyle(c).display !== "none")
+      .map((c) => c.querySelector(".card-title").textContent.trim()));
+  assert.equal(cards.length, 1,
+    "общие настройки не для финансиста — он их всё равно не сохранит");
+  assert.match(cards[0], /^⏰ Мои напоминания/);
+
+  await page.fill("#my-rem-time", "07:15");
+  await page.fill("#my-rem-days", "3");
+  await page.click("#my-rem-overdue-seg button[data-value='off']");
+  await page.click("#my-rem-save");
+  await page.waitForTimeout(400);
+  assert.deepEqual(await page.evaluate(() => window.__saved),
+    { enabled: true, time: "07:15", days_before: "3", overdue_enabled: false });
+  assert.match(await page.evaluate(() =>
+    document.getElementById("my-rem-note").textContent), /ваши настройки/);
+  await page.close();
+});

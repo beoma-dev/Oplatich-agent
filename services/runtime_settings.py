@@ -38,8 +38,17 @@ _DEFAULTS: dict = {
     "access_requests": {},
     "backup": {},
     "reminders": {},
+    # Личные настройки напоминаний: {"<id>": {time, days_before, ...}}.
+    # Общие остаются значением по умолчанию для тех, кто себе ничего не
+    # менял, — иначе новый финансист остался бы вовсе без напоминаний.
+    "reminders_by_user": {},
     "autofill": {},
 }
+
+
+def _fresh_cache() -> dict:
+    """Пустые настройки. Один источник структуры — иначе ключи разъезжаются."""
+    return {k: (dict(v) if isinstance(v, dict) else list(v)) for k, v in _DEFAULTS.items()}
 
 
 def _load_locked() -> dict:
@@ -61,26 +70,24 @@ def _load_locked() -> dict:
                     "access_requests": dict(raw.get("access_requests", {})),
                     "backup": dict(raw.get("backup", {})),
                     "reminders": dict(raw.get("reminders", {})),
+                    "reminders_by_user": {
+                        str(k): dict(v)
+                        for k, v in raw.get("reminders_by_user", {}).items()
+                    },
                     "autofill": dict(raw.get("autofill", {})),
                 }
             except (ValueError, OSError):
                 log.exception("Не удалось прочитать настройки %s — начинаю с пустых", path)
-                _cache = {k: (dict(v) if isinstance(v, dict) else list(v)) for k, v in _DEFAULTS.items()}
+                _cache = _fresh_cache()
         else:
-            _cache = {
-                "finance": [], "finance_off": [], "allowed": [], "allowed_off": [],
-                "admins": [],
-                "admin_chats": {},
-    # Заявки на доступ: {id: {"username": ..., "ts": ...}}. Живут здесь же,
-    # чтобы не заводить второй файл с блокировкой ради пары записей.
-    "access_requests": {}, "backup": {}, "reminders": {}, "autofill": {},
-            }
+            _cache = _fresh_cache()
     # Файл мог быть создан версией без этих ключей.
     _cache.setdefault("finance_off", [])
     _cache.setdefault("allowed_off", [])
     _cache.setdefault("admins", [])
     _cache.setdefault("access_requests", {})
     _cache.setdefault("reminders", {})
+    _cache.setdefault("reminders_by_user", {})
     _cache.setdefault("autofill", {})
     return _cache
 
@@ -447,6 +454,67 @@ def set_reminders_config(
         _save_locked()
     log.info("Настройки напоминаний обновлены: %s", reminders_config())
     return reminders_config()
+
+
+def personal_reminders(user_id: int) -> dict:
+    """Настройки напоминаний конкретного получателя.
+
+    Общие настройки — значения по умолчанию: пока человек ничего себе не
+    менял, он получает напоминания «как все». Что он поменял — перекрывает
+    общее только для него.
+    """
+    base = reminders_config()
+    with _lock:
+        own = dict(_load_locked()["reminders_by_user"].get(str(user_id), {}))
+    try:
+        days_before = int(own.get("days_before", base["days_before"]))
+    except (TypeError, ValueError):
+        days_before = base["days_before"]
+    return {
+        "enabled": bool(own.get("enabled", base["enabled"])),
+        "time": str(own.get("time") or base["time"]),
+        "days_before": max(0, min(days_before, 14)),
+        "overdue_enabled": bool(own.get("overdue_enabled", base["overdue_enabled"])),
+        # True — человек настроил себе сам, а не идёт по общему умолчанию.
+        "custom": bool(own),
+        # True — он ЯВНО отписался. Общий выключатель — это расписание, его
+        # ручной прогон обходит; личный отказ обходить нельзя.
+        "muted": own.get("enabled") is False,
+    }
+
+
+def set_personal_reminders(
+    user_id: int,
+    *,
+    enabled: bool | None = None,
+    time: str | None = None,
+    days_before: int | None = None,
+    overdue_enabled: bool | None = None,
+) -> dict:
+    """Сохраняет личные настройки получателя. Возвращает эффективные."""
+    with _lock:
+        data = _load_locked()
+        own = data["reminders_by_user"].setdefault(str(user_id), {})
+        if enabled is not None:
+            own["enabled"] = bool(enabled)
+        if time is not None:
+            own["time"] = time
+        if days_before is not None:
+            own["days_before"] = int(days_before)
+        if overdue_enabled is not None:
+            own["overdue_enabled"] = bool(overdue_enabled)
+        _save_locked()
+    log.info("Напоминания: личные настройки %s обновлены", user_id)
+    return personal_reminders(user_id)
+
+
+def clear_personal_reminders(user_id: int) -> dict:
+    """Возврат к общим настройкам: «как у всех»."""
+    with _lock:
+        data = _load_locked()
+        if data["reminders_by_user"].pop(str(user_id), None) is not None:
+            _save_locked()
+    return personal_reminders(user_id)
 
 
 # ---------------------------------------------------------------------------

@@ -757,6 +757,16 @@
 
   // Доступ к подаче: null — ещё не спросили, false — отказано.
   var canSubmit = null;
+  // Финансист ли открывший форму: решает и кнопку панели, и вкладку напоминаний.
+  var isFinancier = false;
+
+  /** Вкладка «Напоминания» есть у получателей: настраивают её себе сами. */
+  function applyRecipientTab(show) {
+    var tab = $("tab-fin");
+    if (!tab || tab.classList.contains("hidden") === !show) return;
+    tab.classList.toggle("hidden", !show);
+    if (show) loadMyReminders();
+  }
 
   function refreshMainButton() {
     var ok = validationError(false) === null && canSubmit !== false;
@@ -1788,6 +1798,9 @@
       .then(function (d) {
         if (!d) return;
         applyAccess(d.allowed, false);
+        // Сразу, а не на первом тике опроса: иначе вкладка напоминаний
+        // появлялась у финансиста через несколько секунд после открытия.
+        applyFinance(d.financier);
         if (d.allowed) return;
         if (!d.has_admins) {
           $("access-note").textContent =
@@ -1858,6 +1871,9 @@
    *  так же быстро, как появляется. Открытую панель при отзыве закрываем —
    *  чужие заявки в ней смотреть уже нельзя. */
   function applyFinance(allowed) {
+    isFinancier = !!allowed;
+    // Напоминания настраивает получатель — финансист или админ.
+    applyRecipientTab(isFinancier || isBotAdmin);
     var btn = $("fin-btn");
     if (!btn || btn.classList.contains("hidden") === !allowed) return;
     btn.classList.toggle("hidden", !allowed);
@@ -1970,9 +1986,11 @@
         isBotAdmin = r.ok;
         // Шестерёнка есть у всех — за ней хотя бы «Оформление». Админские
         // вкладки открываются только тем, у кого на них есть право.
-        [].forEach.call($("admin-tabs").querySelectorAll(".tab[data-admin]"), function (t) {
-          t.classList.toggle("hidden", !r.ok);
+        [].forEach.call(document.querySelectorAll("#admin-view [data-admin]"), function (el) {
+          el.classList.toggle("hidden", !r.ok);
         });
+        // Вкладка напоминаний — получателям: финансистам и админам.
+        applyRecipientTab(r.ok || isFinancier);
       })
       .catch(function () { /* не админ или сеть — остаётся «Оформление» */ });
   }
@@ -2296,6 +2314,72 @@
       .catch(function () { showAdminMsg("Сеть недоступна.", true); })
       .then(function () { btn.disabled = false; btn.style.opacity = ""; });
   }
+
+  // --- Мои напоминания: настройки конкретного получателя ---------------------
+  var myRem = { enabled: true, overdue: true };
+
+  function fillMyReminders(cfg) {
+    myRem.enabled = !!cfg.enabled;
+    myRem.overdue = !!cfg.overdue_enabled;
+    setSeg("my-rem-seg", myRem.enabled ? "on" : "off");
+    setSeg("my-rem-overdue-seg", myRem.overdue ? "on" : "off");
+    $("my-rem-time").value = cfg.time || "09:30";
+    $("my-rem-days").value = cfg.days_before === undefined ? 1 : cfg.days_before;
+    $("my-rem-opts").style.opacity = myRem.enabled ? "" : ".45";
+    // Финансист получает и «скоро к оплате», и просрочку; остальные — только
+    // просрочку, если админ так настроил маршрут.
+    $("my-rem-note").textContent = cfg.custom
+      ? "Это ваши настройки. «Как у всех» вернёт общие."
+      : "Сейчас действуют общие настройки бота — измените, чтобы задать свои.";
+  }
+
+  function loadMyReminders() {
+    fetch("/api/reminders/me", { headers: { "X-Telegram-Init-Data": tg.initData } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d) fillMyReminders(d); })
+      .catch(function () { /* не получатель — карточки всё равно не видно */ });
+  }
+
+  function myReminderRequest(body, btn) {
+    btn.disabled = true;
+    btn.style.opacity = ".6";
+    fetch("/api/reminders/me", {
+      method: "POST",
+      headers: {
+        "X-Telegram-Init-Data": tg.initData,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (d) {
+          showAdminMsg(d.message || d.detail || "Готово.", !r.ok);
+          if (r.ok && d.reminders) fillMyReminders(d.reminders);
+          if (tg && tg.HapticFeedback) {
+            tg.HapticFeedback.notificationOccurred(r.ok ? "success" : "error");
+          }
+        });
+      })
+      .catch(function () { showAdminMsg("Сеть недоступна.", true); })
+      .then(function () { btn.disabled = false; btn.style.opacity = ""; });
+  }
+
+  bindFilterSeg("my-rem-seg", function (v) {
+    myRem.enabled = v === "on";
+    $("my-rem-opts").style.opacity = myRem.enabled ? "" : ".45";
+  });
+  bindFilterSeg("my-rem-overdue-seg", function (v) { myRem.overdue = v === "on"; });
+  $("my-rem-save").addEventListener("click", function () {
+    myReminderRequest({
+      enabled: myRem.enabled,
+      time: $("my-rem-time").value,
+      days_before: $("my-rem-days").value.trim(),
+      overdue_enabled: myRem.overdue
+    }, this);
+  });
+  $("my-rem-reset").addEventListener("click", function () {
+    myReminderRequest({ action: "reset" }, this);
+  });
 
   bindFilterSeg("autofill-seg", function (v) {
     fetch("/api/admin/autofill", {

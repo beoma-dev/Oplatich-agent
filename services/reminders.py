@@ -36,7 +36,9 @@ from services.runtime_settings import effective_admin_ids
 log = logging.getLogger(__name__)
 
 # Как часто перечитываем расписание (и ловим смену суток).
-CHECK_INTERVAL = 300.0
+# Тикаем раз в минуту: у каждого получателя своё время, и попасть
+# нужно в его минуту, а не в общее окно.
+TICK_INTERVAL = 30.0
 # Сколько заявок просматриваем: напоминания смотрят «хвост» реестра.
 SCAN_LIMIT = 500
 
@@ -171,63 +173,89 @@ def overdue_recipients(target: str) -> list[int]:
     return admins
 
 
+def recipients() -> list[int]:
+    """Кому вообще может уйти напоминание: финансисты плюс адресаты просрочки."""
+    cfg = rs.reminders_config()
+    out = list(resolved_finance_ids())
+    for uid in overdue_recipients(cfg["overdue_to"]):
+        if uid not in out:
+            out.append(uid)
+    return out
+
+
+async def send_to(bot: Bot, user_id: int, rows: list[dict[str, str]],
+                  today: date, *, force: bool = False) -> tuple[int, int]:
+    """Напоминание одному получателю — по ЕГО настройкам.
+
+    Окно «за сколько дней» у каждого своё, поэтому и выборка своя: у одного
+    «завтра к оплате», у другого «на неделю вперёд».
+
+    force — ручной прогон «Проверить сейчас»: он обходит общий выключатель
+    расписания, но НЕ личный отказ получателя.
+    """
+    cfg = rs.personal_reminders(user_id)
+    if cfg["muted"] or (not cfg["enabled"] and not force):
+        return 0, 0
+    due, overdue = split_by_deadline(rows, today, cfg["days_before"])
+    sent_due = sent_overdue = 0
+    if due and user_id in resolved_finance_ids():
+        sent_due = len(due) if await _send(
+            bot, [user_id], build_due_message(due, cfg["days_before"])) else 0
+    wants_overdue = cfg["overdue_enabled"] and rs.reminders_config()["overdue_enabled"]
+    if overdue and wants_overdue and user_id in overdue_recipients(
+            rs.reminders_config()["overdue_to"]):
+        sent_overdue = len(overdue) if await _send(
+            bot, [user_id], build_overdue_message(overdue)) else 0
+    return sent_due, sent_overdue
+
+
 async def run_reminders(bot: Bot, today: date | None = None) -> tuple[int, int]:
-    """Считает и рассылает напоминания. Возвращает (к оплате скоро, просрочено)."""
+    """Рассылает напоминания всем получателям сразу — кнопка «Проверить сейчас».
+
+    Возвращает (к оплате скоро, просрочено) по ОБЩИМ настройкам: это сводка
+    для админа, а каждому уходит его собственная выборка.
+    """
     cfg = rs.reminders_config()
     today = today or datetime.now(ZoneInfo(settings.timezone)).date()
     rows = await storage.recent_requests(limit=SCAN_LIMIT)
+    for user_id in recipients():
+        await send_to(bot, user_id, rows, today, force=True)
     due, overdue = split_by_deadline(rows, today, cfg["days_before"])
-
-    if due:
-        await _send(
-            bot, resolved_finance_ids(), build_due_message(due, cfg["days_before"])
-        )
-    if overdue and cfg["overdue_enabled"]:
-        await _send(
-            bot, overdue_recipients(cfg["overdue_to"]), build_overdue_message(overdue)
-        )
     log.info("Напоминания: к оплате %s, просрочено %s", len(due), len(overdue))
     return len(due), len(overdue)
 
 
-def _seconds_until(hhmm: str, now: datetime) -> float:
-    hour, minute = (int(p) for p in hhmm.strip().split(":", 1))
-    target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    if target <= now:
-        target += timedelta(days=1)
-    return (target - now).total_seconds()
+def _hhmm(now: datetime) -> str:
+    return now.strftime("%H:%M")
 
 
 async def reminder_loop(bot: Bot) -> None:
-    """Фоновая задача: раз в сутки в назначенное время.
+    """Фоновая задача: каждому получателю — в его собственное время.
 
-    Настройки перечитываются каждые CHECK_INTERVAL секунд — правки из
-    админ-панели применяются без рестарта.
+    Раньше время было одно на всех и цикл спал до него. Теперь у каждого
+    финансиста своё расписание, поэтому тикаем раз в минуту и смотрим, кому
+    сейчас пора. Настройки перечитываются на каждом тике — правки из панели
+    применяются без рестарта.
     """
     log.info("Планировщик напоминаний запущен: %s", rs.reminders_config())
+    # Кому и в какой день уже отправили: защита от повтора внутри минуты.
+    sent_on: dict[int, date] = {}
     while True:
-        cfg = rs.reminders_config()
-        if not cfg["enabled"]:
-            await asyncio.sleep(CHECK_INTERVAL)
+        await asyncio.sleep(TICK_INTERVAL)
+        if not rs.reminders_config()["enabled"]:
+            continue
+        now = datetime.now(ZoneInfo(settings.timezone))
+        today = now.date()
+        due_now = [
+            uid for uid in recipients()
+            if rs.personal_reminders(uid)["time"] == _hhmm(now) and sent_on.get(uid) != today
+        ]
+        if not due_now:
             continue
         try:
-            delay = _seconds_until(
-                cfg["time"], datetime.now(ZoneInfo(settings.timezone))
-            )
-        except (ValueError, IndexError):
-            log.error("Некорректное время напоминаний %r — жду исправления", cfg["time"])
-            await asyncio.sleep(CHECK_INTERVAL)
-            continue
-
-        if delay > CHECK_INTERVAL:
-            await asyncio.sleep(CHECK_INTERVAL)
-            continue
-
-        await asyncio.sleep(delay)
-        if not rs.reminders_config()["enabled"]:  # выключили, пока ждали
-            continue
-        try:
-            await run_reminders(bot)
+            rows = await storage.recent_requests(limit=SCAN_LIMIT)
+            for user_id in due_now:
+                await send_to(bot, user_id, rows, today)
+                sent_on[user_id] = today
         except Exception:  # noqa: BLE001 — цикл должен пережить любой сбой
             log.exception("Сбой напоминаний о сроках")
-        await asyncio.sleep(61)  # не сработать дважды в ту же минуту

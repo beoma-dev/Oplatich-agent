@@ -39,6 +39,7 @@ from bot.admin import (
     fin_del_command,
     myid_command,
 )
+from bot.commands import help_command
 from bot.finance_actions import (
     CB_REASON_SKIP,
     reason_message,
@@ -186,6 +187,8 @@ def build_application(proxy_url: str | None = None) -> Application:
     app.add_handler(TypeHandler(Update, collect_user), group=-1)
 
     app.add_handler(CommandHandler("menu", show_menu))
+    # /help — список команд под права конкретного человека.
+    app.add_handler(CommandHandler("help", help_command))
     # «Мои заявки»: список своих заявок со статусами, отзыв и повтор.
     app.add_handler(CommandHandler("my", my_command))
     # Админ-команды (личка) и /myid для всех.

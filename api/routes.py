@@ -614,6 +614,58 @@ async def admin_backup(request: Request) -> dict:
     raise HTTPException(status_code=422, detail="Некорректный запрос.")
 
 
+@router.get("/reminders/me")
+async def my_reminders(request: Request) -> dict:
+    """Личные настройки напоминаний того, кто открыл форму.
+
+    Доступ — получателям: финансистам и админам. Остальным напоминать нечего.
+    """
+    user = validate_init_data(
+        request.headers.get("X-Telegram-Init-Data", ""), settings.telegram_bot_token
+    )
+    uid = user["id"]
+    if not (is_financier(uid) or await is_bot_admin(request.app.state.bot, uid)):
+        raise HTTPException(status_code=403, detail="Только для финансистов и админов.")
+    cfg = rs.personal_reminders(uid)
+    cfg["defaults"] = rs.reminders_config()
+    cfg["financier"] = is_financier(uid)
+    return cfg
+
+
+@router.post("/reminders/me")
+async def save_my_reminders(request: Request) -> dict:
+    """Сохранить свои настройки или вернуться к общим ({"action": "reset"})."""
+    user = validate_init_data(
+        request.headers.get("X-Telegram-Init-Data", ""), settings.telegram_bot_token
+    )
+    uid = user["id"]
+    if not (is_financier(uid) or await is_bot_admin(request.app.state.bot, uid)):
+        raise HTTPException(status_code=403, detail="Только для финансистов и админов.")
+    body = await request.json()
+    if body.get("action") == "reset":
+        cfg = await asyncio.to_thread(rs.clear_personal_reminders, uid)
+        return {"ok": True, "message": "Вернул общие настройки.", "reminders": cfg}
+
+    time_value = str(body.get("time", "")).strip()
+    if time_value and not _TIME_RE.fullmatch(time_value):
+        raise HTTPException(status_code=422, detail="Время — в формате ЧЧ:ММ.")
+    days_raw = str(body.get("days_before", "")).strip()
+    days = None
+    if days_raw:
+        if not days_raw.isdigit() or not 0 <= int(days_raw) <= 14:
+            raise HTTPException(status_code=422, detail="«За сколько дней» — число 0…14.")
+        days = int(days_raw)
+    cfg = await asyncio.to_thread(
+        rs.set_personal_reminders,
+        uid,
+        enabled=bool(body.get("enabled", True)),
+        time=time_value or None,
+        days_before=days,
+        overdue_enabled=bool(body.get("overdue_enabled", True)),
+    )
+    return {"ok": True, "message": "Настройки сохранены.", "reminders": cfg}
+
+
 @router.post("/admin/reminders")
 async def admin_reminders(request: Request) -> dict:
     """Напоминания финансистам: {"action": "save"|"run", …}.

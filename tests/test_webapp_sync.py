@@ -453,10 +453,13 @@ def test_admin_settings_are_split_into_tabs():
     open_panes = re.findall(r'<div class="pane" id="pane-(\w+)"', HTML)
     assert open_panes == ["skin"], open_panes
     assert "function showAdminTab(" in HTML
-    # Настройки финансистов лежат вместе: список и напоминания им.
+    # Вкладка получателя: сначала свои настройки, потом общие (у админа).
     fin_pane = HTML[HTML.index('id="pane-fin"'):HTML.index('id="pane-access"')]
-    assert "💼 Финансисты" in fin_pane
-    assert "⏰ Напоминания финансистам" in fin_pane
+    assert "⏰ Мои напоминания" in fin_pane
+    assert "⏰ Напоминания по умолчанию" in fin_pane
+    # Состав финансистов — вопрос прав, поэтому он во вкладке доступа.
+    access_pane = HTML[HTML.index('id="pane-access"'):HTML.index('id="pane-data"')]
+    assert "💼 Финансисты" in access_pane
 
 
 def test_tabs_fit_one_row():
@@ -482,8 +485,13 @@ def test_settings_are_open_to_everyone_but_admin_tabs_are_not():
     m = re.search(r'<button[^>]*id="admin-btn"[^>]*>', HTML, re.S)
     assert m and "hidden" not in re.search(r'class="([^"]*)"', m.group(0)).group(1)
     admin_tabs = re.findall(r'data-pane="(\w+)" data-admin="1"', HTML)
-    assert admin_tabs == ["fin", "access", "data", "beta"], admin_tabs
-    assert '.tab[data-admin]' in HTML, "видимость админских вкладок не управляется"
+    assert admin_tabs == ["access", "data", "beta"], admin_tabs
+    # Напоминания настраивает получатель — финансист тоже, не только админ.
+    assert 'data-pane="fin" data-recipient="1"' in MARKUP
+    assert "function applyRecipientTab(" in JS
+    # Скрывается не только вкладка, но и карточка общих настроек внутри неё.
+    assert '#admin-view [data-admin]' in JS, "видимость админского не управляется"
+    assert 'id="rem-card" data-admin="1"' in MARKUP
     # Настройки чужих заявок не тянем тому, кому сервер их всё равно не отдаст.
     opener = HTML[HTML.index("function openAdmin("):]
     assert "if (isBotAdmin) { loadAdminSettings(); loadUsers(); }" in opener[:900]

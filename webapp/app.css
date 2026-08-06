@@ -455,7 +455,7 @@
     .t-short { display: none; }
   }
   @media (max-width: 460px) {
-    .tab { padding: 8px 8px; font-size: 12.5px; }
+    .tab { padding: 8px 7px; font-size: 12.5px; }
   }
   @media (max-width: 400px) {
     .tabs { gap: 4px; }

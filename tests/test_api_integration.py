@@ -1107,3 +1107,88 @@ class TestAccessRequests:
         body = (await client.get("/api/admin/settings", headers=_auth(1))).json()
         rows = [u for u in body["allowed"] if u["id"] == 42]
         assert rows and rows[0]["username"] == "@tester"
+
+
+class TestPersonalReminders:
+    """Каждый получатель настраивает напоминания себе, а не всем сразу."""
+
+    async def test_only_recipients_may_read_and_save(self, api, monkeypatch):
+        client, _ = api
+        _allow(monkeypatch)          # обычный сотрудник: напоминать нечего
+        assert (await client.get("/api/reminders/me", headers=_auth())).status_code == 403
+        assert (await client.post("/api/reminders/me", json={},
+                                  headers=_auth())).status_code == 403
+
+    async def test_financier_sets_own_schedule(self, api, monkeypatch):
+        from services import runtime_settings as rs
+
+        client, _ = api
+        settings.__dict__.pop("finance_recipients", None)
+        monkeypatch.setattr(settings, "finance_chat_ids_raw", "42")
+
+        first = (await client.get("/api/reminders/me", headers=_auth())).json()
+        assert first["custom"] is False, "пока ничего не меняли — общие настройки"
+
+        saved = await client.post("/api/reminders/me", json={
+            "enabled": True, "time": "07:15", "days_before": "3",
+            "overdue_enabled": False,
+        }, headers=_auth())
+        assert saved.status_code == 200
+        cfg = saved.json()["reminders"]
+        assert (cfg["time"], cfg["days_before"], cfg["overdue_enabled"]) == ("07:15", 3, False)
+        assert cfg["custom"] is True
+        # Общие настройки при этом не тронуты — это и есть смысл личных.
+        assert rs.reminders_config()["time"] != "07:15"
+
+        back = await client.post("/api/reminders/me", json={"action": "reset"},
+                                 headers=_auth())
+        assert back.json()["reminders"]["custom"] is False
+
+    async def test_personal_time_is_validated(self, api, monkeypatch):
+        client, _ = api
+        settings.__dict__.pop("finance_recipients", None)
+        monkeypatch.setattr(settings, "finance_chat_ids_raw", "42")
+        bad_time = await client.post("/api/reminders/me", json={"time": "25:99"},
+                                     headers=_auth())
+        assert bad_time.status_code == 422
+        bad_days = await client.post("/api/reminders/me", json={"days_before": "99"},
+                                     headers=_auth())
+        assert bad_days.status_code == 422
+
+class TestHelpCommand:
+    """/help показывает только то, что доступно этому человеку."""
+
+    async def _help(self, bot, user_id: int) -> str:
+        from bot.commands import build_help
+
+        return await build_help(bot, user_id)
+
+    async def test_plain_employee_sees_common_commands_only(self, api, monkeypatch):
+        _, bot = api
+        _allow(monkeypatch)
+        text = await self._help(bot, 42)
+        assert "/invoice" in text and "/my" in text and "/myid" in text
+        assert "/allow" not in text, "админские команды не для всех"
+        assert "Финансисту" not in text
+
+    async def test_financier_sees_their_block(self, api, monkeypatch):
+        _, bot = api
+        _allow(monkeypatch)
+        settings.__dict__.pop("finance_recipients", None)
+        monkeypatch.setattr(settings, "finance_chat_ids_raw", "42")
+        text = await self._help(bot, 42)
+        assert "Финансисту" in text
+        assert "/allow" not in text
+
+    async def test_admin_sees_everything(self, api, monkeypatch):
+        _, bot = api
+        _admins(monkeypatch, "42")
+        text = await self._help(bot, 42)
+        assert "Админу" in text
+        for command in ("/allow", "/deny", "/fin_add", "/export", "/audit", "/backup"):
+            assert command in text, command
+
+    async def test_without_access_help_says_how_to_get_it(self, api):
+        _, bot = api
+        text = await self._help(bot, 42)     # whitelist пуст → доступа нет
+        assert "Запросить доступ" in text
