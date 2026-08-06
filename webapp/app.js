@@ -1801,6 +1801,7 @@
         // Сразу, а не на первом тике опроса: иначе вкладка напоминаний
         // появлялась у финансиста через несколько секунд после открытия.
         applyFinance(d.financier);
+        applyAdmin(d.admin);
         if (d.allowed) return;
         if (!d.has_admins) {
           $("access-note").textContent =
@@ -1863,6 +1864,7 @@
         if (!d) return;
         applyAccess(d.allowed, true);
         applyFinance(d.financier);
+        applyAdmin(d.admin);
       })
       .catch(function () { /* сеть мигнула — попробуем на следующем круге */ });
   }
@@ -1870,6 +1872,27 @@
   /** Кнопка панели финансиста: права снимают в чате, и она должна уходить
    *  так же быстро, как появляется. Открытую панель при отзыве закрываем —
    *  чужие заявки в ней смотреть уже нельзя. */
+  /** Права админа снимают и выдают в чате — приложение узнаёт об этом из
+   *  того же опроса, что и про доступ. Шестерёнка есть у всех: за ней хотя
+   *  бы «Оформление», а вот админские вкладки — по праву. */
+  function applyAdmin(isAdmin) {
+    if (isBotAdmin === !!isAdmin) return;
+    isBotAdmin = !!isAdmin;
+    [].forEach.call(document.querySelectorAll("#admin-view [data-admin]"), function (el) {
+      el.classList.toggle("hidden", !isBotAdmin);
+    });
+    applyRecipientTab(isFinancier || isBotAdmin);
+    if (isBotAdmin) {
+      loadAdminSettings();
+      loadUsers();
+      return;
+    }
+    // Права сняли на открытой админской вкладке — уводим на оставшуюся.
+    if ($("admin-view").classList.contains("hidden")) return;
+    var first = $("admin-tabs").querySelector(".tab:not(.hidden)");
+    showAdminTab(first ? first.dataset.pane : "skin");
+  }
+
   function applyFinance(allowed) {
     isFinancier = !!allowed;
     // Напоминания настраивает получатель — финансист или админ.
@@ -1982,16 +2005,7 @@
   function tryAdmin() {
     if (!insideTelegram) return;
     fetch("/api/admin/settings", { headers: { "X-Telegram-Init-Data": tg.initData } })
-      .then(function (r) {
-        isBotAdmin = r.ok;
-        // Шестерёнка есть у всех — за ней хотя бы «Оформление». Админские
-        // вкладки открываются только тем, у кого на них есть право.
-        [].forEach.call(document.querySelectorAll("#admin-view [data-admin]"), function (el) {
-          el.classList.toggle("hidden", !r.ok);
-        });
-        // Вкладка напоминаний — получателям: финансистам и админам.
-        applyRecipientTab(r.ok || isFinancier);
-      })
+      .then(function (r) { applyAdmin(r.ok); })
       .catch(function () { /* не админ или сеть — остаётся «Оформление» */ });
   }
 

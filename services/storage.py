@@ -147,14 +147,29 @@ async def delete_request(request_id: str) -> bool:
     return removed
 
 
-async def recent_requests(limit: int = 200) -> list[dict[str, str]]:
-    """Последние заявки всех авторов — панель финансиста."""
+class RegistryUnavailable(RuntimeError):
+    """Реестр не прочитался: сеть, квота Google или таймаут.
+
+    Отдельный тип, потому что «реестр недоступен» и «заявок нет» — разные
+    вещи: на пустом списке напоминания молча не уходили, и понять, что
+    именно случилось, было нельзя.
+    """
+
+
+async def recent_requests(limit: int = 200, *, strict: bool = False) -> list[dict[str, str]]:
+    """Последние заявки всех авторов — панель финансиста.
+
+    strict=True — поднять RegistryUnavailable вместо пустого списка. Нужен
+    тем, для кого «пусто» означает «делать нечего»: напоминаниям.
+    """
     try:
         if settings.storage_is_google:
             return await asyncio.to_thread(google_backend.recent_requests_sync, limit)
         return await asyncio.to_thread(registry_sqlite.recent_requests_sync, limit)
-    except Exception:  # noqa: BLE001 — панель не критична
+    except Exception as exc:  # noqa: BLE001 — панель не критична
         log.exception("Не удалось получить список заявок")
+        if strict:
+            raise RegistryUnavailable(str(exc)) from exc
         return []
 
 

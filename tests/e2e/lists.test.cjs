@@ -17,7 +17,8 @@ const ITEM = {
 };
 
 const ROUTES = {
-  "/api/access": { allowed: true, pending: false, has_admins: true },
+  "/api/access": { allowed: true, financier: true, admin: true,
+                   pending: false, has_admins: true },
   "/api/my-requests": { items: [ITEM] },
   "/api/finance/access": { ok: true },
   "/api/finance/requests": {

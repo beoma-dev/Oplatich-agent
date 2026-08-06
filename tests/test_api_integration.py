@@ -954,7 +954,7 @@ class TestAccessRequests:
         client, _ = api
         _admins(monkeypatch, "1")
         first = (await client.get("/api/access", headers=_auth())).json()
-        assert first == {"allowed": False, "financier": False,
+        assert first == {"allowed": False, "financier": False, "admin": False,
                          "pending": False, "has_admins": True}
         await client.post("/api/access/request", headers=_auth())
         assert (await client.get("/api/access", headers=_auth())).json()["pending"] is True
@@ -1121,3 +1121,40 @@ class TestHelpCommand:
         _, bot = api
         text = await self._help(bot, 42)     # whitelist пуст → доступа нет
         assert "Запросить доступ" in text
+
+
+class TestOverdueFilter:
+    """Фильтр «Просрочены»: срок прошёл, а заявка всё ещё ждёт оплаты."""
+
+    async def _seed(self, request_id: str, days: int):
+        from datetime import date, timedelta
+
+        from services import storage
+        from tests.conftest import make_request
+
+        await storage.append_invoice(make_request(
+            request_id=request_id, planned_date=date.today() + timedelta(days=days)))
+
+    async def test_overdue_is_a_state_not_a_status(self, api, monkeypatch):
+        client, _ = api
+        _allow(monkeypatch)
+        settings.__dict__.pop("finance_recipients", None)
+        monkeypatch.setattr(settings, "finance_chat_ids_raw", "42")
+        await self._seed("INV-20260804-000001-0001", -3)   # срок прошёл
+        await self._seed("INV-20260804-000002-0002", +5)   # ещё впереди
+
+        resp = await client.get("/api/finance/requests?status=__overdue__", headers=_auth())
+        assert resp.status_code == 200
+        assert [r["id"] for r in resp.json()["items"]] == ["INV-20260804-000001-0001"]
+
+    async def test_paid_request_is_never_overdue(self, api, monkeypatch):
+        from services import storage
+
+        client, _ = api
+        _allow(monkeypatch)
+        settings.__dict__.pop("finance_recipients", None)
+        monkeypatch.setattr(settings, "finance_chat_ids_raw", "42")
+        await self._seed("INV-20260804-000003-0003", -3)
+        await storage.set_request_status("INV-20260804-000003-0003", "Оплачена")
+        resp = await client.get("/api/finance/requests?status=__overdue__", headers=_auth())
+        assert resp.json()["items"] == []

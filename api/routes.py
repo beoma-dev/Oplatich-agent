@@ -52,6 +52,7 @@ from services.access_requests import request_access
 from services.deletion import delete_request as delete_request_service
 from services.intake import finalize_submission
 from services.local_storage import build_invoice_filename
+from services.reminders import PENDING_STATUSES
 from services.reminders import SCAN_LIMIT as REMINDER_SCAN_LIMIT
 from services.reminders import send_to as send_reminder_to
 from services.status_change import apply_status
@@ -120,11 +121,14 @@ async def access_state(request: Request) -> dict:
     user = validate_init_data(
         request.headers.get("X-Telegram-Init-Data", ""), settings.telegram_bot_token
     )
-    # Заодно отдаём признак финансиста: приложение опрашивает эту ручку и по
-    # ней же убирает/возвращает кнопку панели, когда права поменяли в чате.
+    # Заодно отдаём роли: приложение опрашивает эту ручку и по ней же
+    # показывает или убирает панель финансиста и админские вкладки, когда
+    # права поменяли в чате. is_bot_admin кэширует ответ Telegram на 5 минут,
+    # так что опрос его не дёргает.
     return {
         "allowed": is_allowed(user["id"]),
         "financier": is_financier(user["id"]),
+        "admin": await is_bot_admin(request.app.state.bot, user["id"]),
         "pending": rs.access_request_pending(user["id"]),
         "has_admins": bool(rs.effective_admin_ids()),
     }
@@ -263,6 +267,10 @@ def _parse_registry_date(value: str) -> date | None:
     return None
 
 
+# Значение фильтра «Просрочено»: не встречается среди статусов реестра.
+OVERDUE_FILTER = "__overdue__"
+
+
 def _matches(
     row: dict[str, str],
     *,
@@ -272,7 +280,14 @@ def _matches(
     date_from: date | None,
     date_to: date | None,
 ) -> bool:
-    if status and row.get("Статус оплаты", "") != status:
+    if status == OVERDUE_FILTER:
+        # Просрочка — не статус в реестре, а «срок прошёл, а всё ещё ждёт».
+        if row.get("Статус оплаты", "") not in PENDING_STATUSES:
+            return False
+        planned = _parse_registry_date(row.get("Плановая дата оплаты", ""))
+        if planned is None or planned >= datetime.now(ZoneInfo(settings.timezone)).date():
+            return False
+    elif status and row.get("Статус оплаты", "") != status:
         return False
     if urgency and row.get("Срочность", "") != urgency:
         return False
@@ -649,7 +664,13 @@ async def save_my_reminders(request: Request) -> dict:
 
     if body.get("action") == "test":
         # Прогон на себе: приходит только тому, кто нажал, и не ждёт расписания.
-        rows = await storage.recent_requests(limit=REMINDER_SCAN_LIMIT)
+        try:
+            rows = await storage.recent_requests(limit=REMINDER_SCAN_LIMIT, strict=True)
+        except storage.RegistryUnavailable as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Реестр сейчас недоступен — попробуйте ещё раз через минуту.",
+            ) from exc
         today = datetime.now(ZoneInfo(settings.timezone)).date()
         due, overdue = await send_reminder_to(
             request.app.state.bot, uid, rows, today, force=True

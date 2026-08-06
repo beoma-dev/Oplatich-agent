@@ -7,7 +7,8 @@ const assert = require("node:assert");
 const { launch, openApp } = require("./helpers.cjs");
 
 const ADMIN = {
-  "/api/access": { allowed: true, pending: false, has_admins: true },
+  "/api/access": { allowed: true, financier: false, admin: true,
+                   pending: false, has_admins: true },
   "/api/admin/settings": {
     autofill: true, financiers: [], allowed: [],
     admins: [{ id: 42, source: "env", username: "@boss" }],
@@ -181,7 +182,10 @@ test("панель админа обновляется после решения
     window.fetch = (u) => {
       const s = String(u);
       let body = { ok: true, items: [] };
-      if (s.endsWith("/api/access")) body = { allowed: true, pending: false, has_admins: true };
+      if (s.endsWith("/api/access")) {
+        body = { allowed: true, financier: false, admin: true,
+                 pending: false, has_admins: true };
+      }
       if (s.indexOf("/api/admin/settings") !== -1) body = {
         autofill: true, financiers: [], backup: {}, reminders: {},
         admins: [{ id: 42, source: "env", username: "@boss" }],
@@ -259,7 +263,8 @@ test("финансист настраивает напоминания себе,
       }
       let body = { ok: true, items: [] };
       if (s.endsWith("/api/access")) {
-        body = { allowed: true, financier: true, pending: false, has_admins: true };
+        body = { allowed: true, financier: true, admin: false,
+                 pending: false, has_admins: true };
       }
       if (s.indexOf("/api/finance/access") !== -1) body = { ok: true };
       return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });

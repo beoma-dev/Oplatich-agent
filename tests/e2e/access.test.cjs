@@ -180,3 +180,68 @@ test("кнопка панели финансиста уходит вместе �
     "кнопка панели осталась после отзыва прав финансиста");
   await page.close();
 });
+
+test("права админа появляются и уходят без перезапуска", async () => {
+  // Назначают и снимают их в чате — приложение узнаёт из того же опроса.
+  const page = await browser.newPage({ viewport: { width: 430, height: 820 } });
+  await page.route("**/telegram-web-app.js", (r) => r.abort());
+  await page.addInitScript(() => {
+    window.__admin = false;
+    window.Telegram = { WebApp: {
+      initData: "signed", initDataUnsafe: {}, themeParams: {}, colorScheme: "light",
+      ready() {}, expand() {}, close() {}, openLink() {},
+      MainButton: { isVisible: false, show() { this.isVisible = true; },
+        hide() { this.isVisible = false; }, setText() {}, showProgress() {},
+        hideProgress() {}, onClick() {}, offClick() {}, setParams() {},
+        enable() {}, disable() {} },
+      BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} },
+      HapticFeedback: { selectionChanged() {}, impactOccurred() {}, notificationOccurred() {} },
+      onEvent() {}, offEvent() {},
+    } };
+    window.fetch = (u) => {
+      const s = String(u);
+      if (s.indexOf("/api/admin/") !== -1 && !window.__admin) {
+        return Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({}) });
+      }
+      let body = { ok: true, items: [] };
+      if (s.endsWith("/api/access")) {
+        body = { allowed: true, financier: false, admin: window.__admin,
+                 pending: false, has_admins: true };
+      }
+      if (s.indexOf("/api/admin/settings") !== -1) {
+        body = { autofill: true, financiers: [], allowed: [], admins: [],
+                 backup: {}, reminders: {}, registry_url: null, drive_url: null };
+      }
+      if (s.indexOf("/api/admin/users") !== -1) body = { whitelist_empty: false, users: [] };
+      if (s.indexOf("/api/finance/access") !== -1) body = { ok: false };
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+    };
+  });
+  await page.goto(PAGE_URL, { waitUntil: "load" });
+  await page.waitForTimeout(700);
+  await page.click("#admin-btn");
+  await page.waitForTimeout(350);
+
+  const tabs = () => page.evaluate(() =>
+    [...document.querySelectorAll("#admin-tabs .tab")]
+      .filter((t) => !t.classList.contains("hidden")).map((t) => t.dataset.pane));
+  assert.deepEqual(await tabs(), ["skin"], "у не-админа админских вкладок быть не должно");
+
+  await page.evaluate(() => { window.__admin = true; });
+  await page.waitForTimeout(7500);
+  // Админ — тоже получатель напоминаний, поэтому вкладка «fin» тоже его.
+  assert.deepEqual(await tabs(), ["fin", "access", "data", "beta", "skin"],
+    "назначили админом — вкладки не появились");
+
+  // И обратно: права сняли, открытая админская вкладка не должна остаться.
+  await page.click("#tab-data");
+  await page.waitForTimeout(200);
+  await page.evaluate(() => { window.__admin = false; });
+  await page.waitForTimeout(7500);
+  assert.deepEqual(await tabs(), ["skin"], "права сняли — вкладки остались");
+  assert.deepEqual(await page.evaluate(() =>
+    [...document.querySelectorAll("#admin-view .pane")]
+      .filter((p) => !p.classList.contains("hidden")).map((p) => p.id)),
+    ["pane-skin"], "остались на админской вкладке после снятия прав");
+  await page.close();
+});

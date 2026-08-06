@@ -220,7 +220,7 @@ async def run_reminders(bot: Bot, today: date | None = None) -> tuple[int, int]:
     """
     cfg = rs.reminders_config()
     today = today or datetime.now(ZoneInfo(settings.timezone)).date()
-    rows = await storage.recent_requests(limit=SCAN_LIMIT)
+    rows = await storage.recent_requests(limit=SCAN_LIMIT, strict=True)
     for user_id in recipients():
         await send_to(bot, user_id, rows, today, force=True)
     due, overdue = split_by_deadline(rows, today, cfg["days_before"])
@@ -256,9 +256,15 @@ async def reminder_loop(bot: Bot) -> None:
         if not due_now:
             continue
         try:
-            rows = await storage.recent_requests(limit=SCAN_LIMIT)
-            for user_id in due_now:
+            # strict: на недоступном реестре нельзя помечать день отправленным,
+            # иначе одна сетевая заминка съедала напоминания на все сутки.
+            rows = await storage.recent_requests(limit=SCAN_LIMIT, strict=True)
+        except storage.RegistryUnavailable:
+            log.warning("Напоминания: реестр недоступен, повторю на следующем тике")
+            continue
+        for user_id in due_now:
+            try:
                 await send_to(bot, user_id, rows, today)
                 sent_on[user_id] = today
-        except Exception:  # noqa: BLE001 — цикл должен пережить любой сбой
-            log.exception("Сбой напоминаний о сроках")
+            except Exception:  # noqa: BLE001 — один сбой не срывает остальных
+                log.exception("Сбой напоминания для %s", user_id)
