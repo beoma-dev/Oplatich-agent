@@ -12,9 +12,21 @@ from pathlib import Path
 from bot.models import ARTICLES, CURRENCIES
 from bot.validators import MAX_FILE_SIZE_BYTES
 
-HTML = (Path(__file__).resolve().parent.parent / "webapp" / "index.html").read_text(
-    encoding="utf-8"
-)
+WEBAPP = Path(__file__).resolve().parent.parent / "webapp"
+
+
+def _read(name: str) -> str:
+    return (WEBAPP / name).read_text(encoding="utf-8")
+
+
+MARKUP = _read("index.html")
+CSS = _read("app.css")
+JS = _read("app.js")
+FIELD = _read("skin-field.js")
+# Большинству проверок неважно, в каком файле лежит правило или функция, —
+# важно, что они есть и согласованы между собой. Разбор по файлам делают
+# те тесты, где это существенно (порядок правил, состав разметки).
+HTML = "\n".join((MARKUP, CSS, JS, FIELD))
 
 
 def _media_blocks(query: str) -> list[str]:
@@ -651,3 +663,31 @@ def test_username_inputs_suggest_known_people():
     # mousedown, а не click: blur поля успевал закрыть список до выбора.
     body = HTML[HTML.index("function wireSuggest("):]
     assert 'addEventListener("mousedown"' in body[:2200]
+
+
+def test_mini_app_is_split_into_files():
+    """Разметка, стили и логика — в разных файлах, и все подключены.
+
+    Единый index.html на четыре тысячи строк был главным источником правок
+    вслепую: конфликты специфичности CSS находились только глазами.
+    """
+    assert '<link rel="stylesheet" href="app.css">' in MARKUP
+    assert '<script src="form-lib.js"></script>' in MARKUP
+    assert '<script src="skin-field.js"></script>' in MARKUP
+    assert '<script src="app.js"></script>' in MARKUP
+    # В разметке не должно остаться ни стилей, ни логики.
+    assert "<style>" not in MARKUP
+    assert MARKUP.count("<script>") == 1, "инлайн-скрипт только один — ранний выбор темы"
+    assert "data-skin" in MARKUP, "ранний скрипт темы обязан остаться инлайном"
+    # Порядок подключения значим: app.js зовёт buildSkinField и функции формы.
+    assert MARKUP.index("skin-field.js") < MARKUP.index('src="app.js"')
+    assert "buildSkinField(" in FIELD
+    assert 'buildSkinField($("skin-field"))' in JS
+
+
+def test_split_files_stay_reasonably_small():
+    """Порог, чтобы файлы снова не срослись в одну простыню."""
+    for name, limit in (("index.html", 900), ("app.css", 1600), ("app.js", 2800),
+                        ("skin-field.js", 400), ("form-lib.js", 300)):
+        length = len(_read(name).split("\n"))
+        assert length <= limit, f"{name}: {length} строк — пора делить дальше"

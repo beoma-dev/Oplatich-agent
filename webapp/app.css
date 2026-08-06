@@ -1,0 +1,1162 @@
+/*
+ * app.css — оформление Mini App: токены темы, компоненты формы, две шкуры.
+ *
+ * Порядок правил значим: скиновые переопределения идут ПОСЛЕ базовых, а
+ * блок наведения — последним, иначе более специфичные правила перебивают
+ * подсветку (уже ловили это на подсказках и крестиках).
+ */
+  :root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --bg2: var(--tg-theme-secondary-bg-color, #f2f2f7);
+    --text: var(--tg-theme-text-color, #1c1c1e);
+    --hint: var(--tg-theme-hint-color, #8e8e93);
+    --accent: var(--tg-theme-button-color, #2481cc);
+    --accent-text: var(--tg-theme-button-text-color, #ffffff);
+    --danger: #e53935;
+    --ok: #34c759;
+    --radius: 14px;
+    --shadow: 0 1px 3px rgba(0, 0, 0, .06);
+  }
+
+
+  /* ── Бета: предложение заполнить форму по счёту ─────────────────────── */
+  .autofill {
+    margin-top: 12px;
+    /* Без нижнего отступа блок вставал вплотную к кнопкам ниже и читался
+       как наложение. */
+    margin-bottom: 14px;
+    padding: 13px 14px;
+    border-radius: 12px;
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    background: color-mix(in srgb, var(--accent) 9%, var(--bg));
+    animation: rise .3s ease;
+  }
+  .autofill-head {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 14px; font-weight: 650; margin-bottom: 10px;
+  }
+  .beta {
+    font-size: 10px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--accent-text);
+    background: var(--accent);
+    padding: 2px 7px; border-radius: 999px;
+  }
+  /* Та же причина: предупреждение автопроверки липло к кнопкам. */
+  #file-warn:not(.hidden) { margin-bottom: 14px; }
+
+  .autofill-list { display: grid; gap: 10px; }
+  .autofill-field { display: grid; gap: 4px; }
+  .autofill-field label {
+    font-size: 12px; color: var(--hint);
+  }
+  .autofill-field input, .autofill-field textarea {
+    font-size: 15px;
+    padding: 9px 11px;
+  }
+  .autofill-field textarea { resize: vertical; min-height: 74px; }
+  .autofill-note {
+    font-size: 12.5px; color: var(--hint);
+    display: flex; gap: 8px;
+  }
+  .autofill-note b { color: var(--text); font-weight: 600; }
+
+  /* ── Экран «Оформление» ─────────────────────────────────────────────── */
+  .skin-options { display: grid; gap: 10px; }
+  @media (min-width: 460px) { .skin-options { grid-template-columns: 1fr 1fr; } }
+  .skin-opt {
+    display: grid;
+    gap: 6px;
+    text-align: left;
+    padding: 14px;
+    border-radius: 12px;
+    border: 1.5px solid color-mix(in srgb, var(--hint) 30%, transparent);
+    background: var(--bg2);
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+    transition: border-color .2s ease, transform .12s ease, background .2s ease;
+  }
+  .skin-opt:active { transform: scale(.98); }
+  .skin-opt.active {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, var(--bg2));
+  }
+  .skin-opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .skin-name { font-weight: 650; font-size: 15px; }
+  .skin-desc { font-size: 12.5px; color: var(--hint); line-height: 1.4; }
+  /* Образец темы: три полосы — фон, поверхность, акцент. */
+  .skin-swatch { display: flex; gap: 4px; height: 34px; margin-bottom: 4px; }
+  .skin-swatch i { flex: 1; border-radius: 7px; }
+  .sw-tg i:nth-child(1) { background: #f2f2f7; }
+  .sw-tg i:nth-child(2) { background: #ffffff; border: 1px solid #e3e3e8; }
+  .sw-tg i:nth-child(3) { background: #2481cc; }
+  .sw-neon i:nth-child(1) { background: #05080A; }
+  .sw-neon i:nth-child(2) { background: #131A1D; }
+  .sw-neon i:nth-child(3) { background: #10B981; box-shadow: 0 0 12px rgba(16,185,129,.65); }
+  /* ── Скин «Неон»: второй вариант оформления ───────────────────────────
+     Переопределяем ТОЛЬКО токены — вся остальная вёрстка написана через
+     них, поэтому новая тема не требует ни одного дубля правил.
+     Выбор запоминается в localStorage (invoice_skin_v1).              */
+  :root[data-skin="neon"] {
+    --bg: #0B1114;
+    --bg2: #05080A;
+    --text: #E9F1EE;
+    --hint: #8FA09B;
+    --accent: #10B981;          /* изумруд, а не мята */
+    --accent-text: #04140D;
+    --danger: #F08672;
+    --ok: #10B981;
+    --shadow: 0 10px 30px -18px rgba(0, 0, 0, .9);
+  }
+  /* Цветные пятна — часть «телеграмного» скина; в неоне их место занимает
+     живое полотно, иначе два фона спорят друг с другом. */
+  :root[data-skin="neon"] .bg { display: none; }
+  /* Мятная дымка по фону: плоская чернота выглядит пусто, а мята рядом с
+     изумрудным акцентом даёт глубину, не перетягивая внимание.
+     Слои закреплены (fixed) — при прокрутке подсветка остаётся на месте. */
+  :root[data-skin="neon"] body {
+    background:
+      radial-gradient(115% 70% at 50% -8%,  rgba(110, 231, 183, .20), transparent 62%),
+      radial-gradient(85% 55% at 105% 22%,  rgba(47, 211, 162, .14), transparent 66%),
+      radial-gradient(90% 60% at -10% 78%,  rgba(16, 185, 129, .13), transparent 68%),
+      linear-gradient(180deg, #071013 0%, #05080A 55%, #061012 100%);
+    background-attachment: fixed;
+  }
+  :root[data-skin="neon"] .card {
+    border-color: rgba(255, 255, 255, .08);
+    background: rgba(255, 255, 255, .04);
+  }
+  :root[data-skin="neon"] .seg button:not(.active):not(:hover) {
+    background: rgba(255, 255, 255, .06);
+  }
+  :root[data-skin="neon"] .chip,
+  :root[data-skin="neon"] .chip-x { background: rgba(255, 255, 255, .06); }
+  :root[data-skin="neon"] .chip { color: var(--text); }
+  :root[data-skin="neon"] .drop { border-color: rgba(255, 255, 255, .18); }
+  :root[data-skin="neon"] .gear { background: rgba(255, 255, 255, .07); }
+  /* Поля ввода: на почти чёрном фоне им нужна своя поверхность и граница,
+     иначе они сливаются со страницей и перестают читаться как поля. */
+  :root[data-skin="neon"] input[type=text],
+  :root[data-skin="neon"] input[type=date],
+  :root[data-skin="neon"] input[type=time],
+  :root[data-skin="neon"] textarea {
+    background: rgba(255, 255, 255, .05);
+    border-color: rgba(255, 255, 255, .09);
+    color-scheme: dark;
+  }
+
+  #skin-field {
+    position: fixed;
+    inset: 0;
+    z-index: -1;              /* над цветными пятнами .bg, под контентом */
+    width: 100%;
+    height: 100%;
+    display: block;
+    pointer-events: none;
+    opacity: .5;              /* телеграмная тема: сеть лишь угадывается */
+    transition: opacity .3s ease;
+  }
+  :root[data-skin="neon"] #skin-field { opacity: .75; }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg2);
+    color: var(--text);
+    font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    padding: 16px 16px 104px;
+    overflow-x: hidden;
+  }
+
+  /* ---------- Анимированный фон (aurora) ---------- */
+  .bg {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .blob {
+    position: absolute;
+    width: 68vw;
+    height: 68vw;
+    min-width: 380px;
+    min-height: 380px;
+    border-radius: 50%;
+    filter: blur(58px);
+    opacity: .38;
+    will-change: transform;
+  }
+  /* В тёмной теме пятна «светятся» поверх фона, иначе они тонут в темноте. */
+  body[data-theme="dark"] .blob {
+    opacity: .55;
+    mix-blend-mode: screen;
+  }
+  .b1 {
+    top: -18vw; left: -14vw;
+    background: radial-gradient(circle at 35% 35%,
+      var(--accent) 0%,
+      color-mix(in srgb, var(--accent) 70%, transparent) 40%,
+      transparent 72%);
+    animation: drift1 34s ease-in-out infinite alternate;
+  }
+  .b2 {
+    top: 26%; right: -22vw;
+    background: radial-gradient(circle at 60% 40%,
+      color-mix(in srgb, var(--accent) 25%, #8a5cff) 0%,
+      color-mix(in srgb, #8a5cff 55%, transparent) 42%,
+      transparent 72%);
+    animation: drift2 44s ease-in-out infinite alternate;
+  }
+  .b3 {
+    bottom: -20vw; left: 8vw;
+    background: radial-gradient(circle at 45% 55%,
+      color-mix(in srgb, var(--accent) 20%, #2fd6a7) 0%,
+      color-mix(in srgb, #2fd6a7 55%, transparent) 42%,
+      transparent 72%);
+    animation: drift3 39s ease-in-out infinite alternate;
+  }
+  @keyframes drift1 {
+    from { transform: translate3d(0, 0, 0) scale(1); }
+    to   { transform: translate3d(16vw, 12vh, 0) scale(1.25); }
+  }
+  @keyframes drift2 {
+    from { transform: translate3d(0, 0, 0) scale(1.15) rotate(0deg); }
+    to   { transform: translate3d(-14vw, -10vh, 0) scale(.9) rotate(40deg); }
+  }
+  @keyframes drift3 {
+    from { transform: translate3d(0, 0, 0) scale(.95); }
+    to   { transform: translate3d(10vw, -14vh, 0) scale(1.2); }
+  }
+
+  /* ---------- Появление ---------- */
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: none; }
+  }
+  header { animation: rise .4s cubic-bezier(.22,1,.36,1) backwards; }
+  .card:nth-of-type(1) { animation-delay: .05s; }
+  .card:nth-of-type(2) { animation-delay: .11s; }
+  .card:nth-of-type(3) { animation-delay: .17s; }
+  .card:nth-of-type(4) { animation-delay: .23s; }
+
+  /* padding-right уточняет layoutHeaderIcons() по числу ВИДИМЫХ иконок:
+     базовое значение — на две всегда видимые (инструкция и «Мои заявки»). */
+  header { margin: 4px 2px 16px; position: relative; padding-right: 92px; }
+  h1 { font-size: 21px; letter-spacing: -.02em; }
+  /* Имя бота — крупнее прочих заголовков: это единственная «вывеска» в
+     приложении. Всё в em, поэтому марка ужимается вместе с надписью. */
+  .brand { display: flex; align-items: center; gap: .28em; font-size: 30px; line-height: 1.15; }
+  /* Иконок бывает от двух до пяти. Когда их много, заголовок переносился на
+     вторую строку — вместо этого ужимаем и заголовок, и сами кнопки, чтобы
+     шапка оставалась в одну строку. Класс ставит layoutHeaderIcons(). */
+  header.icons-4 .brand { font-size: 27px; }
+  header.icons-5 .brand { font-size: 24px; }
+  header.icons-4 .gear, header.icons-5 .gear { width: 34px; height: 34px; font-size: 16px; }
+  @media (max-width: 400px) {
+    header.icons-4 .brand { font-size: 23px; }
+    header.icons-5 .brand { font-size: 20px; }
+    header.icons-4 .gear, header.icons-5 .gear { width: 31px; height: 31px; font-size: 14px; }
+  }
+  header p { color: var(--hint); font-size: 14px; margin-top: 2px; }
+
+  /* Надпись «Оплатыч»: округлый гротеск, если система его даёт (ui-rounded —
+     это SF Pro Rounded на iOS), и градиент из акцента темы, чтобы имя
+     одинаково жило и в телеграмной, и в неоновой шкуре. */
+  .brand span {
+    font-family: ui-rounded, "SF Pro Rounded", "Segoe UI Rounded", system-ui,
+                 -apple-system, "Helvetica Neue", sans-serif;
+    font-weight: 800;
+    letter-spacing: -.005em;
+    background: linear-gradient(102deg,
+      color-mix(in srgb, var(--accent) 72%, #ffffff) 0%,
+      var(--accent) 46%,
+      color-mix(in srgb, var(--accent) 72%, #05261B) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    filter: drop-shadow(0 1px 1px color-mix(in srgb, var(--accent) 22%, transparent));
+  }
+  /* Прозрачный текст — только там, где обрезка по глифам реально работает,
+     иначе имя стало бы невидимым. */
+  @supports (-webkit-background-clip: text) or (background-clip: text) {
+    .brand span { color: transparent; }
+  }
+
+  /* Марка Оплатыча вместо эмодзи в заголовке. Высота задана в em, поэтому
+     она ужимается вместе с h1, когда layoutHeaderIcons() уменьшает шрифт,
+     и шапка по-прежнему помещается в одну строку. */
+  .mark {
+    height: 1.85em;
+    width: auto;
+    flex: none;
+    filter: drop-shadow(0 3px 7px color-mix(in srgb, var(--accent) 34%, transparent));
+    animation: mark-in .6s cubic-bezier(.34,1.56,.64,1) backwards,
+               mark-float 5s ease-in-out .7s infinite;
+  }
+  @keyframes mark-in {
+    from { opacity: 0; transform: scale(.35) rotate(-16deg); }
+  }
+  @keyframes mark-float {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-2.5px); }
+  }
+
+  /* Пустой список — не голая строка текста, а сам Оплатыч с подписью. */
+  .empty-art {
+    display: block;
+    width: 96px;
+    margin: 18px auto 8px;
+    opacity: .9;
+    animation: mark-in .5s cubic-bezier(.34,1.56,.64,1) backwards;
+  }
+  .empty-art + .empty-note { text-align: center; padding-bottom: 14px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mark, .empty-art { animation: none; }
+  }
+
+  .gear {
+    position: absolute;
+    top: 0; right: 0;
+    width: 38px; height: 38px;
+    border: none;
+    border-radius: 50%;
+    background: var(--bg);
+    box-shadow: var(--shadow);
+    font-size: 18px;
+    cursor: pointer;
+    transition: transform .25s ease, background .18s ease, box-shadow .18s ease;
+  }
+  /* Только масштаб, без поворота: подсказка — псевдоэлемент кнопки и
+     крутилась вместе с ней, превращаясь в вертикальную полоску текста. */
+  .gear:active { transform: scale(.92); }
+  /* Инструкция всегда в правом углу, левее — «Мои заявки». Панель
+     финансиста и шестерёнка появляются не у всех, поэтому их место
+     расставляет layoutHeaderIcons() — иначе от скрытых оставались дыры. */
+  @media (max-width: 430px) {
+    .gear { width: 34px; height: 34px; font-size: 16px; }
+  }
+  #my-btn { right: 46px; }
+  #fin-btn { right: 92px; }
+  #admin-btn { right: 138px; }
+  #help-btn:active, #my-btn:active, #fin-btn:active { transform: scale(.9); }
+
+  .help-text { font-size: 14.5px; line-height: 1.55; }
+  .help-text b { font-weight: 600; }
+  .help-text + .help-text { margin-top: 8px; }
+
+  .draft-note {
+    display: inline-block;
+    font-size: 12.5px;
+    color: var(--hint);
+    background: var(--bg);
+    border-radius: 999px;
+    padding: 5px 11px;
+    margin: -6px 0 12px;
+    box-shadow: var(--shadow);
+    animation: rise .4s ease backwards;
+  }
+
+  /* ---------- Чипсы контрагентов ---------- */
+  .chips {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    margin-top: 8px;
+    padding-bottom: 2px;
+  }
+
+  /* Статьи расходов — тот же список подсказок, только кнопками: одна строка
+     под полем ввода, листается так же. Вертикальные отступы держат свечение
+     выбранной кнопки, которое иначе срезал бы overflow.
+     Селекторы с двумя классами намеренно: правила .seg идут ниже по файлу и
+     при равной специфичности перебивали бы и перенос, и растяжение кнопок. */
+  .seg.seg-scroll {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin-top: 8px;
+    padding: 4px 0 6px;
+  }
+  .seg.seg-scroll button { flex: 0 0 auto; }
+
+  /* На телефоне список листается пальцем, а на десктопе листать было нечем:
+     тач-жеста нет, полоса спрятана, вертикальное колесо горизонталь не
+     крутит. Там, где указатель точный, возвращаем тонкую полосу; колесо
+     разворачивает вбок скрипт (wireHScroll). */
+  .hscroll { scrollbar-width: none; }
+  .hscroll::-webkit-scrollbar { display: none; }
+  @media (pointer: fine) {
+    .hscroll { scrollbar-width: thin; scrollbar-color: var(--accent) transparent; }
+    .hscroll::-webkit-scrollbar { display: block; height: 6px; }
+    .hscroll::-webkit-scrollbar-track { background: transparent; }
+    .hscroll::-webkit-scrollbar-thumb {
+      border-radius: 3px;
+      background: color-mix(in srgb, var(--accent) 55%, transparent);
+    }
+  }
+  /* Растушёвка края — единственный намёк, что список продолжается за
+     обрезом. Классы ставит updateFades() по фактической позиции прокрутки. */
+  .fade-r {
+    mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent);
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent);
+  }
+  .fade-l {
+    mask-image: linear-gradient(to left, #000 calc(100% - 26px), transparent);
+    -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 26px), transparent);
+  }
+  .fade-l.fade-r {
+    mask-image: linear-gradient(to right, transparent, #000 26px,
+                #000 calc(100% - 26px), transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 26px,
+                #000 calc(100% - 26px), transparent);
+  }
+
+  /* ---------- Вкладки настроек ---------- */
+  /* Ровно одна строка: все разделы должны быть видны сразу, без переноса и
+     без прокрутки. Поэтому подписи без эмодзи, а на узких экранах кегль и
+     поля ужимаются — пять вкладок влезают и в 360 px. */
+  .tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 5px;
+    margin: 0 0 14px;
+  }
+  .tab {
+    /* Не сжимаются: сжатая кнопка молча режет подпись вместо переполнения. */
+    flex: 0 0 auto;
+    white-space: nowrap;
+    border: 1px solid color-mix(in srgb, var(--hint) 35%, transparent);
+    border-radius: 999px;
+    padding: 8px 12px;
+    background: var(--bg);
+    color: var(--hint);
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .18s ease, color .18s ease, border-color .18s ease;
+  }
+  /* Самая длинная подпись разворачивается только там, где на неё есть
+     место, — на широком экране десктопного Telegram. */
+  .t-long { display: none; }
+  @media (min-width: 561px) {
+    .t-long { display: inline; }
+    .t-short { display: none; }
+  }
+  @media (max-width: 460px) {
+    .tab { padding: 8px 8px; font-size: 12.5px; }
+  }
+  @media (max-width: 400px) {
+    .tabs { gap: 4px; }
+    .tab { padding: 7px 6px; font-size: 10.5px; }
+  }
+  @media (max-width: 340px) {
+    .tab { padding: 6px 4px; font-size: 9.5px; }
+  }
+  .tab[aria-selected="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-text);
+  }
+  .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .chip {
+    flex: 0 0 auto;
+    max-width: 60vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: var(--bg2);
+    border: 1px solid transparent;
+    border-radius: 999px;
+    padding: 7px 12px;
+    font-size: 13px;
+    color: var(--text);
+    cursor: pointer;
+    transition: background .16s ease, border-color .16s ease, color .16s ease,
+                transform .12s ease;
+  }
+  .chip:active { transform: scale(.94); }
+  /* Подсказку можно убрать: чипс = кнопка подстановки + крестик рядом.
+     Вложенная кнопка в кнопку недопустима, поэтому обёртка. */
+  .chip-wrap { display: inline-flex; flex: 0 0 auto; max-width: 70vw; }
+  .chip-wrap .chip { border-radius: 999px 0 0 999px; padding-right: 8px; border-right: none; }
+  .chip-x {
+    flex: 0 0 auto;
+    border: 1px solid transparent;
+    border-left: none;
+    border-radius: 0 999px 999px 0;
+    background: var(--bg2);
+    color: var(--hint);
+    font-size: 12px;
+    padding: 0 9px;
+    cursor: pointer;
+    transition: background .16s ease, border-color .16s ease, color .16s ease;
+  }
+  /* Крестик внутри кнопки-статьи: span, а не button (вложенность запрещена). */
+  .seg-x {
+    display: inline-block;
+    margin-left: 7px;
+    padding: 2px 5px;
+    border-radius: 999px;
+    color: var(--hint);
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: .8;
+    transition: background .16s ease, color .16s ease, opacity .16s ease;
+  }
+
+  /* ---------- Предупреждения по реквизитам ---------- */
+  .req-warn {
+    margin-top: 8px;
+    background: color-mix(in srgb, #f59e0b 13%, var(--bg));
+    color: #b45309;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: pre-line;
+  }
+  body[data-theme="dark"] .req-warn { color: #fbbf24; }
+  .checking-note {
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--hint);
+  }
+
+  /* ---------- Админ-панель ---------- */
+  .row-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 4px;
+    border-bottom: .5px solid var(--bg2);
+    animation: rise .25s ease backwards;
+  }
+  .row-item:last-child { border-bottom: none; }
+  .row-item .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .row-item .sub { color: var(--hint); font-size: 12px; }
+  .tag {
+    flex: 0 0 auto;
+    font-size: 11px;
+    color: var(--hint);
+    background: var(--bg2);
+    border-radius: 6px;
+    padding: 2px 7px;
+  }
+  .row-del {
+    flex: 0 0 auto;
+    width: 28px; height: 28px;
+    border: none;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--danger) 12%, var(--bg));
+    color: var(--danger);
+    font-size: 14px;
+    cursor: pointer;
+    transition: transform .12s ease;
+  }
+  .row-del:active { transform: scale(.86); }
+  .add-row { display: flex; gap: 8px; margin-top: 12px; }
+  .add-row input { flex: 1; }
+  .add-btn {
+    flex: 0 0 auto;
+    border: none;
+    border-radius: 11px;
+    background: var(--accent);
+    color: var(--accent-text);
+    font-size: 15px;
+    font-weight: 600;
+    /* Собственная высота: в рядах без input кнопки не должны сплющиваться. */
+    padding: 13px 18px;
+    cursor: pointer;
+    transition: transform .12s ease, opacity .15s ease;
+  }
+  .add-btn:active { transform: scale(.95); }
+  /* Фильтры статусов не влезают в один ряд — разрешаем перенос. */
+  .seg-wrap { flex-wrap: wrap; }
+  .fin-count { color: var(--hint); font-size: 12.5px; margin-top: 8px; }
+  .tap-hint {
+    margin-left: auto;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 11.5px;
+    opacity: .8;
+    user-select: none;
+  }
+  /* Вся карточка заявки кликабельна — открывает подробности. */
+  .my-item.tappable {
+    cursor: pointer;
+    /* Клик не должен выделять текст карточки. */
+    user-select: none;
+    border-radius: 12px;
+    padding-left: 10px;
+    padding-right: 10px;
+    margin: 0 -10px;
+    transition: background .15s ease;
+  }
+  .modal-rows { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; }
+  .modal-rows dt { color: var(--hint); font-size: 13px; white-space: nowrap; }
+  .modal-rows dd { font-size: 14px; overflow-wrap: anywhere; }
+  .modal-req {
+    margin-top: 12px;
+    font-size: 13.5px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    background: var(--bg2);
+    border-radius: 10px;
+    padding: 10px;
+  }
+
+  #admin-msg, #my-msg, #fin-msg {
+    display: none;
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    font-size: 13.5px;
+    background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+    animation: rise .25s ease;
+  }
+  .empty-note { color: var(--hint); font-size: 13.5px; padding: 6px 4px; }
+
+  /* Подсказки к полю «@username или id»: список тех, кого бот уже знает. */
+  .suggest {
+    margin-top: 6px;
+    border: 1px solid color-mix(in srgb, var(--hint) 30%, transparent);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .suggest-row {
+    display: block;
+    width: 100%;
+    padding: 9px 11px;
+    border: none;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .suggest-row + .suggest-row { border-top: 1px solid color-mix(in srgb, var(--hint) 18%, transparent); }
+  .suggest-row .sub { display: block; font-size: 11.5px; color: var(--hint); margin-top: 2px; }
+
+  /* Экран «доступа нет»: не тупик, а кнопка попросить. */
+  .access-gate {
+    margin-bottom: 14px;
+    padding: 14px;
+    border-radius: var(--radius);
+    border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+    background: color-mix(in srgb, var(--danger) 10%, var(--bg));
+  }
+  .access-gate b { display: block; font-size: 15px; }
+  .access-gate p { margin: 6px 0 10px; color: var(--hint); font-size: 13.5px; }
+  .access-gate .add-btn { width: 100%; padding: 12px; }
+
+  /* Заголовок группы в списке пользователей: роли вперемешку не читались. */
+  .group-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 12px 0 2px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .group-head:first-child { margin-top: 2px; }
+  .group-head span {
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--hint);
+  }
+
+  /* ---------- «Мои заявки» ---------- */
+  .my-item {
+    padding: 12px 0;
+    border-bottom: .5px solid var(--bg2);
+    animation: rise .25s ease backwards;
+  }
+  .my-item:last-child { border-bottom: none; }
+  .my-top { display: flex; align-items: center; gap: 8px; }
+  .my-status {
+    flex: 0 0 auto;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 7px;
+    padding: 3px 9px;
+    background: var(--bg2);
+  }
+  .my-status.st-paid { background: color-mix(in srgb, var(--ok) 18%, var(--bg)); color: var(--ok); }
+  .my-status.st-rejected { background: color-mix(in srgb, var(--danger) 14%, var(--bg)); color: var(--danger); }
+  .my-status.st-new { background: color-mix(in srgb, var(--accent) 15%, var(--bg)); color: var(--accent); }
+  .my-sum { flex: 1; text-align: right; font-weight: 600; white-space: nowrap; }
+  .my-cp {
+    margin-top: 7px;
+    font-size: 14.5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .my-meta { margin-top: 3px; color: var(--hint); font-size: 12.5px; }
+  .my-reason {
+    margin-top: 6px;
+    font-size: 13px;
+    border-radius: 9px;
+    padding: 7px 9px;
+    background: color-mix(in srgb, var(--danger) 9%, var(--bg));
+  }
+  .my-comment {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .my-id {
+    margin-top: 5px;
+    font-size: 11.5px;
+    color: var(--hint);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    overflow-wrap: anywhere;
+  }
+  /* Кнопок бывает три (изменить/повторить/отозвать) — переносим строкой. */
+  .my-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .my-actions .add-btn { flex: 1 1 120px; padding: 9px 12px; font-size: 13.5px; }
+  .btn-ghost {
+    background: var(--bg2);
+    color: var(--text);
+  }
+  .btn-danger {
+    background: color-mix(in srgb, var(--danger) 13%, var(--bg));
+    color: var(--danger);
+  }
+
+  .optional-mark {
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--hint);
+    background: var(--bg2);
+    border-radius: 6px;
+    padding: 2px 7px;
+  }
+
+  /* Глазик: скрытие реквизитов от посторонних глаз (как спойлер в Telegram).
+     Акцентный фон и рамка — иначе на тёмной теме кнопка сливалась с полем. */
+  .eye-btn {
+    position: absolute;
+    top: 8px; right: 8px;
+    z-index: 2;
+    width: 32px; height: 32px;
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--accent) 20%, var(--bg));
+    box-shadow: var(--shadow);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    transition: transform .12s ease;
+  }
+  .eye-btn:active { transform: scale(.88); }
+  textarea.veiled { filter: blur(6px); }
+
+  /* Знак вопроса с пояснением настройки. */
+  .help-q {
+    margin-left: auto;
+    width: 20px; height: 20px;
+    flex: 0 0 auto;
+    border: none;
+    border-radius: 50%;
+    background: var(--bg2);
+    color: var(--hint);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 20px;
+    cursor: pointer;
+    transition: transform .12s ease;
+  }
+  .help-q:active { transform: scale(.85); }
+
+  .card {
+    background: var(--bg); /* fallback, если color-mix не поддерживается */
+    background: color-mix(in srgb, var(--bg) 78%, transparent);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    border: 1px solid color-mix(in srgb, var(--bg) 40%, transparent);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 12px;
+    box-shadow: var(--shadow);
+    animation: rise .4s cubic-bezier(.22,1,.36,1) backwards;
+  }
+  .card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--hint);
+    margin-bottom: 10px;
+  }
+
+  label.field-label {
+    display: block;
+    font-size: 13px;
+    color: var(--hint);
+    margin: 12px 0 6px;
+  }
+  label.field-label:first-of-type { margin-top: 0; }
+
+  input[type=text], input[type=date], input[type=time], textarea {
+    width: 100%;
+    border: 1.5px solid transparent;
+    background: var(--bg2);
+    color: var(--text);
+    border-radius: 11px;
+    padding: 12px 13px;
+    font-size: 16px;
+    outline: none;
+    color-scheme: light dark;
+    transition: border-color .18s ease, box-shadow .18s ease;
+  }
+  input[type=text]:focus, input[type=date]:focus, input[type=time]:focus, textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  textarea { resize: vertical; min-height: 74px; }
+
+  #amount { font-size: 22px; font-weight: 600; letter-spacing: .01em; }
+
+  .invalid {
+    border-color: var(--danger) !important;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 15%, transparent) !important;
+  }
+
+  /* ---------- Сегменты ---------- */
+  .seg { display: flex; gap: 6px; flex-wrap: wrap; }
+  .seg button {
+    flex: 1 0 auto;
+    min-width: 56px;
+    padding: 11px 8px;
+    border: 1.5px solid transparent;
+    background: var(--bg2);
+    color: var(--text);
+    border-radius: 11px;
+    font-size: 15px;
+    cursor: pointer;
+    transition: background .18s ease, color .18s ease, border-color .18s ease,
+                transform .12s ease, box-shadow .18s ease;
+  }
+  .seg button:active { transform: scale(.95); }
+  .seg button.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-text);
+    font-weight: 600;
+    box-shadow: 0 3px 10px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  @keyframes pop {
+    0% { transform: scale(1); }
+    45% { transform: scale(1.06); }
+    100% { transform: scale(1); }
+  }
+  .seg button.just-picked { animation: pop .22s ease; }
+
+  .counter {
+    font-size: 12px;
+    color: var(--hint);
+    text-align: right;
+    margin-top: 4px;
+    transition: color .2s ease;
+  }
+  .pay-date-note {
+    display: inline-block;
+    margin-top: 10px;
+    font-size: 13.5px;
+    color: var(--text);
+    background: var(--bg2);
+    border-radius: 999px;
+    padding: 7px 12px;
+    transition: opacity .2s ease;
+  }
+  .card:nth-of-type(5) { animation-delay: .29s; }
+  .card:nth-of-type(6) { animation-delay: .35s; }
+  .counter.warn { color: var(--danger); font-weight: 600; }
+
+  /* ---------- Файл ---------- */
+  .drop {
+    position: relative;
+    border: 1.5px dashed color-mix(in srgb, var(--hint) 55%, transparent);
+    border-radius: 11px;
+    padding: 20px 14px;
+    text-align: center;
+    color: var(--hint);
+    cursor: pointer;
+    transition: border-color .2s ease, background .2s ease, transform .12s ease;
+  }
+  .drop:active { transform: scale(.985); }
+  .drop .drop-icon { font-size: 26px; display: block; margin-bottom: 6px; }
+  .drop small { display: block; margin-top: 4px; font-size: 12px; }
+  .drop.has-file {
+    border-style: solid;
+    border-color: var(--ok);
+    background: color-mix(in srgb, var(--ok) 8%, var(--bg));
+    color: var(--text);
+  }
+  @keyframes attach-bounce {
+    0% { transform: scale(.9); }
+    55% { transform: scale(1.04); }
+    100% { transform: scale(1); }
+  }
+  .drop.has-file .drop-inner { animation: attach-bounce .28s ease; }
+  .drop .file-name { font-weight: 600; word-break: break-all; }
+  .file-remove {
+    position: absolute;
+    top: 8px; right: 8px;
+    width: 26px; height: 26px;
+    border: none;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--hint) 22%, transparent);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 26px;
+    cursor: pointer;
+    display: none;
+    transition: transform .12s ease, background .15s ease;
+  }
+  .file-remove:active { transform: scale(.88); }
+  .drop.has-file .file-remove { display: block; }
+
+  /* ---------- Ошибка ---------- */
+  /* Сброс черновика: две точки входа, обе почти невесомые — ссылка в
+     плашке восстановления (там, где это нужнее всего) и приглушённая
+     строка в конце формы (когда плашка уже исчезла). */
+  #draft-clear {
+    margin-left: 8px;
+    border: none;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  #form-reset {
+    display: block;
+    width: 100%;
+    margin: 4px 0 12px;
+    border: none;
+    background: none;
+    color: var(--hint);
+    font: inherit;
+    font-size: 13px;
+    padding: 6px;
+    cursor: pointer;
+  }
+  @media (hover: hover) { #form-reset:hover { color: var(--danger); } }
+  #form-reset:focus-visible, #draft-clear:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+
+  #error-banner {
+    display: none;
+    background: color-mix(in srgb, var(--danger) 12%, var(--bg));
+    color: var(--danger);
+    border-radius: 11px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    font-size: 14px;
+    box-shadow: var(--shadow);
+  }
+  @keyframes shake {
+    10%, 90% { transform: translateX(-1px); }
+    20%, 80% { transform: translateX(2px); }
+    30%, 50%, 70% { transform: translateX(-4px); }
+    40%, 60% { transform: translateX(4px); }
+  }
+  #error-banner.shaking { display: block; animation: shake .45s ease; }
+
+  /* ---------- Своё модальное окно ----------
+     Не tg.showPopup: нативный попап Telegram рисуется в ГЛАВНОМ окне
+     мессенджера, а Mini App на десктопе живёт в отдельном — подтверждение
+     уезжало «на другой экран». Своё окно всегда по центру приложения. */
+  #modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: rgba(0, 0, 0, .45);
+    backdrop-filter: blur(2px);
+    padding: 20px;
+    overflow-y: auto;
+  }
+  #modal.shown { display: flex; align-items: center; justify-content: center; }
+  .modal-box {
+    width: 100%;
+    max-width: 380px;
+    background: var(--bg);
+    border-radius: var(--radius);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, .3);
+    padding: 20px;
+    animation: rise .22s cubic-bezier(.22, 1, .36, 1);
+  }
+  .modal-title { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
+  .modal-text { font-size: 14.5px; line-height: 1.5; white-space: pre-line; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 18px; }
+  .modal-actions .add-btn { flex: 1; }
+
+  /* ---------- Подсказки у иконок ----------
+     Появляются при наведении и с клавиатуры (:focus-visible). На тач-экранах
+     hover не срабатывает — там смысл кнопок объясняет экран «Инструкция». */
+  .tip { position: relative; }
+  /* Кнопки, у которых своя абсолютная раскладка (иконки шапки, глазок,
+     «убрать файл»), position НЕ переопределяем: правило .tip идёт по файлу
+     позже и при равной специфичности выбило бы их из раскладки шапки. */
+  .gear.tip, .eye-btn.tip, .file-remove.tip { position: absolute; }
+  .tip::after {
+    content: attr(data-tip);
+    position: absolute;
+    top: calc(100% + 7px);
+    right: 0;
+    z-index: 60;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--bg);
+    background: color-mix(in srgb, var(--text) 88%, transparent);
+    border-radius: 7px;
+    padding: 5px 9px;
+    opacity: 0;
+    transform: translateY(-3px);
+    pointer-events: none;
+    transition: opacity .15s ease, transform .15s ease;
+  }
+  @media (hover: hover) {
+    .tip:hover::after { opacity: 1; transform: translateY(0); }
+  }
+  .tip:focus-visible::after { opacity: 1; transform: translateY(0); }
+
+  /* ---------- Наведение ----------
+     Только для устройств с курсором: на тач-экранах :hover «залипает»
+     после нажатия. */
+  @media (hover: hover) {
+    .add-btn:hover { filter: brightness(1.08); }
+    .btn-ghost:hover, .row-del:hover, .btn-danger:hover {
+      filter: none;
+      background: color-mix(in srgb, var(--accent) 18%, var(--bg));
+    }
+    .btn-danger:hover, .row-del:hover {
+      background: color-mix(in srgb, var(--danger) 22%, var(--bg));
+    }
+    .gear:hover { background: var(--bg2); box-shadow: 0 2px 8px rgba(0, 0, 0, .12); }
+    /* Подсказки подсвечиваются одинаково: контур акцентом по всей пилюле
+       (крестик — её часть) плюс лёгкая заливка. Раньше чипс контрагента
+       обводился, а кнопка статьи только меняла фон. */
+    .chip-wrap:hover .chip, .chip-wrap:hover .chip-x,
+    .seg button:hover:not(.active) {
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 12%, transparent);
+      color: var(--accent);
+    }
+    .help-q:hover { background: var(--accent); color: var(--accent-text); }
+    .drop:hover { border-color: var(--accent); }
+    .eye-btn:hover, .file-remove:hover { filter: brightness(1.15); }
+    /* Заметная подсветка: слабая заливка сливалась с фоном карточки. */
+    .my-item.tappable:hover { background: color-mix(in srgb, var(--accent) 16%, var(--bg)); }
+    .suggest-row:hover { background: color-mix(in srgb, var(--accent) 14%, var(--bg)); }
+    /* Крестик под курсором краснеет — он удаляет, а не подставляет.
+       Селекторы длиннее правила пилюли выше: иначе оно перебивало красный
+       и наведение прямо на крестик оставалось акцентным. */
+    .chip-wrap .chip-x:hover, .seg button .seg-x:hover {
+      color: var(--danger);
+      opacity: 1;
+    }
+  }
+  /* Клавиатурная навигация: видимый фокус на всех интерактивных элементах. */
+  button:focus-visible, input:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* ---------- Вне Telegram ---------- */
+  #fallback-note {
+    display: none;
+    text-align: center;
+    color: var(--hint);
+    font-size: 14px;
+    margin-top: 12px;
+  }
+  #submit-fallback {
+    display: none;
+    width: 100%;
+    padding: 15px;
+    margin-top: 8px;
+    border: none;
+    border-radius: var(--radius);
+    background: var(--accent);
+    color: var(--accent-text);
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform .12s ease, opacity .15s ease;
+  }
+  #submit-fallback:active { transform: scale(.98); }
+
+  /* ---------- Успех ---------- */
+  #success {
+    display: none;
+    text-align: center;
+    padding: 56px 16px;
+  }
+  #success.shown { display: block; animation: rise .45s cubic-bezier(.22,1,.36,1); }
+  .check-wrap { width: 96px; height: 96px; margin: 0 auto 4px; }
+  .check-wrap svg { width: 100%; height: 100%; }
+  .check-circle {
+    fill: none;
+    stroke: var(--ok);
+    stroke-width: 5;
+    stroke-linecap: round;
+    stroke-dasharray: 302;
+    stroke-dashoffset: 302;
+    animation: draw-circle .55s ease-out forwards;
+  }
+  .check-mark {
+    fill: none;
+    stroke: var(--ok);
+    stroke-width: 6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 60;
+    stroke-dashoffset: 60;
+    animation: draw-mark .3s .45s ease-out forwards;
+  }
+  @keyframes draw-circle { to { stroke-dashoffset: 0; } }
+  @keyframes draw-mark { to { stroke-dashoffset: 0; } }
+  #success h2 { margin: 14px 0 6px; font-size: 22px; }
+  #success .req-id {
+    display: inline-block;
+    color: var(--text);
+    background: var(--bg);
+    border-radius: 9px;
+    padding: 6px 12px;
+    font-weight: 600;
+    box-shadow: var(--shadow);
+  }
+  #success p { margin-top: 12px; color: var(--hint); font-size: 14px; }
+
+  .hidden { display: none !important; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .01ms !important;
+      animation-delay: 0ms !important;
+      transition-duration: .01ms !important;
+    }
+  }

@@ -1,8 +1,12 @@
 # Секреты и окружение
 .env
 secrets/
+# JSON по умолчанию — секрет (ключи сервис-аккаунта, выгрузки), исключения
+# перечисляем явно.
 *.json
 !requirements*.json
+!package.json
+!package-lock.json
 
 # Данные (реестр, файлы счетов, справочник пользователей)
 data/
@@ -16,6 +20,9 @@ __pycache__/
 .venv/
 venv/
 env/
+
+# Node: зависимости тестов Mini App ставит npm ci
+node_modules/
 
 # Логи и временные файлы
 *.log

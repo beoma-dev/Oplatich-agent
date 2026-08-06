@@ -6,7 +6,12 @@ Telegram-бот подачи заявок на оплату счетов. Два
 (страница `webapp/` + API `api/`) и пошаговая чат-форма (`bot/handlers.py`);
 оба сходятся в `services/intake.py::finalize_submission`. Бот называется
 **Оплатыч**, его марка — `webapp/logo.svg` (отдаётся статикой из `webapp/`,
-используется в шапке формы, favicon и пустых списках). Краткое описание
+используется в шапке формы, favicon и пустых списках). Mini App разложен по
+файлам: `index.html` — только разметка, `app.css` — стили, `app.js` — логика
+(один IIFE), `form-lib.js` — чистые функции формы, `skin-field.js` — фон.
+Порядок подключения значим: `form-lib.js` и `skin-field.js` идут ПЕРЕД
+`app.js`, а ранний выбор темы остаётся инлайном в `<head>` (иначе неон мигнёт
+светлой темой до отрисовки). Краткое описание
 архитектуры по пунктам ТЗ и стоимость реализации — в
 [ARCHITECTURE.md](ARCHITECTURE.md), полное описание решений и их причин — в
 [CONTEXT.md](CONTEXT.md), деплой — в [DEPLOY.md](DEPLOY.md).
@@ -22,7 +27,11 @@ ruff check .
 
 # Тесты (токен подставит tests/conftest.py, внешний не нужен)
 pytest -q
-node --test "tests/js/*.test.cjs"
+node --test tests/js/
+
+# Браузерные проверки Mini App (нужен npm ci и Chromium)
+npm ci && npx playwright install chromium
+npm run test:e2e
 
 # Смоук-проверка импортов (без реального токена)
 TELEGRAM_BOT_TOKEN=dummy:token python -c "import main, api.server, bot.handlers, services.intake"
@@ -98,6 +107,9 @@ TELEGRAM_BOT_TOKEN=dummy:token python -c "import main, api.server, bot.handlers,
 ## Перед коммитом
 
 1. `ruff check .`
-2. Смоук-импорт (команда выше).
-3. Если менялись поля заявки — проверить все четыре точки: чат-форма,
-   `webapp/index.html`, `api/routes.py`, `bot/models.py`.
+2. `pytest -q` и `node --test tests/js/`.
+3. Смоук-импорт (команда выше).
+4. Трогал стили или раскладку Mini App — гонять `npm run test:e2e`: каскад CSS
+   и раскладку из исходника не видно, тесты по тексту их не ловят.
+5. Если менялись поля заявки — проверить все четыре точки: чат-форма,
+   `webapp/index.html` + `webapp/app.js`, `api/routes.py`, `bot/models.py`.

@@ -8,4 +8,6 @@ data/
 storage/
 dist/
 .git/
+# Зависимости npm в образ не нужны: браузерные тесты гоняются в CI.
+node_modules/
 *.log

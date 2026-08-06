@@ -1,0 +1,15 @@
+{
+  "name": "invoice-bot-webapp",
+  "description": "Тесты Mini App: чистые функции формы и браузерные проверки",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "node --test tests/js/",
+    "test:e2e": "node --test tests/e2e/"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  },
+  "private": true
+}
