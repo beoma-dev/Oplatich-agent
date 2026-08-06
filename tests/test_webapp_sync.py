@@ -708,3 +708,25 @@ def test_split_files_stay_reasonably_small():
                         ("skin-field.js", 400), ("form-lib.js", 300)):
         length = len(_read(name).split("\n"))
         assert length <= limit, f"{name}: {length} строк — пора делить дальше"
+
+
+def test_form_is_hidden_without_access_and_revives_by_itself():
+    """Без доступа форма скрыта, а решение админа не требует перезапуска.
+
+    Раньше поля были видны всегда, а после выдачи доступа приложение надо
+    было закрыть и открыть заново — иначе оно оставалось в отказе.
+    """
+    assert re.search(r"#form-view\.no-access \.card[^}]*display: none", CSS, re.S)
+    assert "function applyAccess(" in JS
+    # Опрос идёт, только пока доступа нет: с доступом это лишняя нагрузка
+    # на всю сессию, и его возвращает проверка при возврате в приложение.
+    assert "function watchAccess(" in JS and "function stopAccessWatch(" in JS
+    body = JS[JS.index("function applyAccess("):]
+    body = body[:body.index("\n  }")]
+    assert "stopAccessWatch();" in body and "watchAccess();" in body
+    assert 'document.addEventListener("visibilitychange"' in JS
+    # Свёрнутое приложение не опрашиваем.
+    watch = JS[JS.index("function watchAccess("):]
+    assert "document.hidden" in watch[:600]
+    # Кнопка отправки без доступа не должна быть видна.
+    assert "if (canSubmit === false) { tg.MainButton.hide(); return; }" in JS

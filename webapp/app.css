@@ -651,6 +651,14 @@
   .suggest-row + .suggest-row { border-top: 1px solid color-mix(in srgb, var(--hint) 18%, transparent); }
   .suggest-row .sub { display: block; font-size: 11.5px; color: var(--hint); margin-top: 2px; }
 
+  /* Пока доступа нет, из формы остаются только шапка и сама плашка: поля,
+     которые всё равно не отправить, только сбивают с толку. */
+  #form-view.no-access .card,
+  #form-view.no-access #draft-note,
+  #form-view.no-access #form-reset,
+  #form-view.no-access #submit-fallback,
+  #form-view.no-access #fallback-note { display: none; }
+
   /* Экран «доступа нет»: не тупик, а кнопка попросить. */
   .access-gate {
     margin-bottom: 14px;

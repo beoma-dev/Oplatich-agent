@@ -25,8 +25,13 @@ function install(cfg) {
     ready() {}, expand() {}, close() {},
     openLink(u) { window.__opened = u; },
     MainButton: {
-      isVisible: false, show() { this.isVisible = true; }, hide() {}, setText() {},
-      showProgress() {}, hideProgress() {}, onClick() {}, offClick() {},
+      // isVisible ведём как настоящий клиент: скрытая кнопка должна быть
+      // видна тестам именно скрытой.
+      isVisible: false,
+      show() { this.isVisible = true; },
+      hide() { this.isVisible = false; },
+      setText() {}, showProgress() {}, hideProgress() {},
+      onClick() {}, offClick() {},
       setParams(p) { window.__params.push(p); }, enable() {}, disable() {},
     },
     BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} },

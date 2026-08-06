@@ -755,9 +755,13 @@
     return err;
   }
 
+  // Доступ к подаче: null — ещё не спросили, false — отказано.
+  var canSubmit = null;
+
   function refreshMainButton() {
-    var ok = validationError(false) === null;
+    var ok = validationError(false) === null && canSubmit !== false;
     if (tg && insideTelegram) {
+      if (canSubmit === false) { tg.MainButton.hide(); return; }
       tg.MainButton.setText("Отправить заявку");
       if (ok && !state.submitting) tg.MainButton.enable(); else tg.MainButton.disable();
       if (!tg.MainButton.isVisible) tg.MainButton.show();
@@ -1782,21 +1786,94 @@
     fetch("/api/access", { headers: { "X-Telegram-Init-Data": tg.initData } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
-        if (!d || d.allowed) return;
-        var gate = $("access-gate");
-        var btn = $("access-ask");
-        gate.classList.remove("hidden");
+        if (!d) return;
+        applyAccess(d.allowed, false);
+        if (d.allowed) return;
         if (!d.has_admins) {
           $("access-note").textContent =
             "У бота не задан ни один админ — рассмотреть заявку некому. " +
             "Обратитесь к тому, кто его настраивал.";
-          btn.classList.add("hidden");
+          $("access-ask").classList.add("hidden");
         } else if (d.pending) {
           markAccessPending();
         }
       })
       .catch(function () { /* сеть — отдельная история, форма не ломается */ });
   }
+
+  /** Применяет состояние доступа к экрану.
+   *
+   *  announce=true — состояние изменилось на глазах у человека (админ решил,
+   *  пока приложение открыто), и об этом надо сказать, иначе форма появится
+   *  или исчезнет без объяснений.
+   */
+  function applyAccess(allowed, announce) {
+    if (canSubmit === !!allowed) return;
+    var first = canSubmit === null;
+    canSubmit = !!allowed;
+    $("access-gate").classList.toggle("hidden", canSubmit);
+    // Показывать поля, которые некуда отправить, — обман.
+    $("form-view").classList.toggle("no-access", !canSubmit);
+    refreshMainButton();
+    if (canSubmit) {
+      stopAccessWatch();
+      if (!first) {
+        // Справочник не загрузился на старте: сервер отвечал 403.
+        loadCounterparties();
+      }
+      if (announce && !first) {
+        showModal("Доступ открыт", "Можно подавать заявки — форма готова.",
+          [{ text: "Понятно", style: "primary" }]);
+        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+      }
+    } else {
+      watchAccess();
+      if (announce && !first) {
+        $("access-note").textContent =
+          "Доступ закрыли. Введённое сохранено — если это ошибка, запросите доступ снова.";
+        $("access-ask").classList.remove("hidden");
+        showModal("Доступ закрыт", "Админ закрыл подачу заявок для вас.",
+          [{ text: "Понятно", style: "primary" }]);
+      }
+    }
+  }
+
+  // Пока доступа нет, тихо переспрашиваем сервер: админ решает в своём чате,
+  // и перезапускать приложение ради этого человек не должен.
+  var accessTimer = null;
+  var ACCESS_POLL_MS = 6000;
+
+  function watchAccess() {
+    if (accessTimer !== null || !insideTelegram) return;
+    accessTimer = setInterval(function () {
+      // Свёрнутое приложение не опрашиваем — вернётся, тогда и спросим.
+      if (document.hidden) return;
+      fetch("/api/access", { headers: { "X-Telegram-Init-Data": tg.initData } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) { if (d) applyAccess(d.allowed, true); })
+        .catch(function () { /* сеть мигнула — попробуем на следующем круге */ });
+    }, ACCESS_POLL_MS);
+  }
+
+  function stopAccessWatch() {
+    if (accessTimer === null) return;
+    clearInterval(accessTimer);
+    accessTimer = null;
+  }
+
+  /** Возврат в приложение — повод переспросить про доступ.
+   *
+   *  Когда доступ есть, опрос выключен: гонять его всю сессию ради редкого
+   *  отзыва — лишняя нагрузка. Но приложение могло провисеть свёрнутым час,
+   *  и права за это время могли поменяться в любую сторону.
+   */
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden || !insideTelegram || canSubmit === null) return;
+    fetch("/api/access", { headers: { "X-Telegram-Init-Data": tg.initData } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d) applyAccess(d.allowed, true); })
+      .catch(function () { /* сеть — состояние оставляем прежним */ });
+  });
 
   function markAccessPending() {
     $("access-note").textContent =

@@ -1,0 +1,122 @@
+/*
+ * Доступ к подаче: форма прячется без него и оживает сама, когда админ
+ * решил, — без перезапуска приложения.
+ */
+const test = require("node:test");
+const assert = require("node:assert");
+const path = require("path");
+const { launch } = require("./helpers.cjs");
+
+const PAGE_URL = "file://" + path.resolve(__dirname, "../../webapp/index.html");
+
+/** Заглушка с ПЕРЕКЛЮЧАЕМЫМ доступом: обычный helpers.cjs отдаёт фиксированные
+ *  ответы, а здесь весь смысл в том, что ответ меняется по ходу. */
+function install() {
+  window.__allowed = false;
+  window.__checks = 0;
+  window.__cpLoads = 0;
+  window.Telegram = { WebApp: {
+    initData: "signed", initDataUnsafe: {}, themeParams: {}, colorScheme: "light",
+    ready() {}, expand() {}, close() {}, openLink() {},
+    MainButton: {
+      isVisible: false, show() { this.isVisible = true; },
+      hide() { this.isVisible = false; }, setText() {}, showProgress() {},
+      hideProgress() {}, onClick() {}, offClick() {}, setParams() {},
+      enable() {}, disable() {},
+    },
+    BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} },
+    HapticFeedback: { selectionChanged() {}, impactOccurred() {}, notificationOccurred() {} },
+    onEvent() {}, offEvent() {},
+  } };
+  window.fetch = (u) => {
+    const s = String(u);
+    if (s.endsWith("/api/access")) {
+      window.__checks++;
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(
+        { allowed: window.__allowed, pending: true, has_admins: true }) });
+    }
+    if (s.indexOf("/api/counterparties") !== -1) {
+      if (!window.__allowed) {
+        return Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({}) });
+      }
+      window.__cpLoads++;
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(
+        { items: [{ name: "ООО «Ромашка»" }] }) });
+    }
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, items: [] }) });
+  };
+}
+
+const snapshot = () => ({
+  gate: !document.getElementById("access-gate").classList.contains("hidden"),
+  cards: [...document.querySelectorAll("#form-view .card")]
+    .filter((c) => getComputedStyle(c).display !== "none").length,
+  mainButton: window.Telegram.WebApp.MainButton.isVisible,
+  chips: document.getElementById("cp-chips").children.length,
+  modal: document.getElementById("modal").classList.contains("shown")
+    ? document.getElementById("modal-title").textContent : null,
+});
+
+/** Сворачивание и возврат в приложение. */
+function toggleVisibility(hidden) {
+  Object.defineProperty(document, "hidden", { value: hidden, configurable: true });
+  document.dispatchEvent(new Event("visibilitychange"));
+}
+
+let browser;
+test.before(async () => { browser = await launch(); });
+test.after(async () => { await browser.close(); });
+
+test("без доступа форма скрыта, с доступом — оживает без перезапуска", async () => {
+  const page = await browser.newPage({ viewport: { width: 430, height: 780 } });
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.route("**/telegram-web-app.js", (r) => r.abort());
+  await page.addInitScript(install);
+  await page.goto(PAGE_URL, { waitUntil: "load" });
+  await page.waitForTimeout(600);
+
+  const denied = await page.evaluate(snapshot);
+  assert.ok(denied.gate, "плашка «нет доступа» не показана");
+  assert.equal(denied.cards, 0, "поля формы видны, хотя отправить их некуда");
+  assert.equal(denied.mainButton, false, "кнопка отправки видна без доступа");
+
+  // Админ открыл доступ — приложение не трогаем.
+  await page.evaluate(() => { window.__allowed = true; });
+  await page.waitForTimeout(7500);
+  const granted = await page.evaluate(snapshot);
+  assert.equal(granted.gate, false, "плашка осталась после выдачи доступа");
+  assert.ok(granted.cards > 0, "форма не появилась");
+  assert.ok(granted.mainButton, "кнопка отправки не вернулась");
+  assert.ok(granted.chips > 0, "подсказки контрагентов не догрузились");
+  assert.equal(granted.modal, "Доступ открыт", "человеку не сказали, что доступ дали");
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test("отзыв доступа замечается при возврате в приложение", async () => {
+  const page = await browser.newPage({ viewport: { width: 430, height: 780 } });
+  await page.route("**/telegram-web-app.js", (r) => r.abort());
+  await page.addInitScript(install);
+  await page.addInitScript(() => { window.__allowed = true; });
+  await page.goto(PAGE_URL, { waitUntil: "load" });
+  await page.waitForTimeout(600);
+  assert.ok((await page.evaluate(snapshot)).cards > 0, "форма должна быть видна");
+
+  const before = await page.evaluate(() => window.__checks);
+  await page.waitForTimeout(3000);
+  assert.equal(await page.evaluate(() => window.__checks), before,
+    "с доступом опрос должен молчать — это лишняя нагрузка всю сессию");
+
+  await page.evaluate(() => { window.__allowed = false; });
+  await page.evaluate(toggleVisibility, true);
+  await page.waitForTimeout(200);
+  await page.evaluate(toggleVisibility, false);
+  await page.waitForTimeout(600);
+
+  const revoked = await page.evaluate(snapshot);
+  assert.ok(revoked.gate, "плашка не вернулась после отзыва доступа");
+  assert.equal(revoked.cards, 0, "форма осталась видна после отзыва");
+  assert.equal(revoked.modal, "Доступ закрыт", "человеку не сказали, что доступ закрыли");
+  await page.close();
+});
