@@ -1276,9 +1276,27 @@
   function loadMy() {
     if (!insideTelegram) { renderMy([]); return; }
     fetch("/api/my-requests", { headers: { "X-Telegram-Init-Data": tg.initData } })
-      .then(function (r) { return r.ok ? r.json() : { items: [] }; })
-      .then(function (d) { renderMy((d && d.items) || []); })
-      .catch(function () { showMyMsg("Не удалось загрузить список заявок.", true); });
+      .then(function (r) {
+        return r.json().catch(function () { return {}; })
+          .then(function (d) { return { ok: r.ok, d: d }; });
+      })
+      .then(function (res) {
+        // Реестр недоступен — так и говорим. Пустой список здесь читается
+        // как «заявок нет», то есть врёт человеку про его же заявки.
+        if (!res.ok) { renderMyProblem(res.d.detail || "Не удалось загрузить список."); return; }
+        renderMy((res.d && res.d.items) || []);
+      })
+      .catch(function () { renderMyProblem("Сеть недоступна."); });
+  }
+
+  function renderMyProblem(text) {
+    var box = $("my-list");
+    box.innerHTML = "";
+    var note = document.createElement("div");
+    note.className = "empty-note";
+    note.style.textAlign = "center";
+    note.textContent = "⚠️ " + text;
+    box.appendChild(note);
   }
 
   function openMy() {

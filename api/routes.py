@@ -231,7 +231,14 @@ async def my_requests(request: Request, request_id: str = "") -> dict:
     подставить чужой идентификатор нельзя.
     """
     user = await _authorized_user(request)
-    rows = await storage.recent_by_author(user["id"], limit=MY_LIST_LIMIT)
+    try:
+        rows = await storage.recent_by_author(user["id"], limit=MY_LIST_LIMIT, strict=True)
+    except storage.RegistryUnavailable as exc:
+        # Пустой список здесь читается как «заявок нет» — а это неправда.
+        raise HTTPException(
+            status_code=503,
+            detail="Реестр сейчас недоступен — попробуйте ещё раз через минуту.",
+        ) from exc
     if request_id:
         if not REQUEST_ID_RE.fullmatch(request_id):
             raise HTTPException(status_code=422, detail="Некорректный идентификатор заявки.")

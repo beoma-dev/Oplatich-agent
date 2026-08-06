@@ -66,3 +66,20 @@ for (const [name, button, list] of [
     await page.close();
   });
 }
+
+test("недоступный реестр не выглядит как «заявок нет»", async () => {
+  // Пустой список здесь — ложь про чужие заявки: ровно та подмена, что
+  // однажды съела напоминания.
+  const page = await openApp(browser, { skin: "neon", width: 430, routes: {
+    "/api/access": { allowed: true, financier: false, admin: false,
+                     pending: false, has_admins: true },
+    "/api/my-requests": { __status: 403, detail: "Реестр сейчас недоступен." },
+  } });
+  await page.click("#my-btn");
+  await page.waitForTimeout(500);
+  const text = await page.evaluate(() =>
+    document.getElementById("my-list").textContent.trim());
+  assert.match(text, /недоступен/, `на экране «${text}»`);
+  assert.ok(!/Заявок пока нет/.test(text), "показали «заявок нет» вместо ошибки");
+  await page.close();
+});

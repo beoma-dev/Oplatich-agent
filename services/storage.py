@@ -173,8 +173,15 @@ async def recent_requests(limit: int = 200, *, strict: bool = False) -> list[dic
         return []
 
 
-async def recent_by_author(telegram_id: int, limit: int = 10) -> list[dict[str, str]]:
-    """Последние заявки автора — для экрана «Мои заявки»."""
+async def recent_by_author(
+    telegram_id: int, limit: int = 10, *, strict: bool = False
+) -> list[dict[str, str]]:
+    """Последние заявки автора — для экрана «Мои заявки».
+
+    strict=True — поднять RegistryUnavailable вместо пустого списка. Иначе
+    недоступный реестр читается как «заявок нет», то есть человеку показывают
+    неправду: та же ошибка, что однажды съела напоминания.
+    """
     try:
         if settings.storage_is_google:
             return await asyncio.to_thread(
@@ -183,6 +190,8 @@ async def recent_by_author(telegram_id: int, limit: int = 10) -> list[dict[str, 
         return await asyncio.to_thread(
             registry_sqlite.recent_by_author_sync, telegram_id, limit
         )
-    except Exception:  # noqa: BLE001 — список не критичен
+    except Exception as exc:  # noqa: BLE001
         log.exception("Не удалось получить заявки автора")
+        if strict:
+            raise RegistryUnavailable(str(exc)) from exc
         return []

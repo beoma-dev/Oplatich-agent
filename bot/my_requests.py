@@ -116,8 +116,16 @@ def _build_keyboard(rows: list[dict[str, str]]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(keyboard)
 
 
+# Что отвечаем, когда реестр не прочитался: «заявок нет» здесь было бы
+# неправдой — человек решит, что его заявка пропала.
+REGISTRY_DOWN = (
+    "⚠️ Реестр сейчас недоступен, список показать не могу. "
+    "Попробуйте через минуту — заявки на месте."
+)
+
+
 async def _load(user_id: int) -> tuple[list[dict[str, str]], dict[str, str]]:
-    rows = await storage.recent_by_author(user_id, limit=LIST_LIMIT)
+    rows = await storage.recent_by_author(user_id, limit=LIST_LIMIT, strict=True)
     reasons = await request_meta.reasons_for([r.get("ID заявки", "") for r in rows])
     return rows, reasons
 
@@ -147,7 +155,11 @@ async def my_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await message.reply_text(access_denied_message())
         return
 
-    rows, reasons = await _load(user.id)
+    try:
+        rows, reasons = await _load(user.id)
+    except storage.RegistryUnavailable:
+        await message.reply_text(REGISTRY_DOWN)
+        return
     if not rows:
         await message.reply_text(
             "Заявок пока нет. Подать первую — /invoice или кнопка в меню (/menu)."
@@ -179,8 +191,14 @@ async def withdraw_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if not ok:
         return
 
-    # Перерисовываем список: статус и набор кнопок изменились.
-    rows, reasons = await _load(user.id)
+    # Перерисовываем список: статус и набор кнопок изменились. Отзыв уже
+    # прошёл, поэтому недоступный реестр здесь не ошибка — просто оставляем
+    # прежнее сообщение, оно устарело только в одной строке.
+    try:
+        rows, reasons = await _load(user.id)
+    except storage.RegistryUnavailable:
+        log.info("Список «Мои заявки» не перерисован: реестр недоступен")
+        return
     try:
         await query.edit_message_text(
             _format_list(rows, reasons),

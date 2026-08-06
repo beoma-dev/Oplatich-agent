@@ -488,3 +488,68 @@ class TestAmountFormatting:
 
     def test_unparsable_stays_as_is(self):
         assert my.format_amount("—") == "—"
+
+
+class TestRegistryUnavailable:
+    """Недоступный реестр не должен выглядеть как «заявок нет».
+
+    Именно эта подмена однажды съела напоминания: пустой результат вместо
+    ошибки. В «Моих заявках» она врёт человеку про его же заявки.
+    """
+
+    async def test_storage_can_raise_instead_of_lying(self, tmp_paths, monkeypatch):
+        from services import registry_sqlite, storage
+
+        def boom(*args, **kwargs):
+            raise TimeoutError("read timed out")
+
+        monkeypatch.setattr(registry_sqlite, "recent_by_author_sync", boom)
+        assert await storage.recent_by_author(42) == [], "мягкий режим прежний"
+        with pytest.raises(storage.RegistryUnavailable):
+            await storage.recent_by_author(42, strict=True)
+
+    async def test_api_answers_503_not_empty_list(self, tmp_paths, monkeypatch):
+        import httpx
+
+        import api.routes as routes_mod
+        import bot.access as access
+        from api.server import build_api
+        from services import registry_sqlite
+        from tests.test_api_integration import _auth, _make_bot
+
+        def boom(*args, **kwargs):
+            raise TimeoutError("read timed out")
+
+        monkeypatch.setattr(registry_sqlite, "recent_by_author_sync", boom)
+        monkeypatch.setattr(routes_mod, "_my_rate", {})
+        monkeypatch.setattr(access, "_admin_cache", {})
+        settings.__dict__.pop("allowed_user_ids", None)
+        monkeypatch.setattr(settings, "allowed_user_ids_raw", "42")
+
+        transport = httpx.ASGITransport(app=build_api(_make_bot()))
+        async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
+            resp = await client.get("/api/my-requests", headers=_auth())
+        assert resp.status_code == 503
+        assert "недоступен" in resp.json()["detail"]
+
+    async def test_chat_says_registry_is_down(self, tmp_paths, monkeypatch):
+        from unittest.mock import AsyncMock, MagicMock
+
+        from bot import my_requests
+        from services import registry_sqlite
+
+        def boom(*args, **kwargs):
+            raise TimeoutError("read timed out")
+
+        monkeypatch.setattr(registry_sqlite, "recent_by_author_sync", boom)
+        settings.__dict__.pop("allowed_user_ids", None)
+        monkeypatch.setattr(settings, "allowed_user_ids_raw", "42")
+
+        update, context = MagicMock(), MagicMock()
+        update.effective_user.id = 42
+        update.effective_chat.type = "private"
+        update.effective_message.reply_text = AsyncMock()
+        await my_requests.my_command(update, context)
+        text = update.effective_message.reply_text.await_args[0][0]
+        assert "Реестр сейчас недоступен" in text
+        assert "Заявок пока нет" not in text
