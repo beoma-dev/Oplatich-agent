@@ -496,7 +496,13 @@ def test_article_hints_scroll_below_the_field():
     m = re.search(r"\.seg\.seg-scroll \{([^}]*)\}", HTML)
     assert m, "нет стилей листающегося ряда статей"
     assert "flex-wrap: nowrap" in m.group(1) and "overflow-x: auto" in m.group(1)
-    assert ".seg.seg-scroll button { flex: 0 0 auto; }" in HTML
+    button = re.search(r"\.seg\.seg-scroll button \{([^}]*)\}", HTML)
+    assert button and "flex: 0 0 auto" in button.group(1)
+    # Размер — как у подсказок контрагента: один вид у обоих списков.
+    chip = re.search(r"\n  \.chip \{([^}]*)\}", HTML).group(1)
+    for prop in ("padding: 7px 12px", "border-radius: 999px", "font-size: 13px"):
+        assert prop in chip, f"изменился эталон чипса: нет «{prop}»"
+        assert prop in button.group(1), f"ряд статей разошёлся с чипсами: нет «{prop}»"
     assert "wireHScroll(artSeg);" in HTML
     # Выбранная статья могла остаться за обрезом — её подтягивают в кадр.
     assert "function revealActive(" in HTML
@@ -574,6 +580,9 @@ def test_user_list_is_grouped_by_role():
     assert '"может подавать заявки"' in HTML
     assert '"не может подавать заявки"' in HTML
     assert '"подаёт заявки как админ"' in HTML
+    # Общее «whitelist пуст» стояло в КАЖДОЙ строке и читалось как личный
+    # статус человека; сам факт виден в карточке доступа выше.
+    assert '"подача закрыта всем — whitelist пуст"' not in JS
 
 
 def test_admins_can_be_managed_from_the_access_tab():

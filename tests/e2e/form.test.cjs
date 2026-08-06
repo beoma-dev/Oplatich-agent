@@ -110,6 +110,27 @@ test("крестики подсказок краснеют одинаково в
   }
 });
 
+test("подсказки статей и контрагентов одного размера", async () => {
+  // Два списка подсказок рядом: разный кегль и высота читались как разнобой.
+  for (const skin of ["neon", "tg"]) {
+    const page = await openApp(browser, { skin, width: 430, routes: HINTS });
+    const size = await page.evaluate(() => {
+      const m = (sel) => {
+        const el = document.querySelector(sel);
+        const st = getComputedStyle(el);
+        return [Math.round(el.getBoundingClientRect().height), st.fontSize,
+                st.paddingTop, st.paddingLeft, st.borderTopLeftRadius];
+      };
+      return { chip: m("#cp-chips .chip"), article: m("#article-seg button"),
+               crossChip: getComputedStyle(document.querySelector("#cp-chips .chip-x")).fontSize,
+               crossArticle: getComputedStyle(document.querySelector("#article-seg .seg-x")).fontSize };
+    });
+    assert.deepEqual(size.article, size.chip, `${skin}: подсказки разного размера`);
+    assert.equal(size.crossArticle, size.crossChip, `${skin}: крестики разного размера`);
+    await page.close();
+  }
+});
+
 test("родная кнопка Telegram красится акцентом шкуры", async () => {
   const neon = await openApp(browser, { skin: "neon", routes: HINTS });
   assert.deepEqual(await neon.evaluate(() => window.__params),

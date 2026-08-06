@@ -1976,7 +1976,7 @@
   function loadUsers() {
     fetch("/api/admin/users", { headers: { "X-Telegram-Init-Data": tg.initData } })
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (d) { if (d) renderUsers(d.users || [], d.whitelist_empty); })
+      .then(function (d) { if (d) renderUsers(d.users || []); })
       .catch(function () { /* список не критичен */ });
   }
 
@@ -2039,7 +2039,7 @@
     wireSuggest(who + "-input", who + "-suggest");
   });
 
-  function renderUsers(items, whitelistEmpty) {
+  function renderUsers(items) {
     knownUsers = items || [];
     var box = $("users-list");
     box.innerHTML = "";
@@ -2065,11 +2065,11 @@
       hint.textContent = g.hint;
       head.appendChild(hint);
       box.appendChild(head);
-      part.forEach(function (it, i) { box.appendChild(userRow(it, i, whitelistEmpty)); });
+      part.forEach(function (it, i) { box.appendChild(userRow(it, i)); });
     });
   }
 
-  function userRow(it, i, whitelistEmpty) {
+  function userRow(it, i) {
     var row = document.createElement("div");
     row.className = "row-item";
     row.style.animationDelay = (i * 0.03) + "s";
@@ -2081,10 +2081,11 @@
     who.appendChild(main);
     var sub = document.createElement("div");
     sub.className = "sub";
-    // Формулировки полные: «может подавать» не отвечало на вопрос «что?».
+    // Строка — про этого человека, и только. Общее «whitelist пуст» стояло
+    // в каждой строке и читалось как их личный статус; сам факт и так виден
+    // в карточке доступа выше, когда список пуст.
     var state = it.access ? "может подавать заявки"
       : it.admin ? "подаёт заявки как админ"
-      : whitelistEmpty ? "подача закрыта всем — whitelist пуст"
       : "не может подавать заявки";
     sub.textContent = (it.username ? "id " + it.id + " · " : "") + state;
     who.appendChild(sub);
