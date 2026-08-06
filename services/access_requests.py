@@ -7,6 +7,7 @@ Mini App, чтобы поведение не разъезжалось.
 """
 from __future__ import annotations
 
+import asyncio
 import html
 import logging
 import time
@@ -16,6 +17,7 @@ from telegram.constants import ParseMode
 
 from services import audit
 from services import runtime_settings as rs
+from services.user_directory import remember, username_for
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +51,12 @@ async def request_access(
     bot: Bot, user_id: int, username: str = "", full_name: str = ""
 ) -> str:
     """Регистрирует просьбу и рассылает её админам. Возвращает текст для автора."""
+    # Запоминаем @username сразу: whitelist хранит числовые id (ник человек
+    # может сменить), а показывает справочник. Из Mini App апдейта в чат нет,
+    # и без этой записи выданный доступ выглядел бы как «id 930027909».
+    if username:
+        await asyncio.to_thread(remember, user_id, username)
+
     admins = rs.effective_admin_ids()
     if not admins:
         return NO_ADMINS
@@ -86,15 +94,17 @@ async def resolve_access(
 ) -> str:
     """Решение админа. Возвращает короткий итог для карточки в чате."""
     rs.clear_access_request(target_id)
+    # Ник знаем из справочника — в итоге на карточке он читается лучше id.
+    who = username_for(target_id) or f"id {target_id}"
     if approve:
         rs.add_allowed(target_id)
-        note = f"✅ Доступ открыт (id {target_id})"
+        note = f"✅ Доступ открыт: {who}"
         to_user = (
             "✅ Доступ открыт — можно подавать заявки на оплату.\n"
             "Нажмите /start, чтобы начать."
         )
     else:
-        note = f"🚫 Отказано (id {target_id})"
+        note = f"🚫 Отказано: {who}"
         to_user = "🚫 В доступе отказано. Уточните у администратора, почему."
     try:
         await bot.send_message(chat_id=target_id, text=to_user)

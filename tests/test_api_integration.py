@@ -1084,3 +1084,25 @@ class TestAccessRequests:
         await resolve_access(bot, 42, False, actor_id=1, actor_name="@boss")
         assert not is_allowed(42)
         assert (await client.get("/api/access", headers=_auth())).json()["pending"] is False
+
+    async def test_request_remembers_the_username_for_the_whitelist(self, api, monkeypatch):
+        """После выдачи доступа в настройках виден @ник, а не «id 42».
+
+        Whitelist хранит числовые id (ник можно сменить), а показывает
+        справочник; из Mini App апдейта в чат нет, поэтому ник туда попадает
+        только отсюда.
+        """
+        from services.access_requests import resolve_access
+        from services.user_directory import username_for
+
+        client, bot = api
+        _admins(monkeypatch, "1")
+        assert username_for(42) is None
+        await client.post("/api/access/request", headers=_auth())
+        assert username_for(42) == "@tester"
+
+        note = await resolve_access(bot, 42, True, actor_id=1, actor_name="@boss")
+        assert "@tester" in note, "решение админа тоже должно называть человека по нику"
+        body = (await client.get("/api/admin/settings", headers=_auth(1))).json()
+        rows = [u for u in body["allowed"] if u["id"] == 42]
+        assert rows and rows[0]["username"] == "@tester"

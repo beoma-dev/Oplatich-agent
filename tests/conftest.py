@@ -64,8 +64,12 @@ def tmp_paths(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "user_directory_file", str(tmp_path / "known_users.json"))
 
     import services.runtime_settings as rs
+    import services.user_directory as directory
 
     monkeypatch.setattr(rs, "_cache", None)
+    # Справочник тоже держит карту в модуле: без сброса @username, записанный
+    # одним тестом, «переезжал» в следующий и ломал соседей.
+    monkeypatch.setattr(directory, "_cache", None)
     # Сбрасываем кэшированные списки из реального .env.
     settings.__dict__.pop("finance_recipients", None)
     settings.__dict__.pop("allowed_user_ids", None)

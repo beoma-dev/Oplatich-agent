@@ -159,3 +159,70 @@ test("когда админов нет, честно сообщаем, что р
   assert.ok(state.askHidden);
   await page.close();
 });
+
+test("панель админа обновляется после решения в чате", async () => {
+  // Админ уходит в чат нажать «Открыть доступ» и возвращается: списки на
+  // экране должны быть уже новыми, без перезапуска приложения.
+  const page = await browser.newPage({ viewport: { width: 430, height: 800 } });
+  await page.route("**/telegram-web-app.js", (r) => r.abort());
+  await page.addInitScript(() => {
+    window.__granted = false;
+    window.Telegram = { WebApp: {
+      initData: "signed", initDataUnsafe: {}, themeParams: {}, colorScheme: "light",
+      ready() {}, expand() {}, close() {}, openLink() {},
+      MainButton: { isVisible: false, show() { this.isVisible = true; },
+        hide() { this.isVisible = false; }, setText() {}, showProgress() {},
+        hideProgress() {}, onClick() {}, offClick() {}, setParams() {},
+        enable() {}, disable() {} },
+      BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} },
+      HapticFeedback: { selectionChanged() {}, impactOccurred() {}, notificationOccurred() {} },
+      onEvent() {}, offEvent() {},
+    } };
+    window.fetch = (u) => {
+      const s = String(u);
+      let body = { ok: true, items: [] };
+      if (s.endsWith("/api/access")) body = { allowed: true, pending: false, has_admins: true };
+      if (s.indexOf("/api/admin/settings") !== -1) body = {
+        autofill: true, financiers: [], backup: {}, reminders: {},
+        admins: [{ id: 42, source: "env", username: "@boss" }],
+        allowed: window.__granted
+          ? [{ id: 7, source: "dynamic", username: "@newbie" }] : [],
+        registry_url: null, drive_url: null };
+      if (s.indexOf("/api/admin/users") !== -1) body = { whitelist_empty: !window.__granted,
+        users: [{ id: 7, username: "@newbie", admin: false, financier: false,
+                  access: window.__granted ? "dynamic" : null }] };
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+    };
+  });
+  await page.goto(require("./helpers.cjs").PAGE_URL, { waitUntil: "load" });
+  await page.waitForTimeout(500);
+  await page.click("#admin-btn");
+  await page.waitForTimeout(400);
+  await page.click("#tab-access");
+  await page.waitForTimeout(300);
+
+  const read = () => page.evaluate(() => ({
+    whitelist: [...document.querySelectorAll("#wl-list .row-item .who")]
+      .map((w) => w.innerText.split("\n")[0]),
+    empty: !!document.querySelector("#wl-list .empty-note"),
+  }));
+  const before = await read();
+  assert.deepEqual(before.whitelist, []);
+  assert.ok(before.empty, "список должен быть пуст до решения");
+
+  const visibility = (hidden) => {
+    Object.defineProperty(document, "hidden", { value: hidden, configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  };
+  await page.evaluate(visibility, true);
+  await page.evaluate(() => { window.__granted = true; });
+  await page.waitForTimeout(150);
+  await page.evaluate(visibility, false);
+  await page.waitForTimeout(600);
+
+  const after = await read();
+  assert.deepEqual(after.whitelist, ["@newbie"],
+    "после возврата из чата список остался прежним");
+  assert.equal(after.empty, false);
+  await page.close();
+});

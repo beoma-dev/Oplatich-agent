@@ -718,13 +718,15 @@ def test_form_is_hidden_without_access_and_revives_by_itself():
     """
     assert re.search(r"#form-view\.no-access \.card[^}]*display: none", CSS, re.S)
     assert "function applyAccess(" in JS
-    # Опрос идёт, только пока доступа нет: с доступом это лишняя нагрузка
-    # на всю сессию, и его возвращает проверка при возврате в приложение.
-    assert "function watchAccess(" in JS and "function stopAccessWatch(" in JS
-    body = JS[JS.index("function applyAccess("):]
-    body = body[:body.index("\n  }")]
-    assert "stopAccessWatch();" in body and "watchAccess();" in body
+    # Опрос идёт в ОБЕ стороны и не останавливается: права снимают так же
+    # буднично, как выдают, и человек должен это увидеть сразу.
+    assert "function watchAccess(" in JS and "function pollAccess(" in JS
+    assert "stopAccessWatch" not in JS, "опрос снова выключается при доступе"
     assert 'document.addEventListener("visibilitychange"' in JS
+    # Вернувшись из чата, админ должен видеть свежие списки.
+    vis = JS[JS.index('document.addEventListener("visibilitychange"'):]
+    vis = vis[:vis.index("\n  });")]
+    assert "loadAdminSettings();" in vis and "loadUsers();" in vis
     # Свёрнутое приложение не опрашиваем.
     watch = JS[JS.index("function watchAccess("):]
     assert "document.hidden" in watch[:600]

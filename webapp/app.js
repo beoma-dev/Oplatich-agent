@@ -1816,7 +1816,6 @@
     $("form-view").classList.toggle("no-access", !canSubmit);
     refreshMainButton();
     if (canSubmit) {
-      stopAccessWatch();
       if (!first) {
         // Справочник не загрузился на старте: сервер отвечал 403.
         loadCounterparties();
@@ -1827,7 +1826,6 @@
         if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
       }
     } else {
-      watchAccess();
       if (announce && !first) {
         $("access-note").textContent =
           "Доступ закрыли. Введённое сохранено — если это ошибка, запросите доступ снова.";
@@ -1838,41 +1836,38 @@
     }
   }
 
-  // Пока доступа нет, тихо переспрашиваем сервер: админ решает в своём чате,
-  // и перезапускать приложение ради этого человек не должен.
+  // Права меняются в чате у админа, а не в приложении, поэтому тихо
+  // переспрашиваем сервер — в ОБЕ стороны: и выдачу, и отзыв. Ручка дешёвая
+  // (проверка по спискам в памяти), свёрнутое приложение не опрашиваем.
   var accessTimer = null;
   var ACCESS_POLL_MS = 6000;
 
-  function watchAccess() {
-    if (accessTimer !== null || !insideTelegram) return;
-    accessTimer = setInterval(function () {
-      // Свёрнутое приложение не опрашиваем — вернётся, тогда и спросим.
-      if (document.hidden) return;
-      fetch("/api/access", { headers: { "X-Telegram-Init-Data": tg.initData } })
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (d) { if (d) applyAccess(d.allowed, true); })
-        .catch(function () { /* сеть мигнула — попробуем на следующем круге */ });
-    }, ACCESS_POLL_MS);
-  }
-
-  function stopAccessWatch() {
-    if (accessTimer === null) return;
-    clearInterval(accessTimer);
-    accessTimer = null;
-  }
-
-  /** Возврат в приложение — повод переспросить про доступ.
-   *
-   *  Когда доступ есть, опрос выключен: гонять его всю сессию ради редкого
-   *  отзыва — лишняя нагрузка. Но приложение могло провисеть свёрнутым час,
-   *  и права за это время могли поменяться в любую сторону.
-   */
-  document.addEventListener("visibilitychange", function () {
-    if (document.hidden || !insideTelegram || canSubmit === null) return;
+  function pollAccess() {
+    if (!insideTelegram || document.hidden) return;
     fetch("/api/access", { headers: { "X-Telegram-Init-Data": tg.initData } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) { if (d) applyAccess(d.allowed, true); })
-      .catch(function () { /* сеть — состояние оставляем прежним */ });
+      .catch(function () { /* сеть мигнула — попробуем на следующем круге */ });
+  }
+
+  function watchAccess() {
+    if (accessTimer !== null || !insideTelegram) return;
+    accessTimer = setInterval(pollAccess, ACCESS_POLL_MS);
+  }
+
+  /** Возврат в приложение: спрашиваем сразу, не дожидаясь круга опроса.
+   *
+   *  Решение админ принимает в ЧАТЕ и возвращается в приложение — к этому
+   *  моменту у него на экране должны быть свежие списки, а не те, что были
+   *  до его нажатия.
+   */
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden || !insideTelegram) return;
+    if (canSubmit !== null) pollAccess();
+    if (isBotAdmin && !$("admin-view").classList.contains("hidden")) {
+      loadAdminSettings();
+      loadUsers();
+    }
   });
 
   function markAccessPending() {
@@ -1903,6 +1898,7 @@
       .then(function () { btn.disabled = false; });
   });
   checkAccess();
+  watchAccess();
 
   function tryFinance() {
     if (!insideTelegram) return;

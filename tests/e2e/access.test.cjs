@@ -94,7 +94,7 @@ test("без доступа форма скрыта, с доступом — о�
   await page.close();
 });
 
-test("отзыв доступа замечается при возврате в приложение", async () => {
+test("отзыв доступа виден сам, без возврата в приложение", async () => {
   const page = await browser.newPage({ viewport: { width: 430, height: 780 } });
   await page.route("**/telegram-web-app.js", (r) => r.abort());
   await page.addInitScript(install);
@@ -103,20 +103,29 @@ test("отзыв доступа замечается при возврате в 
   await page.waitForTimeout(600);
   assert.ok((await page.evaluate(snapshot)).cards > 0, "форма должна быть видна");
 
-  const before = await page.evaluate(() => window.__checks);
-  await page.waitForTimeout(3000);
-  assert.equal(await page.evaluate(() => window.__checks), before,
-    "с доступом опрос должен молчать — это лишняя нагрузка всю сессию");
-
+  // Права снимают в чате у админа: приложение должно заметить это само.
   await page.evaluate(() => { window.__allowed = false; });
-  await page.evaluate(toggleVisibility, true);
-  await page.waitForTimeout(200);
-  await page.evaluate(toggleVisibility, false);
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(7500);
 
   const revoked = await page.evaluate(snapshot);
   assert.ok(revoked.gate, "плашка не вернулась после отзыва доступа");
   assert.equal(revoked.cards, 0, "форма осталась видна после отзыва");
   assert.equal(revoked.modal, "Доступ закрыт", "человеку не сказали, что доступ закрыли");
+  await page.close();
+});
+
+test("свёрнутое приложение сервер не дёргает", async () => {
+  const page = await browser.newPage({ viewport: { width: 430, height: 780 } });
+  await page.route("**/telegram-web-app.js", (r) => r.abort());
+  await page.addInitScript(install);
+  await page.addInitScript(() => { window.__allowed = true; });
+  await page.goto(PAGE_URL, { waitUntil: "load" });
+  await page.waitForTimeout(600);
+
+  await page.evaluate(toggleVisibility, true);
+  const before = await page.evaluate(() => window.__checks);
+  await page.waitForTimeout(7000);
+  assert.equal(await page.evaluate(() => window.__checks), before,
+    "опрос идёт, пока приложение свёрнуто");
   await page.close();
 });
