@@ -119,8 +119,11 @@ async def access_state(request: Request) -> dict:
     user = validate_init_data(
         request.headers.get("X-Telegram-Init-Data", ""), settings.telegram_bot_token
     )
+    # Заодно отдаём признак финансиста: приложение опрашивает эту ручку и по
+    # ней же убирает/возвращает кнопку панели, когда права поменяли в чате.
     return {
         "allowed": is_allowed(user["id"]),
+        "financier": is_financier(user["id"]),
         "pending": rs.access_request_pending(user["id"]),
         "has_admins": bool(rs.effective_admin_ids()),
     }

@@ -129,3 +129,54 @@ test("свёрнутое приложение сервер не дёргает",
     "опрос идёт, пока приложение свёрнуто");
   await page.close();
 });
+
+test("кнопка панели финансиста уходит вместе с правами", async () => {
+  // Права снимают в чате: приложение должно убрать кнопку само и закрыть
+  // уже открытую панель — чужие заявки в ней смотреть больше нельзя.
+  const page = await browser.newPage({ viewport: { width: 430, height: 800 } });
+  await page.route("**/telegram-web-app.js", (r) => r.abort());
+  await page.addInitScript(() => {
+    window.__fin = true;
+    window.Telegram = { WebApp: {
+      initData: "signed", initDataUnsafe: {}, themeParams: {}, colorScheme: "light",
+      ready() {}, expand() {}, close() {}, openLink() {},
+      MainButton: { isVisible: false, show() { this.isVisible = true; },
+        hide() { this.isVisible = false; }, setText() {}, showProgress() {},
+        hideProgress() {}, onClick() {}, offClick() {}, setParams() {},
+        enable() {}, disable() {} },
+      BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} },
+      HapticFeedback: { selectionChanged() {}, impactOccurred() {}, notificationOccurred() {} },
+      onEvent() {}, offEvent() {},
+    } };
+    window.fetch = (u) => {
+      const s = String(u);
+      if (s.indexOf("/api/admin/") !== -1) {
+        return Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({}) });
+      }
+      let body = { ok: true, items: [] };
+      if (s.endsWith("/api/access")) {
+        body = { allowed: true, financier: window.__fin, pending: false, has_admins: true };
+      }
+      if (s.indexOf("/api/finance/access") !== -1) body = { ok: window.__fin };
+      if (s.indexOf("/api/finance/requests") !== -1) body = { items: [], total: 0 };
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+    };
+  });
+  await page.goto(PAGE_URL, { waitUntil: "load" });
+  await page.waitForTimeout(700);
+
+  const read = () => page.evaluate(() => ({
+    button: !document.getElementById("fin-btn").classList.contains("hidden"),
+    panel: !document.getElementById("fin-view").classList.contains("hidden"),
+  }));
+  assert.deepEqual(await read(), { button: true, panel: false });
+  await page.click("#fin-btn");
+  await page.waitForTimeout(400);
+  assert.deepEqual(await read(), { button: true, panel: true });
+
+  await page.evaluate(() => { window.__fin = false; });
+  await page.waitForTimeout(7500);
+  assert.deepEqual(await read(), { button: false, panel: false },
+    "кнопка панели осталась после отзыва прав финансиста");
+  await page.close();
+});

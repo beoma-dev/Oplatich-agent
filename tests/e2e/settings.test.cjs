@@ -210,14 +210,9 @@ test("панель админа обновляется после решения
   assert.deepEqual(before.whitelist, []);
   assert.ok(before.empty, "список должен быть пуст до решения");
 
-  const visibility = (hidden) => {
-    Object.defineProperty(document, "hidden", { value: hidden, configurable: true });
-    document.dispatchEvent(new Event("visibilitychange"));
-  };
-  await page.evaluate(visibility, true);
   await page.evaluate(() => { window.__granted = true; });
-  await page.waitForTimeout(150);
-  await page.evaluate(visibility, false);
+  // Окно Mini App на десктопе не «скрывается» — только теряет фокус.
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await page.waitForTimeout(600);
 
   const after = await read();

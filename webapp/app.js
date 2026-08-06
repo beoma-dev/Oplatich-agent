@@ -1846,8 +1846,23 @@
     if (!insideTelegram || document.hidden) return;
     fetch("/api/access", { headers: { "X-Telegram-Init-Data": tg.initData } })
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (d) { if (d) applyAccess(d.allowed, true); })
+      .then(function (d) {
+        if (!d) return;
+        applyAccess(d.allowed, true);
+        applyFinance(d.financier);
+      })
       .catch(function () { /* сеть мигнула — попробуем на следующем круге */ });
+  }
+
+  /** Кнопка панели финансиста: права снимают в чате, и она должна уходить
+   *  так же быстро, как появляется. Открытую панель при отзыве закрываем —
+   *  чужие заявки в ней смотреть уже нельзя. */
+  function applyFinance(allowed) {
+    var btn = $("fin-btn");
+    if (!btn || btn.classList.contains("hidden") === !allowed) return;
+    btn.classList.toggle("hidden", !allowed);
+    if (!allowed && !$("fin-view").classList.contains("hidden")) closeFinance();
+    layoutHeaderIcons();
   }
 
   function watchAccess() {
@@ -1861,14 +1876,25 @@
    *  моменту у него на экране должны быть свежие списки, а не те, что были
    *  до его нажатия.
    */
-  document.addEventListener("visibilitychange", function () {
-    if (document.hidden || !insideTelegram) return;
+  function refreshOnReturn() {
+    if (!insideTelegram || document.hidden) return;
     if (canSubmit !== null) pollAccess();
-    if (isBotAdmin && !$("admin-view").classList.contains("hidden")) {
-      loadAdminSettings();
-      loadUsers();
-    }
-  });
+    tryAdmin();
+    if (!isBotAdmin || $("admin-view").classList.contains("hidden")) return;
+    // Не затираем то, что человек прямо сейчас правит: перерисовка вернула
+    // бы в поля значения с сервера.
+    var active = document.activeElement;
+    if (active && $("admin-view").contains(active) &&
+        /^(INPUT|TEXTAREA)$/.test(active.tagName)) return;
+    loadAdminSettings();
+    loadUsers();
+  }
+
+  // На телефоне приложение уходит в фон (visibilitychange), а на десктопе
+  // Mini App — отдельное ОКНО: оно остаётся видимым, и срабатывает только
+  // focus. Нужны оба, иначе на десктопе обновления не было вовсе.
+  document.addEventListener("visibilitychange", refreshOnReturn);
+  window.addEventListener("focus", refreshOnReturn);
 
   function markAccessPending() {
     $("access-note").textContent =
