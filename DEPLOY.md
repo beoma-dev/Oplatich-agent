@@ -18,7 +18,7 @@
 ## Шаг 1. Получить проект
 
 ```bash
-git clone https://github.com/elementary1997/invoice-bot-test.git invoice-bot
+git clone https://github.com/beoma-dev/Oplatich-agent.git invoice-bot
 cd invoice-bot
 ```
 
@@ -212,7 +212,7 @@ ssh -N -D 172.17.0.1:1080 user@foreign-vps   # в проде — через auto
 1. Python 3.11+, каталог `/opt/invoice-bot`:
    ```bash
    sudo useradd -r -m -d /opt/invoice-bot invoicebot
-   sudo -u invoicebot git clone https://github.com/elementary1997/invoice-bot-test.git /opt/invoice-bot
+   sudo -u invoicebot git clone https://github.com/beoma-dev/Oplatich-agent.git /opt/invoice-bot
    cd /opt/invoice-bot
    sudo -u invoicebot python3 -m venv .venv
    sudo -u invoicebot .venv/bin/pip install -r requirements.txt
