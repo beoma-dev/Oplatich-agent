@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="64 74 384 404" width="384" height="404" role="img" aria-label="Оплатыч">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="64 44 384 434" width="384" height="434" role="img" aria-label="Оплатыч">
   <defs>
     <radialGradient id="fur" cx="40%" cy="30%" r="76%">
       <stop offset="0%" stop-color="#F8DEA9"/>
@@ -17,6 +17,7 @@
       <stop offset="0%" stop-color="#FFFFFF"/>
       <stop offset="100%" stop-color="#EDF2EF"/>
     </linearGradient>
+    <clipPath id="cap"><path d="M100 212C100 118 168 62 256 62C344 62 412 118 412 212Q256 252 100 212Z"/></clipPath>
     <clipPath id="head">
       <circle cx="256" cy="268" r="168"/>
     </clipPath>
@@ -40,13 +41,29 @@
   <!-- Светлое пузико. -->
   <ellipse cx="256" cy="330" rx="104" ry="92" fill="#FCEFD3" opacity=".8"/>
 
-  <!-- Козырёк бухгалтера: узкая лента на лбу + короткий козырёк.
-       Не шапка — именно тот самый зелёный козырёк счетовода. -->
-  <!-- Ободок обрезан по голове, поэтому лежит на ней, а не парит. -->
-  <g clip-path="url(#head)">
-    <path d="M56 196Q256 146 456 196L456 228Q256 178 56 228Z" fill="url(#band)"/>
+  <!-- Кепочка Beoma вместо козырька счетовода: тулья по голове + тот же
+       козырёк. Швы, блик и надпись обрезаны по тулье (clip cap) — иначе блик
+       вылезает за силуэт и висит в воздухе над ухом. Уши остались НАД тульей
+       по посадке: они выходят из-под неё по бокам, поэтому хомяк читается
+       хомяком, а не шаром в кепке. -->
+  <path d="M100 212C100 118 168 62 256 62C344 62 412 118 412 212Q256 252 100 212Z"
+        fill="url(#band)" stroke="#0A7A55" stroke-width="7" stroke-linejoin="round"/>
+  <g clip-path="url(#cap)">
+    <g fill="none" stroke="#0A7A55" stroke-width="4" opacity=".38">
+      <path d="M256 64Q252 150 254 238"/><path d="M180 76Q168 152 170 224"/><path d="M332 76Q344 152 342 224"/>
+    </g>
+    <path d="M176 92Q256 66 336 92" fill="none" stroke="#8AF3D0" stroke-width="9"
+          stroke-linecap="round" opacity=".25"/>
+    <path id="cap-word" d="M142 150Q256 190 370 150" fill="none"/>
+    <text font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'DejaVu Sans', sans-serif" font-weight="700" font-size="56" letter-spacing="1.5" fill="#FFFFFF">
+      <textPath href="#cap-word" startOffset="50%" text-anchor="middle">Beoma</textPath>
+    </text>
   </g>
-  <!-- Козырёк выступает за силуэт головы — именно это читается как козырёк. -->
+  <circle cx="256" cy="68" r="13" fill="url(#brim)" stroke="#0A7A55" stroke-width="5"/>
+  <!-- Тень от кепки на шерсти: без неё кепка парит над головой. -->
+  <g clip-path="url(#head)">
+    <path d="M96 208Q256 250 416 208L416 232Q256 274 96 232Z" fill="#7A4A2C" opacity=".18"/>
+  </g>
   <path d="M78 222Q256 178 434 222L434 234Q256 266 78 234Z"
         fill="url(#brim)" stroke="#0A7A55" stroke-width="6" stroke-linejoin="round"/>
   <path d="M136 226Q256 258 376 226" fill="none"
