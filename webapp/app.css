@@ -1286,14 +1286,19 @@
   .tip { position: relative; }
   /* Глазок и «убрать файл» стоят на своей абсолютной раскладке. Кнопки
      шапки — наоборот: они лежат в панели на flex, и absolute сложил бы их
-     в стопку (правило .tip идёт по файлу позже и перебивало бы .gear). */
+     в стопку (правило .tip идёт по файлу позже и перебивало бы .gear).
+     static, а не relative: тогда подсказка отсчитывается от панели, а не от
+     самой кнопки. У крайней левой кнопки подсказка иначе уезжала за левый
+     край экрана — на 320 px «Настройки» начинались с −4 px. Одновременно
+     видна всё равно только одна, так что общий якорь ничего не ломает. */
   .eye-btn.tip, .file-remove.tip { position: absolute; }
-  .gear.tip { position: relative; }
+  .gear.tip { position: static; }
   .tip::after {
     content: attr(data-tip);
     position: absolute;
     top: calc(100% + 7px);
     right: 0;
+    max-width: calc(100vw - 24px);
     z-index: 60;
     white-space: nowrap;
     font-size: 12px;
