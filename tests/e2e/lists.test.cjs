@@ -83,3 +83,35 @@ test("недоступный реестр не выглядит как «зая�
   assert.ok(!/Заявок пока нет/.test(text), "показали «заявок нет» вместо ошибки");
   await page.close();
 });
+
+test("в пустом списке герой расстроен и не занимает пол-экрана", async () => {
+  // Копия марки теряла класс .mark, а .empty-art в CSS не существовал —
+  // SVG растягивался по ширине карточки во весь экран.
+  const page = await openApp(browser, { skin: "tg", width: 393, height: 852,
+    routes: { ...ROUTES, "/api/my-requests": { items: [] } } });
+  await page.evaluate(() => document.getElementById("my-btn").click());
+  await page.waitForTimeout(600);
+  const art = await page.evaluate(() => {
+    const el = document.querySelector(".empty-art");
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    const card = el.closest(".card").getBoundingClientRect();
+    return {
+      h: Math.round(r.height), fits: r.width <= card.width,
+      anim: getComputedStyle(el).animationName,
+      mouth: el.querySelector("path[d^='M234 402']") !== null,
+      lookingDown: [...el.querySelectorAll(".pup")]
+        .every((p) => (p.getAttribute("transform") || "").indexOf("translate") === 0),
+      innerIds: el.querySelectorAll("[id]").length,
+    };
+  });
+  assert.ok(art, "марки в пустом списке нет");
+  assert.ok(art.h > 90 && art.h < 180, `герой ${art.h}px — не тот размер`);
+  assert.equal(art.fits, true, "герой шире карточки");
+  assert.equal(art.anim, "mk-sad", "нет анимации расстроенного вида");
+  assert.equal(art.mouth, true, "уголки рта не опущены");
+  assert.equal(art.lookingDown, true, "взгляд не опущен");
+  // Копия и шапка не должны делить одни id на документ.
+  assert.equal(art.innerIds, 0, "в копии остались внутренние id");
+  await page.close();
+});

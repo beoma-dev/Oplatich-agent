@@ -535,6 +535,36 @@
   header.play #paper-11 { animation: paper-11 var(--mark-cycle) cubic-bezier(.2,.6,.5,1) infinite; }
   header.play #paper-12 { animation: paper-12 var(--mark-cycle) cubic-bezier(.2,.6,.5,1) infinite; }
 
+  /* ---------- Пустой список: расстроенный Оплатыч ----------
+     Класс ставится клоном марки в JS, поэтому высота задаётся ЗДЕСЬ: при
+     клонировании теряется .mark, и без своей высоты SVG растягивался по
+     ширине карточки во весь экран. */
+  .empty-art {
+    display: block;
+    height: 128px;
+    width: auto;
+    margin: 2px auto 12px;
+    overflow: visible;
+    /* Приглушён: заявок нет, и герой не бодрится. */
+    opacity: .85;
+    filter: saturate(.75);
+    transform-origin: 50% 92%;
+    animation: mk-sad 4.2s ease-in-out infinite;
+  }
+
+  /* Понурился и вздохнул: плечи опускаются, лёгкое покачивание из стороны
+     в сторону, без резких движений — это фон, а не аттракцион. */
+  @keyframes mk-sad {
+    0%, 100% { transform: rotate(-2.5deg) translateY(0) scaleY(1); }
+    22%      { transform: rotate(-2.5deg) translateY(3px) scaleY(.982); }
+    46%      { transform: rotate(-1deg) translateY(1px) scaleY(1); }
+    72%      { transform: rotate(2.5deg) translateY(3px) scaleY(.986); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .empty-art { animation: none; transform: rotate(-2.5deg); }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     header.play #mk-body, header.play #mk-arm-free, header.play #mk-paw-doc,
     header.play #mk-ear-l, header.play #mk-ear-r, header.play #mk-thumb,

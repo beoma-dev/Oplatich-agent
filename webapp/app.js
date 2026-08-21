@@ -924,15 +924,6 @@
     catch (e) { /* старые клиенты */ }
   }
 
-  /** «rgb(16, 185, 129)» → «#10b981»: setParams принимает только hex. */
-  function cssHex(value) {
-    var m = /^rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/.exec(value || "");
-    if (!m) return null;
-    return "#" + [m[1], m[2], m[3]].map(function (n) {
-      return ("0" + (+n).toString(16)).slice(-2);
-    }).join("");
-  }
-
   // --- Ошибки ---------------------------------------------------------------------
   function showError(msg) {
     var b = $("error-banner");
@@ -1191,6 +1182,31 @@
     "Отклонена": "❌", "Отозвана": "🚫"
   };
 
+  /** Расстроенный вид для копии марки в пустом списке: заявок нет — и герой
+   *  не бодрится. Правим SVG-атрибутами, а не CSS-трансформами: transform-box
+   *  с координатами viewBox поддержан не во всех WebView, а атрибут transform
+   *  из SVG 1.1 — везде. */
+  function makeSad(art) {
+    // Уголки рта вниз: та же дуга, изогнутая в другую сторону.
+    var mouth = art.querySelector('path[d="M234 396q22 24 44 0"]');
+    if (mouth) mouth.setAttribute("d", "M234 402q22 -22 44 0");
+    // Уши обвисли в стороны.
+    var ears = [["mk-ear-l", "rotate(-17 132 152)"], ["mk-ear-r", "rotate(17 380 152)"]];
+    ears.forEach(function (pair) {
+      var ear = art.querySelector("#" + pair[0]);
+      if (ear) ear.setAttribute("transform", pair[1]);
+    });
+    // Взгляд вниз.
+    [].forEach.call(art.querySelectorAll(".pup"), function (pup) {
+      pup.setAttribute("transform", "translate(0 9)");
+    });
+    // Подмигивание и большой палец — про хорошее настроение, здесь лишние.
+    ["mk-wink", "mk-thumb"].forEach(function (id) {
+      var el = art.querySelector("#" + id);
+      if (el) el.setAttribute("display", "none");
+    });
+  }
+
   function showMyMsg(text, isErr) {
     var m = $("my-msg");
     m.textContent = (isErr ? "⚠️ " : "✓ ") + text;
@@ -1315,6 +1331,14 @@
       var art = $("brand-mark").cloneNode(true);
       art.removeAttribute("id");
       art.setAttribute("class", "empty-art");
+      makeSad(art);
+      // Внутренние id снимаем ПОСЛЕ правки: копия и шапка иначе делят одни id
+      // на документ, и getElementById по частям марки начинает отдавать чужой
+      // элемент. Ссылки на градиенты не трогаем — они и должны вести в defs
+      // шапки: там та же заливка.
+      [].forEach.call(art.querySelectorAll("[id]"), function (el) {
+        el.removeAttribute("id");
+      });
       box.appendChild(art);
       var empty = document.createElement("div");
       empty.className = "empty-note";
@@ -1512,12 +1536,6 @@
   // Права админа: определяются в tryAdmin(), решают, показывать ли «Удалить»
   // для чужих и необработанных заявок. Авторитет всё равно за сервером.
   var isBotAdmin = false;
-  function amountText(item) {
-    var parsed = parseAmount(item.amount);
-    return (parsed === null ? item.amount : formatAmount(parsed)) +
-      " " + (item.currency || "");
-  }
-
   function detailRows(item) {
     var dl = document.createElement("dl");
     dl.className = "modal-rows";

@@ -134,6 +134,22 @@ function plural(n, one, few, many) {
   return many;
 }
 
+
+/** «rgb(16, 185, 129)» → «#10b981»: setParams родной кнопки принимает hex. */
+function cssHex(value) {
+  var m = /^rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/.exec(value || "");
+  if (!m) return null;
+  return "#" + [m[1], m[2], m[3]].map(function (n) {
+    return ("0" + (+n).toString(16)).slice(-2);
+  }).join("");
+}
+
+/** Сумма заявки для показа: «125 000,50 RUB». Непарсящееся отдаём как есть. */
+function amountText(item) {
+  var parsed = parseAmount(item.amount);
+  return (parsed === null ? item.amount : formatAmount(parsed)) +
+    " " + (item.currency || "");
+}
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     parseAmount: parseAmount,
@@ -149,6 +165,8 @@ if (typeof module !== "undefined" && module.exports) {
     nextBusinessISO: nextBusinessISO,
     fmtRu: fmtRu,
     brokenReason: brokenReason,
-    plural: plural
+    plural: plural,
+    cssHex: cssHex,
+    amountText: amountText
   };
 }
