@@ -174,6 +174,9 @@ test("незаполненная форма объясняет, чего не х
     return { hidden: box.classList.contains("hidden"), text: box.textContent };
   });
   assert.equal(hint.hidden, false, "подсказка должна быть видна на пустой форме");
+  // «Осталось заполнить 5:» — пять чего? Число без существительного не читается.
+  assert.match(hint.text, /Осталось заполнить \d+ (поле|поля|полей):/,
+    `у числа нет существительного: ${hint.text}`);
   for (const label of ["Сумма", "Контрагент", "Статья расходов", "Срок исполнения"]) {
     assert.ok(hint.text.includes(label), `в подсказке нет «${label}»: ${hint.text}`);
   }
@@ -206,6 +209,30 @@ test("незаполненная форма объясняет, чего не х
   assert.ok(modal.items.includes("Контрагент"), `в окне нет контрагента: ${modal.items}`);
   assert.ok(modal.items.length >= 4, `в окне мало пунктов: ${modal.items}`);
 
+  await page.close();
+});
+
+test("число незаполненного склоняется по-русски", async () => {
+  const page = await openApp(browser, { skin: "neon", routes: HINTS });
+  const read = () => page.evaluate(() =>
+    document.getElementById("gaps-hint").textContent);
+  const fill = (id, value) => page.evaluate(([i, v]) => {
+    const el = document.getElementById(i);
+    el.value = v;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  }, [id, value]);
+
+  assert.match(await read(), /5 полей:/, "на пяти ждём «полей»");
+  await fill("amount", "1000");
+  await page.waitForTimeout(150);
+  assert.match(await read(), /4 поля:/, "на четырёх ждём «поля»");
+  await fill("counterparty", "ООО «Ромашка»");
+  await fill("article-custom", "Аренда");
+  await page.waitForTimeout(150);
+  assert.match(await read(), /2 поля:/, "на двух ждём «поля»");
+  await fill("work-deadline", "текущий месяц");
+  await page.waitForTimeout(150);
+  assert.match(await read(), /одно поле:/, "на одном ждём «одно поле»");
   await page.close();
 });
 

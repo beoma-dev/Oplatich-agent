@@ -766,6 +766,14 @@
     return gaps;
   }
 
+  /** Русское склонение после числа: 2 поля, 5 полей, 21 поле. */
+  function plural(n, one, few, many) {
+    var mod10 = n % 10, mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return one;
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+    return many;
+  }
+
   /** Живая подсказка над кнопкой: видно, чего не хватает, ещё до нажатия. */
   function updateGapsHint(gaps) {
     var box = $("gaps-hint");
@@ -779,7 +787,7 @@
     var head = document.createElement("b");
     head.textContent = gaps.length === 1
       ? "Осталось заполнить одно поле:"
-      : "Осталось заполнить " + gaps.length + ":";
+      : "Осталось заполнить " + gaps.length + " " + plural(gaps.length, "поле", "поля", "полей") + ":";
     box.appendChild(head);
     var list = document.createElement("div");
     list.className = "gap-item";
