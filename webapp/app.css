@@ -134,7 +134,10 @@
   :root[data-skin="neon"] .chip-x { background: rgba(255, 255, 255, .06); }
   :root[data-skin="neon"] .chip { color: var(--text); }
   :root[data-skin="neon"] .drop { border-color: rgba(255, 255, 255, .18); }
-  :root[data-skin="neon"] .gear { background: rgba(255, 255, 255, .07); }
+  /* В неоне подложку несёт панель целиком: у каждой кнопки своя давала
+     «кнопки внутри кнопки». */
+  :root[data-skin="neon"] .gears { background: rgba(255, 255, 255, .06); }
+  :root[data-skin="neon"] .gear { background: none; }
   /* Поля ввода: на почти чёрном фоне им нужна своя поверхность и граница,
      иначе они сливаются со страницей и перестают читаться как поля. */
   :root[data-skin="neon"] input[type=text],
@@ -247,17 +250,25 @@
   h1 { font-size: 21px; letter-spacing: -.02em; }
   /* Имя бота — крупнее прочих заголовков: это единственная «вывеска» в
      приложении. Всё в em, поэтому марка ужимается вместе с надписью. */
-  .brand { display: flex; align-items: center; gap: .28em; font-size: 30px; line-height: 1.15; }
-  /* Иконок бывает от двух до пяти. Когда их много, заголовок переносился на
-     вторую строку — вместо этого ужимаем и заголовок, и сами кнопки, чтобы
-     шапка оставалась в одну строку. Класс ставит layoutHeaderIcons(). */
-  header.icons-4 .brand { font-size: 27px; }
-  header.icons-5 .brand { font-size: 24px; }
-  header.icons-4 .gear, header.icons-5 .gear { width: 34px; height: 34px; font-size: 16px; }
+  /* Подложки под персонажем нет — фон шапки общий со страницей. Поля
+     сверху оставлены по делу: без них на подъёме герой упирался ушами
+     в край экрана. */
+  .brand {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    margin: 0;
+    min-height: 96px;
+    padding: 4px 8px 0;
+  }
+
+  /* Кнопки собраны в панель, поэтому кегль заголовка больше ни на что не
+     влияет: при пяти иконках ужимается сама марка, а не надпись. */
+  header.icons-5 .mark { height: 82px; }
   @media (max-width: 400px) {
-    header.icons-4 .brand { font-size: 23px; }
-    header.icons-5 .brand { font-size: 20px; }
-    header.icons-4 .gear, header.icons-5 .gear { width: 31px; height: 31px; font-size: 14px; }
+    .mark { height: 82px; }
+    header.icons-5 .mark { height: 74px; }
+    .brand { min-height: 86px; }
   }
   header p { color: var(--hint); font-size: 14px; margin-top: 2px; }
 
@@ -265,86 +276,320 @@
      иначе браузер не отдаёт из него заливки. */
   .svg-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
 
-  /* Надпись «Оплатыч»: округлый гротеск, если система его даёт (ui-rounded —
-     это SF Pro Rounded на iOS), и градиент из акцента темы, чтобы имя
-     одинаково жило и в телеграмной, и в неоновой шкуре. */
-  .brand span {
-    font-family: ui-rounded, "SF Pro Rounded", "Segoe UI Rounded", system-ui,
-                 -apple-system, "Helvetica Neue", sans-serif;
-    font-weight: 800;
-    letter-spacing: -.005em;
-    background: linear-gradient(102deg,
-      color-mix(in srgb, var(--accent) 72%, #ffffff) 0%,
-      var(--accent) 46%,
-      color-mix(in srgb, var(--accent) 72%, #05261B) 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    filter: drop-shadow(0 1px 1px color-mix(in srgb, var(--accent) 22%, transparent));
-  }
-  /* Прозрачный текст — только там, где обрезка по глифам реально работает,
-     иначе имя стало бы невидимым. */
-  @supports (-webkit-background-clip: text) or (background-clip: text) {
-    .brand span { color: transparent; }
+  /* Имя больше не показывается: его место занял персонаж. В разметке
+     оставлено — без него у экрана нет заголовка для скринридера. */
+  .brand-name {
+    position: absolute; width: 1px; height: 1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
   }
 
-  /* Марка Оплатыча вместо эмодзи в заголовке. Высота задана в em, поэтому
-     она ужимается вместе с h1, когда layoutHeaderIcons() уменьшает шрифт,
-     и шапка по-прежнему помещается в одну строку. */
+  /* Полноростовая марка: высота в пикселях, потому что персонаж стоит на
+     месте и его размер больше не зависит от кегля заголовка. */
   .mark {
-    height: 1.85em;
+    height: 92px;
     width: auto;
     flex: none;
-    filter: drop-shadow(0 3px 7px color-mix(in srgb, var(--accent) 34%, transparent));
-    animation: mark-in .6s cubic-bezier(.34,1.56,.64,1) backwards,
-               mark-float 5s ease-in-out .7s infinite;
-  }
-  @keyframes mark-in {
-    from { opacity: 0; transform: scale(.35) rotate(-16deg); }
-  }
-  @keyframes mark-float {
-    0%, 100% { transform: translateY(0); }
-    50%      { transform: translateY(-2.5px); }
+    overflow: visible;
   }
 
-  /* Пустой список — не голая строка текста, а сам Оплатыч с подписью. */
-  .empty-art {
-    display: block;
-    width: 96px;
-    margin: 18px auto 8px;
-    opacity: .9;
-    animation: mark-in .5s cubic-bezier(.34,1.56,.64,1) backwards;
+  /* ---------- Оживление марки ----------
+     Полный круг: шесть замахов, лайк, пауза. Длительность одна на все
+     дорожки — иначе фазы разъезжаются и лист уходит мимо взмаха. */
+  /* --fly — множитель разлёта листов. Дуги заданы в единицах рисунка и
+     растут вместе с героем, поэтому в пикселях они зависят и от размера
+     марки, и от свободной ширины. Точное значение выставляет
+     layoutHeaderIcons(): брейкпоинтами это не угадать — ширина зависит ещё
+     и от числа видимых кнопок. */
+  header { --mark-cycle: 5.4s; --fly: 1; }
+
+  /* ---------- Рига ---------- */
+  #mk-thumb, #mk-wink { opacity: 0; }
+  #mk-body, #mk-leg-l, #mk-leg-r, #mk-ear-l, #mk-ear-r, .pup,
+  #mk-eye-r, #mk-thumb, #mk-paw-free, #mk-shadow { transform-box: fill-box; }
+  #mk-body { transform-origin: 50% 92%; }
+  #mk-leg-l, #mk-leg-r { transform-origin: 50% 2%; }
+  #mk-ear-l, #mk-ear-r { transform-origin: 50% 90%; }
+  #mk-eye-r { transform-origin: 50% 50%; }
+  #mk-thumb { transform-origin: 50% 90%; }
+  /* Рука на лайке повёрнута — кулак доворачиваем обратно, чтобы палец
+     смотрел строго вверх. */
+  #mk-thumb > * { transform-box: view-box; transform-origin: 68px 396px; }
+  #mk-paw-free { transform-origin: 62% 34%; }
+  #mk-shadow { transform-origin: 50% 50%; }
+  .paper { transform-box: fill-box; transform-origin: 50% 50%; opacity: 0; }
+  /* Оси — в плечах. transform-box: view-box отсчитывает от начала viewBox
+     (64,74), поэтому из координат рисунка вычтено это смещение:
+     плечо (176,436) → 112px 362px, плечо (330,438) → 266px 364px. */
+  #mk-arm-free { transform-box: view-box; transform-origin: 176px 436px; }
+  #mk-paw-doc  { transform-box: view-box; transform-origin: 330px 438px; }
+
+  @keyframes paper-1 {
+    0%, 8.0%   { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+    10.5%   { opacity: 1; transform: translate(calc(var(--fly) * -139px), calc(var(--fly) * -15px)) rotate(-9deg) scale(1); }
+    23.6% { opacity: .95; transform: translate(calc(var(--fly) * -526px), calc(var(--fly) * -46px)) rotate(-28deg) scale(.98); }
+    34.0%   { opacity: 0; transform: translate(calc(var(--fly) * -773px), calc(var(--fly) * -27px)) rotate(-40deg) scale(.9); }
+    100%        { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
   }
-  .empty-art + .empty-note { text-align: center; padding-bottom: 14px; }
+  @keyframes paper-2 {
+    0%, 9.5%   { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+    12.0%   { opacity: 1; transform: translate(calc(var(--fly) * -118px), calc(var(--fly) * -61px)) rotate(-19deg) scale(1); }
+    25.1% { opacity: .95; transform: translate(calc(var(--fly) * -447px), calc(var(--fly) * -190px)) rotate(-59deg) scale(.98); }
+    35.5%   { opacity: 0; transform: translate(calc(var(--fly) * -658px), calc(var(--fly) * -114px)) rotate(-85deg) scale(.9); }
+    100%        { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+  }
+  @keyframes paper-3 {
+    0%, 20.0%   { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+    22.5%   { opacity: 1; transform: translate(calc(var(--fly) * -75px), calc(var(--fly) * -95px)) rotate(-29deg) scale(1); }
+    35.6% { opacity: .95; transform: translate(calc(var(--fly) * -283px), calc(var(--fly) * -300px)) rotate(-91deg) scale(.98); }
+    46.0%   { opacity: 0; transform: translate(calc(var(--fly) * -417px), calc(var(--fly) * -180px)) rotate(-130deg) scale(.9); }
+    100%        { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+  }
+  @keyframes paper-4 {
+    0%, 21.5%   { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+    24.0%   { opacity: 1; transform: translate(calc(var(--fly) * -130px), calc(var(--fly) * -37px)) rotate(-13deg) scale(1); }
+    37.1% { opacity: .95; transform: translate(calc(var(--fly) * -494px), calc(var(--fly) * -115px)) rotate(-42deg) scale(.98); }
+    47.5%   { opacity: 0; transform: translate(calc(var(--fly) * -726px), calc(var(--fly) * -70px)) rotate(-60deg) scale(.9); }
+    100%        { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+  }
+  @keyframes paper-5 {
+    0%, 32.0%   { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+    34.5%   { opacity: 1; transform: translate(calc(var(--fly) * -97px), calc(var(--fly) * -80px)) rotate(-23deg) scale(1); }
+    47.6% { opacity: .95; transform: translate(calc(var(--fly) * -366px), calc(var(--fly) * -248px)) rotate(-74deg) scale(.98); }
+    58.0%   { opacity: 0; transform: translate(calc(var(--fly) * -538px), calc(var(--fly) * -149px)) rotate(-105deg) scale(.9); }
+    100%        { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+  }
+  @keyframes paper-6 {
+    0%, 33.5%   { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+    36.0%   { opacity: 1; transform: translate(calc(var(--fly) * -46px), calc(var(--fly) * -104px)) rotate(-33deg) scale(1); }
+    49.1% { opacity: .95; transform: translate(calc(var(--fly) * -174px), calc(var(--fly) * -323px)) rotate(-105deg) scale(.98); }
+    59.5%   { opacity: 0; transform: translate(calc(var(--fly) * -255px), calc(var(--fly) * -194px)) rotate(-150deg) scale(.9); }
+    100%        { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+  }
+  @keyframes paper-7 {
+    0%, 14.0%   { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+    16.5%   { opacity: 1; transform: translate(calc(var(--fly) * 142px), calc(var(--fly) * -20px)) rotate(10deg) scale(1); }
+    29.6% { opacity: .95; transform: translate(calc(var(--fly) * 535px), calc(var(--fly) * -64px)) rotate(31deg) scale(.98); }
+    40.0%   { opacity: 0; transform: translate(calc(var(--fly) * 786px), calc(var(--fly) * -38px)) rotate(45deg) scale(.9); }
+    100%        { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+  }
+  @keyframes paper-8 {
+    0%, 15.5%   { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+    18.0%   { opacity: 1; transform: translate(calc(var(--fly) * 121px), calc(var(--fly) * -64px)) rotate(20deg) scale(1); }
+    31.1% { opacity: .95; transform: translate(calc(var(--fly) * 457px), calc(var(--fly) * -202px)) rotate(63deg) scale(.98); }
+    41.5%   { opacity: 0; transform: translate(calc(var(--fly) * 672px), calc(var(--fly) * -121px)) rotate(90deg) scale(.9); }
+    100%        { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+  }
+  @keyframes paper-9 {
+    0%, 26.0%   { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+    28.5%   { opacity: 1; transform: translate(calc(var(--fly) * 78px), calc(var(--fly) * -100px)) rotate(30deg) scale(1); }
+    41.6% { opacity: .95; transform: translate(calc(var(--fly) * 292px), calc(var(--fly) * -312px)) rotate(94deg) scale(.98); }
+    52.0%   { opacity: 0; transform: translate(calc(var(--fly) * 430px), calc(var(--fly) * -187px)) rotate(135deg) scale(.9); }
+    100%        { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+  }
+  @keyframes paper-10 {
+    0%, 27.5%   { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+    30.0%   { opacity: 1; transform: translate(calc(var(--fly) * 133px), calc(var(--fly) * -43px)) rotate(14deg) scale(1); }
+    43.1% { opacity: .95; transform: translate(calc(var(--fly) * 502px), calc(var(--fly) * -132px)) rotate(46deg) scale(.98); }
+    53.5%   { opacity: 0; transform: translate(calc(var(--fly) * 739px), calc(var(--fly) * -80px)) rotate(65deg) scale(.9); }
+    100%        { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+  }
+  @keyframes paper-11 {
+    0%, 38.0%   { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+    40.5%   { opacity: 1; transform: translate(calc(var(--fly) * 99px), calc(var(--fly) * -83px)) rotate(24deg) scale(1); }
+    53.6% { opacity: .95; transform: translate(calc(var(--fly) * 375px), calc(var(--fly) * -260px)) rotate(77deg) scale(.98); }
+    64.0%   { opacity: 0; transform: translate(calc(var(--fly) * 551px), calc(var(--fly) * -156px)) rotate(110deg) scale(.9); }
+    100%        { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+  }
+  @keyframes paper-12 {
+    0%, 39.5%   { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+    42.0%   { opacity: 1; transform: translate(calc(var(--fly) * 48px), calc(var(--fly) * -107px)) rotate(34deg) scale(1); }
+    55.1% { opacity: .95; transform: translate(calc(var(--fly) * 182px), calc(var(--fly) * -334px)) rotate(108deg) scale(.98); }
+    65.5%   { opacity: 0; transform: translate(calc(var(--fly) * 269px), calc(var(--fly) * -201px)) rotate(155deg) scale(.9); }
+    100%        { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.45); }
+  }
+  @keyframes mk-arm-throw {
+    0%, 4%  { transform: rotate(0deg); }
+    5%   { transform: rotate(-30deg); }
+    8%     { transform: rotate(96deg); }
+    11%   { transform: rotate(44deg); }
+    17%   { transform: rotate(-30deg); }
+    20%     { transform: rotate(96deg); }
+    23%   { transform: rotate(44deg); }
+    29%   { transform: rotate(-30deg); }
+    32%     { transform: rotate(96deg); }
+    35%   { transform: rotate(44deg); }
+    44%, 62% { transform: rotate(0deg); }
+    68%     { transform: rotate(26deg) translate(0,-16px); }
+    88%     { transform: rotate(26deg) translate(0,-16px); }
+    93%     { transform: rotate(0deg) translate(0,0); }
+    100%    { transform: rotate(0deg); }
+  }
+  @keyframes mk-arm-doc {
+    0%, 4%  { transform: rotate(0deg); }
+    11%   { transform: rotate(28deg); }
+    14%     { transform: rotate(-94deg); }
+    17%   { transform: rotate(-42deg); }
+    23%   { transform: rotate(28deg); }
+    26%     { transform: rotate(-94deg); }
+    29%   { transform: rotate(-42deg); }
+    35%   { transform: rotate(28deg); }
+    38%     { transform: rotate(-94deg); }
+    41%   { transform: rotate(-42deg); }
+    44%, 100% { transform: rotate(0deg); }
+  }
+  @keyframes mk-recoil {
+    0%, 4%  { transform: translateY(0) scale(1,1) rotate(0deg); }
+    6%   { transform: translateY(1.4%) scale(1.025,.975) rotate(-0.7deg); }
+    9%   { transform: translateY(-1.3%) scale(.985,1.015) rotate(1.5deg); }
+    12%   { transform: translateY(1.4%) scale(1.025,.975) rotate(0.7deg); }
+    15%   { transform: translateY(-1.3%) scale(.985,1.015) rotate(-1.5deg); }
+    18%   { transform: translateY(1.4%) scale(1.025,.975) rotate(-0.7deg); }
+    21%   { transform: translateY(-1.3%) scale(.985,1.015) rotate(1.5deg); }
+    24%   { transform: translateY(1.4%) scale(1.025,.975) rotate(0.7deg); }
+    27%   { transform: translateY(-1.3%) scale(.985,1.015) rotate(-1.5deg); }
+    30%   { transform: translateY(1.4%) scale(1.025,.975) rotate(-0.7deg); }
+    33%   { transform: translateY(-1.3%) scale(.985,1.015) rotate(1.5deg); }
+    36%   { transform: translateY(1.4%) scale(1.025,.975) rotate(0.7deg); }
+    39%   { transform: translateY(-1.3%) scale(.985,1.015) rotate(-1.5deg); }
+    44%     { transform: translateY(0) scale(1,1) rotate(0deg); }
+    66%     { transform: translateY(-2.5%) scale(.98,1.02); }
+    88%     { transform: translateY(-2.5%) scale(.98,1.02); }
+    94%,100%{ transform: translateY(0) scale(1,1); }
+  }
+  /* Лист уходит из лапы ровно на выхлёсте и через паузу берётся новый. */
+  @keyframes held-l {
+    0%, 7.9%   { opacity: 1; }
+    8%, 16.9%  { opacity: 0; }
+    17%, 19.9% { opacity: 1; }
+    20%, 28.9% { opacity: 0; }
+    29%, 31.9% { opacity: 1; }
+    32%, 93.9% { opacity: 0; }
+    94%, 100%  { opacity: 1; }
+  }
+  @keyframes held-r {
+    0%, 13.9%  { opacity: 1; }
+    14%, 22.9% { opacity: 0; }
+    23%, 25.9% { opacity: 1; }
+    26%, 34.9% { opacity: 0; }
+    35%, 37.9% { opacity: 1; }
+    38%, 45.9% { opacity: 0; }
+    46%, 100%  { opacity: 1; }
+  }
+  @keyframes mk-thumb-upright { 0%,100% { transform: rotate(-26deg); } }
+  @keyframes mk-thumb {
+    0%, 64%  { opacity: 0; transform: scale(.35) translateY(20%); }
+    69%      { opacity: 1; transform: scale(1.18) translateY(-4%); }
+    72%      { opacity: 1; transform: scale(.97) translateY(0); }
+    75%, 88% { opacity: 1; transform: scale(1) translateY(0); }
+    92%      { opacity: 0; transform: scale(.5) translateY(16%); }
+    100%     { opacity: 0; transform: scale(.35) translateY(20%); }
+  }
+  @keyframes mk-wink {
+    0%, 68%  { opacity: 0; }
+    70%, 87% { opacity: 1; }
+    90%,100% { opacity: 0; }
+  }
+  @keyframes mk-eye-shut {
+    0%, 68%  { transform: scaleY(1); }
+    70%, 87% { transform: scaleY(.08); }
+    90%,100% { transform: scaleY(1); }
+  }
+  @keyframes mk-look {
+    0%, 66%  { transform: translate(0,0); }
+    72%, 88% { transform: translate(-9%,-6%); }
+    94%,100% { transform: translate(0,0); }
+  }
+  @keyframes mk-ear-shake {
+    0%, 4%  { transform: rotate(0deg); }
+    9%      { transform: rotate(-7deg); }
+    15%     { transform: rotate(6deg); }
+    21%     { transform: rotate(-6deg); }
+    27%     { transform: rotate(5deg); }
+    33%     { transform: rotate(-6deg); }
+    39%     { transform: rotate(5deg); }
+    45%,100%{ transform: rotate(0deg); }
+  }
+
+  header.play #mk-body   { animation: mk-recoil var(--mark-cycle) ease-in-out infinite; }
+  header.play #mk-arm-free { animation: mk-arm-throw var(--mark-cycle) ease-in-out infinite; }
+  header.play #mk-paw-doc  { animation: mk-arm-doc var(--mark-cycle) ease-in-out infinite; }
+  header.play #mk-ear-l  { animation: mk-ear-shake var(--mark-cycle) ease-in-out infinite; }
+  header.play #mk-ear-r  { animation: mk-ear-shake var(--mark-cycle) ease-in-out infinite; animation-delay: .06s; }
+  header.play #mk-held-l { animation: held-l var(--mark-cycle) steps(1,end) infinite; }
+  header.play #mk-held-r { animation: held-r var(--mark-cycle) steps(1,end) infinite; }
+  header.play #mk-thumb > * { animation: mk-thumb-upright var(--mark-cycle) linear infinite; }
+  header.play #mk-thumb  { animation: mk-thumb var(--mark-cycle) cubic-bezier(.34,1.56,.64,1) infinite; }
+  header.play #mk-wink   { animation: mk-wink var(--mark-cycle) steps(1,end) infinite; }
+  header.play #mk-eye-r  { animation: mk-eye-shut var(--mark-cycle) ease-in-out infinite; }
+  header.play .pup       { animation: mk-look var(--mark-cycle) ease-in-out infinite; }
+  header.play #paper-1 { animation: paper-1 var(--mark-cycle) cubic-bezier(.2,.6,.5,1) infinite; }
+  header.play #paper-2 { animation: paper-2 var(--mark-cycle) cubic-bezier(.2,.6,.5,1) infinite; }
+  header.play #paper-3 { animation: paper-3 var(--mark-cycle) cubic-bezier(.2,.6,.5,1) infinite; }
+  header.play #paper-4 { animation: paper-4 var(--mark-cycle) cubic-bezier(.2,.6,.5,1) infinite; }
+  header.play #paper-5 { animation: paper-5 var(--mark-cycle) cubic-bezier(.2,.6,.5,1) infinite; }
+  header.play #paper-6 { animation: paper-6 var(--mark-cycle) cubic-bezier(.2,.6,.5,1) infinite; }
+  header.play #paper-7 { animation: paper-7 var(--mark-cycle) cubic-bezier(.2,.6,.5,1) infinite; }
+  header.play #paper-8 { animation: paper-8 var(--mark-cycle) cubic-bezier(.2,.6,.5,1) infinite; }
+  header.play #paper-9 { animation: paper-9 var(--mark-cycle) cubic-bezier(.2,.6,.5,1) infinite; }
+  header.play #paper-10 { animation: paper-10 var(--mark-cycle) cubic-bezier(.2,.6,.5,1) infinite; }
+  header.play #paper-11 { animation: paper-11 var(--mark-cycle) cubic-bezier(.2,.6,.5,1) infinite; }
+  header.play #paper-12 { animation: paper-12 var(--mark-cycle) cubic-bezier(.2,.6,.5,1) infinite; }
 
   @media (prefers-reduced-motion: reduce) {
-    .mark, .empty-art { animation: none; }
+    header.play #mk-body, header.play #mk-arm-free, header.play #mk-paw-doc,
+    header.play #mk-ear-l, header.play #mk-ear-r, header.play #mk-thumb,
+    header.play #mk-wink, header.play #mk-eye-r, header.play .pup,
+    header.play .paper, header.play #mk-held-l, header.play #mk-held-r {
+      animation: none !important;
+    }
   }
 
-  .gear {
+  /* ---------- Кнопки шапки ----------
+     Одна панель на все кнопки со скруглением карточек формы: раньше это были
+     отдельные кружки с тенью, которые layoutHeaderIcons() расставлял по
+     right — от скрытых оставались дыры. Теперь порядок держит flex. */
+  .gears {
     position: absolute;
     top: 0; right: 0;
-    width: 38px; height: 38px;
-    border: none;
-    border-radius: 50%;
-    background: var(--bg);
-    box-shadow: var(--shadow);
-    font-size: 18px;
-    cursor: pointer;
-    transition: transform .25s ease, background .18s ease, box-shadow .18s ease;
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 15px;
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 9%, transparent);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
   }
+  .gear {
+    position: relative;
+    width: 38px; height: 38px;
+    flex: none;
+    padding: 0;
+    border: none;
+    border-radius: 11px;
+    background: none;
+    color: var(--accent);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    transition: background .16s ease, color .16s ease, transform .12s ease;
+  }
+  .gear svg {
+    width: 20px; height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .gear.hidden { display: none; }
   /* Только масштаб, без поворота: подсказка — псевдоэлемент кнопки и
      крутилась вместе с ней, превращаясь в вертикальную полоску текста. */
-  .gear:active { transform: scale(.92); }
-  /* Инструкция всегда в правом углу, левее — «Мои заявки». Панель
-     финансиста и шестерёнка появляются не у всех, поэтому их место
-     расставляет layoutHeaderIcons() — иначе от скрытых оставались дыры. */
-  @media (max-width: 430px) {
-    .gear { width: 34px; height: 34px; font-size: 16px; }
+  .gear:active { transform: scale(.93); }
+  @media (max-width: 400px) {
+    .gear { width: 34px; height: 34px; border-radius: 10px; }
+    .gear svg { width: 18px; height: 18px; }
   }
-  #my-btn { right: 46px; }
-  #fin-btn { right: 92px; }
-  #admin-btn { right: 138px; }
-  #help-btn:active, #my-btn:active, #fin-btn:active { transform: scale(.9); }
 
   .help-text { font-size: 14.5px; line-height: 1.55; }
   .help-text b { font-weight: 600; }
@@ -1039,10 +1284,11 @@
      Появляются при наведении и с клавиатуры (:focus-visible). На тач-экранах
      hover не срабатывает — там смысл кнопок объясняет экран «Инструкция». */
   .tip { position: relative; }
-  /* Кнопки, у которых своя абсолютная раскладка (иконки шапки, глазок,
-     «убрать файл»), position НЕ переопределяем: правило .tip идёт по файлу
-     позже и при равной специфичности выбило бы их из раскладки шапки. */
-  .gear.tip, .eye-btn.tip, .file-remove.tip { position: absolute; }
+  /* Глазок и «убрать файл» стоят на своей абсолютной раскладке. Кнопки
+     шапки — наоборот: они лежат в панели на flex, и absolute сложил бы их
+     в стопку (правило .tip идёт по файлу позже и перебивало бы .gear). */
+  .eye-btn.tip, .file-remove.tip { position: absolute; }
+  .gear.tip { position: relative; }
   .tip::after {
     content: attr(data-tip);
     position: absolute;

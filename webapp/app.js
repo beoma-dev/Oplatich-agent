@@ -1529,30 +1529,57 @@
   var HEADER_ICONS = ["help-btn", "my-btn", "fin-btn", "admin-btn"];
 
   function layoutHeaderIcons() {
-    var header = $("help-btn").closest("header");
+    var panel = $("header-icons");
+    var header = panel && panel.closest("header");
     if (!header) return;
     var visible = HEADER_ICONS.filter(function (id) {
       var el = $(id);
       return el && !el.classList.contains("hidden");
     });
-    // Чем больше иконок, тем плотнее шаг: иначе заголовку не остаётся места.
-    var pitch = visible.length >= 4 ? (window.innerWidth < 400 ? 34 : 38) : 46;
-    visible.forEach(function (id, i) { $(id).style.right = (i * pitch) + "px"; });
-
+    // Кнопки лежат в одной панели, порядок держит flex — расставлять их по
+    // right больше не нужно. Классом отмечаем только плотность: при пяти
+    // иконках CSS ужимает марку, чтобы шапка осталась в одну строку.
     header.className = header.className.replace(/\s*icons-\d/g, "");
     if (visible.length >= 4) header.className += " icons-" + Math.min(visible.length, 5);
-    header.style.paddingRight = (visible.length * pitch + 6) + "px";
-
-    // Вертикаль считаем ПОСЛЕ класса плотности: он меняет кегль заголовка,
-    // а с ним и высоту строки. Строка с именем выше кнопок (в ней марка),
-    // поэтому прибитые к top: 0 кнопки висели над ней. В CSS эту высоту не
-    // узнать, а transform у кнопок занят состоянием :active.
+    // Отступ под панель меряем по факту: её ширина зависит от числа видимых
+    // кнопок и от их размера в текущей медиа-ветке.
+    var box = panel.getBoundingClientRect();
+    header.style.paddingRight = (Math.ceil(box.width) + 8) + "px";
+    // Вертикаль: панель встаёт по центру строки с маркой. Считаем ПОСЛЕ
+    // класса плотности — он меняет высоту марки, а с ней и высоту строки.
+    // Раньше так двигали каждую кнопку по отдельности; теперь объект один.
     var brand = header.querySelector(".brand");
-    var size = visible.length ? $(visible[0]).getBoundingClientRect().height : 0;
-    var top = brand && size
-      ? Math.max(0, (brand.getBoundingClientRect().height - size) / 2) : 0;
-    visible.forEach(function (id) { $(id).style.top = top.toFixed(2) + "px"; });
+    if (brand && box.height) {
+      var top = Math.max(0, (brand.getBoundingClientRect().height - box.height) / 2);
+      panel.style.top = top.toFixed(2) + "px";
+    }
+
+    // Разлёт листов. Самая дальняя дуга — 786 единиц рисунка при --fly: 1;
+    // в пикселях это зависит от размера марки, а свободная ширина — от того,
+    // сколько кнопок видно. Поэтому считаем, а не подбираем брейкпоинтами.
+    var mark = $("brand-mark");
+    if (mark) {
+      var m = mark.getBoundingClientRect();
+      var room = (brand.getBoundingClientRect().width - m.width) / 2 - 12;
+      var perUnit = m.height / 610;               // высота viewBox марки
+      var fly = room / (786 * perUnit);
+      header.style.setProperty("--fly", Math.max(0.3, Math.min(1, fly)).toFixed(3));
+    }
   }
+
+  /** Прогон марки: бросает счета и показывает лайк. Перезапуск по нажатию —
+   *  класс снимается и ставится заново, иначе анимация не стартует сначала. */
+  function playMark() {
+    var header = $("brand-mark") && $("brand-mark").closest("header");
+    if (!header) return;
+    header.classList.remove("play");
+    void header.offsetWidth;
+    header.classList.add("play");
+  }
+  if ($("brand-mark")) {
+    $("brand-mark").addEventListener("click", playMark);
+  }
+
   // Поворот экрана меняет доступную ширину — пересчитываем.
   window.addEventListener("resize", function () {
     clearTimeout(layoutHeaderIcons._t);
@@ -2527,6 +2554,7 @@
   $("submit-fallback").addEventListener("click", function () { submit(false); });
   restoreDraft();
   layoutHeaderIcons();
+  playMark();
   tryAdmin();
   tryFinance();
   refreshMainButton();

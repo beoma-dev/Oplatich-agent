@@ -147,12 +147,17 @@ def test_my_requests_payload_matches_ui():
         assert f"it.{field}" in HTML, f"поле {field} не используется в Mini App"
 
 
-def test_tooltip_class_keeps_absolute_icons():
+def test_tooltip_class_keeps_header_icons_in_place():
     """Регрессия: .tip идёт по файлу позже .gear и при равной специфичности
-    выбивал иконки шапки из абсолютной раскладки — они падали под заголовок."""
+    задаёт кнопкам position. Кнопки шапки лежат в панели на flex, поэтому им
+    нужен relative — с absolute они складывались в стопку и клик по одной
+    перехватывала соседняя. Глазку и «убрать файл» absolute по-прежнему нужен.
+    """
     m = re.search(r"\.gear\.tip[^{]*\{([^}]*)\}", HTML)
-    assert m, "нет правила, возвращающего position спозиционированным иконкам"
-    assert "position: absolute" in m.group(1)
+    assert m, "нет правила, задающего position кнопкам шапки"
+    assert "position: relative" in m.group(1)
+    m2 = re.search(r"\.eye-btn\.tip[^{]*\{([^}]*)\}", HTML)
+    assert m2 and "position: absolute" in m2.group(1)
 
 
 def test_header_icons_are_laid_out_by_visibility():
@@ -315,18 +320,21 @@ def test_neon_does_not_kill_selected_button_contrast():
 
 
 def test_header_survives_five_icons():
-    """С пятью иконками (админ + финансист) заголовок уезжал на вторую строку.
+    """С пятью иконками (админ + финансист) шапка остаётся в одну строку.
 
-    Раскладка сжимает шаг и типографику по числу ВИДИМЫХ кнопок — проверено
-    в браузере на 390 px: одна строка.
+    Кнопки собраны в одну панель, поэтому ширину под них меряем по факту, а
+    тесноту гасим не кеглем надписи (её больше нет), а высотой марки.
     """
-    assert "header.icons-5 .brand" in HTML
-    assert "header.icons-4 .gear, header.icons-5 .gear" in HTML
+    assert '<div class="gears" id="header-icons">' in MARKUP
+    assert "header.icons-5 .mark" in HTML, "при пяти иконках марка не ужимается"
     m = re.search(r"function layoutHeaderIcons\(\)\s*\{(.+?)\n  \}", HTML, re.S)
     assert m, "layoutHeaderIcons не найдена"
     body = m.group(1)
-    assert "visible.length >= 4" in body, "шаг иконок не зависит от их числа"
     assert "icons-" in body, "класс плотности не выставляется"
+    assert "paddingRight" in body, "отступ под панель не считается"
+    assert "panel.getBoundingClientRect()" in body and "box.width" in body, (
+        "ширина панели зашита числом — она зависит от числа видимых кнопок"
+    )
 
 
 def test_autofill_offer_is_editable_and_not_glued_to_buttons():
@@ -378,17 +386,22 @@ def test_local_assets_exist():
 
 
 def test_brand_is_oplatych():
-    """Имя и марка бота стоят в шапке формы и в иконке вкладки."""
+    """Имя бота осталось заголовком экрана, даже когда его не видно.
+
+    Надпись убрана из вида — её место занял персонаж, — но текст остаётся в
+    разметке: без него у экрана нет заголовка для скринридера.
+    """
     assert "<title>Оплатыч" in HTML
     assert '<link rel="icon" href="logo.svg"' in HTML
-    assert '<h1 class="brand"><svg id="brand-mark" class="mark"' in MARKUP
-    assert "<span>Оплатыч</span></h1>" in MARKUP
+    assert '<span class="brand-name">Оплатыч</span>' in MARKUP
+    assert '<svg id="brand-mark" class="mark"' in MARKUP
+    # Скрыт визуально, но не от вспомогательных технологий: display:none
+    # выкинул бы заголовок и из дерева доступности.
+    assert ".brand-name {" in HTML
+    assert "clip: rect(0 0 0 0)" in HTML
+    assert "display: none" not in HTML[HTML.index(".brand-name {"):HTML.index(".brand-name {") + 260]
     # Пустой список «Моих заявок» показывает персонажа, а не голую строку.
     assert 'art.setAttribute("class", "empty-art");' in JS
-    # Размер имени задаёт .brand — если правило вернуть на h1, шапка
-    # перестанет ужиматься под пять иконок и уедет на вторую строку.
-    assert "header.icons-5 .brand { font-size:" in HTML
-    assert "header.icons-4 .brand { font-size:" in HTML
 
 
 def test_bot_speaks_of_itself_by_name():
@@ -612,19 +625,23 @@ def test_admins_can_be_managed_from_the_access_tab():
     assert 'bindAdd("adm-add", "adm-input", "adm");' in HTML
 
 
-def test_header_icons_are_centred_against_the_title():
-    """Кнопки шапки стоят по центру строки с именем, а не над ней.
+def test_header_icons_are_centred_by_layout_not_script():
+    """Кнопки держит панель, а не пересчёт координат из скрипта.
 
-    Вертикаль считается ПОСЛЕ класса плотности: он меняет кегль заголовка,
-    и посчитанное до него смещение промахивалось на несколько пикселей.
+    Раньше каждая кнопка ставилась по right/top вручную, и от скрытых
+    оставались дыры. Панель на flex делает это сама — если правила вернуть
+    в скрипт, порядок снова начнёт зависеть от того, кто когда скрылся.
     """
+    assert ".gears {" in HTML and "display: flex" in HTML
     body = HTML[HTML.index("function layoutHeaderIcons("):]
     body = body[:body.index("\n  }")]
-    assert "style.top" in body
-    assert body.index("icons-") < body.index("style.top"), (
-        "смещение считается до того, как заголовок ужат"
+    assert "style.right" not in body, "кнопки снова расставляются по одной"
+    # Вертикаль по-прежнему меряется скриптом, но у ПАНЕЛИ, а не у каждой
+    # кнопки: из CSS высоту строки с маркой не узнать.
+    assert "panel.style.top" in body, "панель не центрируется по строке с маркой"
+    assert body.index("icons-") < body.index("panel.style.top"), (
+        "вертикаль считается до того, как класс плотности ужал марку"
     )
-    assert "getBoundingClientRect().height" in body
 
 
 def test_hint_hover_is_identical_everywhere():

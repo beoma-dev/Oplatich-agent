@@ -54,59 +54,202 @@
 
 <div id="form-view">
   <header>
-    <h1 class="brand"><svg id="brand-mark" class="mark" viewBox="64 74 384 404" aria-hidden="true">
-    <g stroke="#8A5F27" stroke-width="7">
-      <circle cx="132" cy="128" r="46" fill="url(#mk-fur)"/>
-      <circle cx="380" cy="128" r="46" fill="url(#mk-fur)"/>
-    </g>
-    <circle cx="132" cy="128" r="24" fill="#E9A0A6"/>
-    <circle cx="380" cy="128" r="24" fill="#E9A0A6"/>
-    <circle cx="256" cy="268" r="172" fill="url(#mk-fur)" stroke="#8A5F27" stroke-width="8"/>
-    <ellipse cx="256" cy="330" rx="104" ry="92" fill="#FCEFD3" opacity=".8"/>
-    <g clip-path="url(#mk-head)">
-      <path d="M56 196Q256 146 456 196L456 228Q256 178 56 228Z" fill="url(#mk-band)"/>
-    </g>
-    <path d="M78 222Q256 178 434 222L434 234Q256 266 78 234Z" fill="url(#mk-brim)"
-          stroke="color-mix(in srgb, var(--accent) 62%, #000000)" stroke-width="6"
-          stroke-linejoin="round"/>
-    <path d="M136 226Q256 258 376 226" fill="none" stroke-width="5" stroke-linecap="round"
-          stroke="color-mix(in srgb, var(--accent) 40%, #ffffff)" opacity=".45"/>
-    <g>
-      <ellipse cx="216" cy="316" rx="50" ry="55" fill="#FFFFFF" stroke="#8A5F27" stroke-width="6"/>
-      <ellipse cx="296" cy="316" rx="50" ry="55" fill="#FFFFFF" stroke="#8A5F27" stroke-width="6"/>
-      <circle cx="228" cy="328" r="21" fill="#2A2018"/>
-      <circle cx="284" cy="328" r="21" fill="#2A2018"/>
-      <circle cx="235" cy="320" r="7.5" fill="#FFFFFF"/>
-      <circle cx="291" cy="320" r="7.5" fill="#FFFFFF"/>
-    </g>
-    <ellipse cx="256" cy="374" rx="18" ry="13" fill="#7A4A2C"/>
-    <path d="M234 396q22 24 44 0" fill="none" stroke="#7A4A2C" stroke-width="8"
-          stroke-linecap="round"/>
-    <circle cx="158" cy="366" r="32" fill="#E9A0A6" opacity=".5"/>
-    <circle cx="354" cy="366" r="32" fill="#E9A0A6" opacity=".5"/>
-    <ellipse cx="152" cy="418" rx="42" ry="30" fill="url(#mk-fur)" stroke="#8A5F27" stroke-width="7"/>
-    <g transform="rotate(-11 366 412)">
-      <rect x="322" y="358" width="88" height="112" rx="11" fill="url(#mk-paper)"
-            stroke="#8A5F27" stroke-width="6"/>
-      <g stroke="#BCC8C2" stroke-width="6" stroke-linecap="round">
-        <path d="M342 384h48"/><path d="M342 405h48"/><path d="M342 426h30"/>
-      </g>
-      <circle cx="378" cy="444" r="17" fill="none" stroke="var(--accent)" stroke-width="5.5"/>
-      <path d="M369.5 444l6 6.5 11.5-13" fill="none" stroke="var(--accent)" stroke-width="6"
-            stroke-linecap="round" stroke-linejoin="round"/>
-    </g>
-    <ellipse cx="336" cy="424" rx="40" ry="29" fill="url(#mk-fur)" stroke="#8A5F27" stroke-width="7"
-             transform="rotate(-14 336 424)"/>
-  </svg><span>Оплатыч</span></h1>
+    <h1 class="brand">
+      <!-- Имя убрано из вида, но остаётся заголовком экрана для скринридера. -->
+      <span class="brand-name">Оплатыч</span>
+<svg id="brand-mark" class="mark" viewBox="64 50 384 610" aria-hidden="true">
+
+              <ellipse id="mk-shadow" cx="256" cy="640" rx="138" ry="14" fill="#0B1A2A" opacity=".14"/>
+
+              <g id="mk-body">
+                <!-- Ноги за корпусом: короткие и толстые, как остальные лапы марки. -->
+                <g id="mk-leg-l">
+                  <rect x="166" y="516" width="78" height="96" rx="39" fill="url(#mk-fur)" stroke="#8A5F27" stroke-width="8"/>
+                  <ellipse cx="205" cy="608" rx="46" ry="21" fill="url(#mk-fur)" stroke="#8A5F27" stroke-width="8"/>
+                </g>
+                <g id="mk-leg-r">
+                  <rect x="268" y="516" width="78" height="96" rx="39" fill="url(#mk-fur)" stroke="#8A5F27" stroke-width="8"/>
+                  <ellipse cx="307" cy="608" rx="46" ry="21" fill="url(#mk-fur)" stroke="#8A5F27" stroke-width="8"/>
+                </g>
+
+                <!-- Корпус: между головой и ногами, уже головы — иначе силуэт «шар на шаре». -->
+                <ellipse cx="256" cy="462" rx="126" ry="92" fill="url(#mk-fur)" stroke="#8A5F27" stroke-width="8"/>
+                <ellipse cx="256" cy="486" rx="80" ry="60" fill="#FCEFD3" opacity=".85"/>
+
+                <g transform="translate(132,470)">
+                  <g class="paper" id="paper-1">
+                    <rect x="-55" y="-70" width="110" height="140" rx="14" fill="url(#mk-paper)" stroke="#8A5F27" stroke-width="9"/>
+                    <g stroke="#BCC8C2" stroke-width="10" stroke-linecap="round">
+                      <path d="M-30 -32h60"/><path d="M-30 0h60"/><path d="M-30 32h38"/>
+                    </g>
+                  </g>
+                </g>
+                <g transform="translate(132,470)">
+                  <g class="paper" id="paper-2">
+                    <rect x="-55" y="-70" width="110" height="140" rx="14" fill="url(#mk-paper)" stroke="#8A5F27" stroke-width="9"/>
+                    <g stroke="#BCC8C2" stroke-width="10" stroke-linecap="round">
+                      <path d="M-30 -32h60"/><path d="M-30 0h60"/><path d="M-30 32h38"/>
+                    </g>
+                  </g>
+                </g>
+                <g transform="translate(132,470)">
+                  <g class="paper" id="paper-3">
+                    <rect x="-55" y="-70" width="110" height="140" rx="14" fill="url(#mk-paper)" stroke="#8A5F27" stroke-width="9"/>
+                    <g stroke="#BCC8C2" stroke-width="10" stroke-linecap="round">
+                      <path d="M-30 -32h60"/><path d="M-30 0h60"/><path d="M-30 32h38"/>
+                    </g>
+                  </g>
+                </g>
+                <g transform="translate(132,470)">
+                  <g class="paper" id="paper-4">
+                    <rect x="-55" y="-70" width="110" height="140" rx="14" fill="url(#mk-paper)" stroke="#8A5F27" stroke-width="9"/>
+                    <g stroke="#BCC8C2" stroke-width="10" stroke-linecap="round">
+                      <path d="M-30 -32h60"/><path d="M-30 0h60"/><path d="M-30 32h38"/>
+                    </g>
+                  </g>
+                </g>
+                <g transform="translate(132,470)">
+                  <g class="paper" id="paper-5">
+                    <rect x="-55" y="-70" width="110" height="140" rx="14" fill="url(#mk-paper)" stroke="#8A5F27" stroke-width="9"/>
+                    <g stroke="#BCC8C2" stroke-width="10" stroke-linecap="round">
+                      <path d="M-30 -32h60"/><path d="M-30 0h60"/><path d="M-30 32h38"/>
+                    </g>
+                  </g>
+                </g>
+                <g transform="translate(132,470)">
+                  <g class="paper" id="paper-6">
+                    <rect x="-55" y="-70" width="110" height="140" rx="14" fill="url(#mk-paper)" stroke="#8A5F27" stroke-width="9"/>
+                    <g stroke="#BCC8C2" stroke-width="10" stroke-linecap="round">
+                      <path d="M-30 -32h60"/><path d="M-30 0h60"/><path d="M-30 32h38"/>
+                    </g>
+                  </g>
+                </g>
+                <g transform="translate(356,476)">
+                  <g class="paper" id="paper-7">
+                    <rect x="-55" y="-70" width="110" height="140" rx="14" fill="url(#mk-paper)" stroke="#8A5F27" stroke-width="9"/>
+                    <g stroke="#BCC8C2" stroke-width="10" stroke-linecap="round">
+                      <path d="M-30 -32h60"/><path d="M-30 0h60"/><path d="M-30 32h38"/>
+                    </g>
+                  </g>
+                </g>
+                <g transform="translate(356,476)">
+                  <g class="paper" id="paper-8">
+                    <rect x="-55" y="-70" width="110" height="140" rx="14" fill="url(#mk-paper)" stroke="#8A5F27" stroke-width="9"/>
+                    <g stroke="#BCC8C2" stroke-width="10" stroke-linecap="round">
+                      <path d="M-30 -32h60"/><path d="M-30 0h60"/><path d="M-30 32h38"/>
+                    </g>
+                  </g>
+                </g>
+                <g transform="translate(356,476)">
+                  <g class="paper" id="paper-9">
+                    <rect x="-55" y="-70" width="110" height="140" rx="14" fill="url(#mk-paper)" stroke="#8A5F27" stroke-width="9"/>
+                    <g stroke="#BCC8C2" stroke-width="10" stroke-linecap="round">
+                      <path d="M-30 -32h60"/><path d="M-30 0h60"/><path d="M-30 32h38"/>
+                    </g>
+                  </g>
+                </g>
+                <g transform="translate(356,476)">
+                  <g class="paper" id="paper-10">
+                    <rect x="-55" y="-70" width="110" height="140" rx="14" fill="url(#mk-paper)" stroke="#8A5F27" stroke-width="9"/>
+                    <g stroke="#BCC8C2" stroke-width="10" stroke-linecap="round">
+                      <path d="M-30 -32h60"/><path d="M-30 0h60"/><path d="M-30 32h38"/>
+                    </g>
+                  </g>
+                </g>
+                <g transform="translate(356,476)">
+                  <g class="paper" id="paper-11">
+                    <rect x="-55" y="-70" width="110" height="140" rx="14" fill="url(#mk-paper)" stroke="#8A5F27" stroke-width="9"/>
+                    <g stroke="#BCC8C2" stroke-width="10" stroke-linecap="round">
+                      <path d="M-30 -32h60"/><path d="M-30 0h60"/><path d="M-30 32h38"/>
+                    </g>
+                  </g>
+                </g>
+                <g transform="translate(356,476)">
+                  <g class="paper" id="paper-12">
+                    <rect x="-55" y="-70" width="110" height="140" rx="14" fill="url(#mk-paper)" stroke="#8A5F27" stroke-width="9"/>
+                    <g stroke="#BCC8C2" stroke-width="10" stroke-linecap="round">
+                      <path d="M-30 -32h60"/><path d="M-30 0h60"/><path d="M-30 32h38"/>
+                    </g>
+                  </g>
+                </g>
+                <g id="mk-ear-l"><circle cx="132" cy="128" r="46" fill="url(#mk-fur)" stroke="#8A5F27" stroke-width="7"/><circle cx="132" cy="128" r="24" fill="#E9A0A6"/></g>
+                <g id="mk-ear-r"><circle cx="380" cy="128" r="46" fill="url(#mk-fur)" stroke="#8A5F27" stroke-width="7"/><circle cx="380" cy="128" r="24" fill="#E9A0A6"/></g>
+
+                <circle cx="256" cy="268" r="172" fill="url(#mk-fur)" stroke="#8A5F27" stroke-width="8"/>
+                <ellipse cx="256" cy="330" rx="104" ry="92" fill="#FCEFD3" opacity=".8"/>
+                <g clip-path="url(#mk-head)">
+                  <path d="M56 196Q256 146 456 196L456 228Q256 178 56 228Z" fill="url(#mk-band)"/>
+                </g>
+                <path d="M78 222Q256 178 434 222L434 234Q256 266 78 234Z" fill="url(#mk-brim)"
+                      stroke="color-mix(in srgb, var(--accent) 62%, #000000)" stroke-width="6" stroke-linejoin="round"/>
+                <path d="M136 226Q256 258 376 226" fill="none" stroke-width="5" stroke-linecap="round"
+                      stroke="color-mix(in srgb, var(--accent) 40%, #ffffff)" opacity=".45"/>
+
+                <g id="mk-eye-l">
+                  <ellipse cx="216" cy="316" rx="50" ry="55" fill="#FFFFFF" stroke="#8A5F27" stroke-width="6"/>
+                  <g class="pup"><circle cx="228" cy="328" r="21" fill="#2A2018"/><circle cx="235" cy="320" r="7.5" fill="#FFFFFF"/></g>
+                </g>
+                <g id="mk-eye-r">
+                  <ellipse cx="296" cy="316" rx="50" ry="55" fill="#FFFFFF" stroke="#8A5F27" stroke-width="6"/>
+                  <g class="pup"><circle cx="284" cy="328" r="21" fill="#2A2018"/><circle cx="291" cy="320" r="7.5" fill="#FFFFFF"/></g>
+                </g>
+                <path id="mk-wink" d="M270 314q26 20 52 -4" fill="none" stroke="#8A5F27" stroke-width="10" stroke-linecap="round"/>
+
+                <ellipse cx="256" cy="374" rx="18" ry="13" fill="#7A4A2C"/>
+                <path d="M234 396q22 24 44 0" fill="none" stroke="#7A4A2C" stroke-width="8" stroke-linecap="round"/>
+                <circle cx="158" cy="366" r="32" fill="#E9A0A6" opacity=".5"/>
+                <circle cx="354" cy="366" r="32" fill="#E9A0A6" opacity=".5"/>
+
+                <!-- Руки крепятся к корпусу, а не к голове. -->
+                <g id="mk-arm-free">
+                  <path d="M176 436 L132 470" fill="none" stroke="#8A5F27" stroke-width="56" stroke-linecap="round"/>
+                  <path d="M176 436 L132 470" fill="none" stroke="#E8BE72" stroke-width="42" stroke-linecap="round"/>
+                  <g id="mk-held-l" transform="rotate(9 106 470)">
+                    <rect x="62" y="420" width="80" height="100" rx="10" fill="url(#mk-paper)" stroke="#8A5F27" stroke-width="6"/>
+                    <g stroke="#BCC8C2" stroke-width="6" stroke-linecap="round">
+                      <path d="M80 446h46"/><path d="M80 468h46"/><path d="M80 490h28"/>
+                    </g>
+                  </g>
+                  <g id="mk-paw-free">
+                  <ellipse cx="132" cy="470" rx="44" ry="32" fill="url(#mk-fur)" stroke="#8A5F27" stroke-width="8" transform="rotate(12 132 470)"/>
+                </g>
+                <g id="mk-thumb">
+                  <rect x="78" y="450" width="110" height="80" rx="37" fill="url(#mk-fur)" stroke="#8A5F27" stroke-width="8"/>
+                  <rect x="80" y="374" width="48" height="90" rx="24" fill="url(#mk-fur)" stroke="#8A5F27" stroke-width="8" transform="rotate(-16 104 452)"/>
+                  <g stroke="#B98A45" stroke-width="5.5" stroke-linecap="round" opacity=".65">
+                    <path d="M130 478h46"/><path d="M132 502h42"/>
+                  </g>
+                </g>
+                </g>
+
+                <g id="mk-paw-doc">
+                  <path d="M330 438 L356 476" fill="none" stroke="#8A5F27" stroke-width="56" stroke-linecap="round"/>
+                  <path d="M330 438 L356 476" fill="none" stroke="#E8BE72" stroke-width="42" stroke-linecap="round"/>
+                  <g id="mk-held-r" transform="rotate(-9 386 462)">
+                    <rect x="340" y="404" width="92" height="118" rx="12" fill="url(#mk-paper)" stroke="#8A5F27" stroke-width="6"/>
+                    <g stroke="#BCC8C2" stroke-width="6" stroke-linecap="round">
+                      <path d="M361 431h50"/><path d="M361 453h50"/><path d="M361 475h32"/>
+                    </g>
+                    <circle cx="398" cy="494" r="17" fill="none" stroke="var(--accent)" stroke-width="5.5"/>
+                    <path d="M389.5 494l6 6.5 11.5-13" fill="none" stroke="var(--accent)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+                  </g>
+                  <ellipse cx="356" cy="476" rx="42" ry="31" fill="url(#mk-fur)" stroke="#8A5F27" stroke-width="8" transform="rotate(-14 356 476)"/>
+                </g>
+              </g>
+            </svg>
+    </h1>
     <p>Заявка на оплату — финансист получит всё необходимое</p>
-    <button type="button" id="admin-btn" class="gear tip" aria-label="Настройки"
-            data-tip="Настройки: оформление и всё остальное">⚙️</button>
-    <button type="button" id="fin-btn" class="gear tip hidden" aria-label="Все заявки"
-            data-tip="Все заявки: фильтры и итоги">📊</button>
-    <button type="button" id="my-btn" class="gear tip" aria-label="Мои заявки"
-            data-tip="Мои заявки и их статусы">📋</button>
-    <button type="button" id="help-btn" class="gear tip" aria-label="Инструкция"
-            data-tip="Как подать заявку">❓</button>
+    <!-- Кнопки собраны в одну панель: радиус тот же, что у карточек формы. -->
+    <div class="gears" id="header-icons">
+      <button type="button" id="admin-btn" class="gear tip" aria-label="Настройки"
+              data-tip="Настройки: оформление и всё остальное"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2.4"/><circle cx="8" cy="17" r="2.4"/></svg></button>
+      <button type="button" id="fin-btn" class="gear tip hidden" aria-label="Все заявки"
+              data-tip="Все заявки: фильтры и итоги"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19.2V11M12 19.2V4.8M19 19.2v-6.4"/></svg></button>
+      <button type="button" id="my-btn" class="gear tip" aria-label="Мои заявки"
+              data-tip="Мои заявки и их статусы"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.8h7L18 8.3v11.9H6.5z"/><path d="M13.5 3.8v4.5H18"/><path d="M9.4 12.4h5.2M9.4 15.8h3.4"/></svg></button>
+      <button type="button" id="help-btn" class="gear tip" aria-label="Инструкция"
+              data-tip="Как подать заявку"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.6"/><path d="M9.6 9.6a2.5 2.5 0 1 1 3.2 2.6c-.6.2-.8.7-.8 1.3v.4"/><path d="M12 17.2v.1"/></svg></button>
+    </div>
   </header>
 
   <div id="draft-note" class="draft-note hidden">
