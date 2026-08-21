@@ -103,25 +103,6 @@ test("в пустом списке герой расстроен и не зан�
       lookingDown: [...el.querySelectorAll(".pup")]
         .every((p) => (p.getAttribute("transform") || "").indexOf("translate") === 0),
       innerIds: el.querySelectorAll("[id]").length,
-      // Две позы руки и закрывающийся глаз: без них жест не читается, а
-      // сдвиг самой руки отрывал лапу от корпуса.
-      armUp: getComputedStyle(el.querySelector(".sad-arm-up") || el).animationName === "mk-arm-up",
-      armDown: getComputedStyle(el.querySelector(".sad-arm-down") || el).animationName === "mk-arm-down",
-      lid: getComputedStyle(el.querySelector(".sad-lid") || el).animationName === "mk-lid",
-      tears: el.querySelectorAll(".sad-tear").length,
-      papersHidden: el.querySelectorAll('[display="none"]').length >= 4,
-      // Рука не должна ездить: сдвиг группы уносит плечо.
-      armMoves: [...document.styleSheets].some((sh) => {
-        try {
-          return [...sh.cssRules].some((r) => r.name === "mk-wipe");
-        } catch (e) { return false; }
-      }),
-      tearScales: [...document.styleSheets].some((sh) => {
-        try {
-          return [...sh.cssRules].some((r) => r.name === "mk-tear"
-            && [...r.cssRules].some((k) => /scale\(/.test(k.style.transform)));
-        } catch (e) { return false; }
-      }),
     };
   });
   assert.ok(art, "марки в пустом списке нет");
@@ -130,15 +111,6 @@ test("в пустом списке герой расстроен и не зан�
   assert.equal(art.anim, "mk-sad", "нет анимации расстроенного вида");
   assert.equal(art.mouth, true, "уголки рта не опущены");
   assert.equal(art.lookingDown, true, "взгляд не опущен");
-  assert.equal(art.armUp, true, "нет поднятой руки");
-  assert.equal(art.armDown, true, "опущенная рука не гаснет");
-  assert.equal(art.lid, true, "глаз под лапой не закрывается");
-  assert.equal(art.tears, 2, `слёз ${art.tears}, а не две`);
-  assert.equal(art.papersHidden, true, "бумаги в лапах остались — заявок-то нет");
-  // scale() у слезы недопустим: у SVG-элемента без transform-origin масштаб
-  // считается от точки (0,0) области просмотра, и капля уезжает в угол.
-  assert.equal(art.tearScales, false, "в анимации слезы появился scale()");
-  assert.equal(art.armMoves, false, "вернулся сдвиг руки — лапа оторвётся от корпуса");
   // Копия и шапка не должны делить одни id на документ.
   assert.equal(art.innerIds, 0, "в копии остались внутренние id");
   await page.close();

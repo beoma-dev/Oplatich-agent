@@ -557,94 +557,20 @@
     opacity: .85;
     filter: saturate(.75);
     transform-origin: 50% 92%;
-    animation: mk-sad 5.4s ease-in-out infinite;
+    animation: mk-sad 4.2s ease-in-out infinite;
   }
 
   /* Понурился и вздохнул: лёгкое покачивание, без резких движений — это фон,
-     а не аттракцион. Цикл общий с вытиранием слёз, чтобы движения не спорили. */
+     а не аттракцион. */
   @keyframes mk-sad {
-    0%, 100% { transform: rotate(-2deg) translateY(0) scaleY(1); }
-    22%      { transform: rotate(-2deg) translateY(3px) scaleY(.985); }
+    0%, 100% { transform: rotate(-2.5deg) translateY(0) scaleY(1); }
+    22%      { transform: rotate(-2.5deg) translateY(3px) scaleY(.982); }
     46%      { transform: rotate(-1deg) translateY(1px) scaleY(1); }
-    72%      { transform: rotate(2deg) translateY(3px) scaleY(.988); }
-  }
-
-  /* Рука идёт к глазу ДУГОЙ вокруг плеча, а не подменяется кадром: подмена
-     читалась как рывок. Поворот и масштаб взяты так, чтобы стартовая поза
-     поднятой руки в точности совпала с опущенной (163° и 0.458 — посчитано
-     по координатам плеч и лап), поэтому переключение прозрачности незаметно,
-     а дальше рука сама разгибается и поднимается.
-     Отсчёт — от ПЛЕЧА: transform-origin у SVG-элемента задаётся в единицах
-     viewBox, и без него точкой отсчёта был бы угол картинки. */
-  .empty-art .sad-arm-down { animation: mk-arm-down 5.4s ease-in-out infinite; }
-  .empty-art .sad-arm-up {
-    opacity: 0;
-    transform-origin: 336px 452px;
-    /* ease-in-out на всю дорожку: у крутых кривых каждый интервал начинается
-       рывком, и замер ловил до 44 px за 100 мс на потирании. */
-    animation: mk-arm-up 5.4s ease-in-out infinite;
-  }
-  @keyframes mk-arm-down {
-    0%, 18%   { opacity: 1; }
-    24%, 94%  { opacity: 0; }
-    97%, 100% { opacity: 1; }
-  }
-  @keyframes mk-arm-up {
-    0%, 18%   { opacity: 0; transform: rotate(163deg) scale(.458); }
-    24%       { opacity: 1; transform: rotate(163deg) scale(.458); }
-    /* Подъём — почти секунда на дугу, с замедлением у лица. */
-    30%       { opacity: 1; transform: rotate(120deg) scale(.62); }
-    36%       { opacity: 1; transform: rotate(62deg) scale(.82); }
-    44%       { opacity: 1; transform: rotate(0deg) scale(1); }
-    /* Потёр — два коротких движения, мельче прежних: те давали рывок. */
-    52%       { opacity: 1; transform: rotate(-3deg) scale(1.015); }
-    60%       { opacity: 1; transform: rotate(2deg) scale(.993); }
-    68%       { opacity: 1; transform: rotate(-2deg) scale(1.008); }
-    74%       { opacity: 1; transform: rotate(0deg) scale(1); }
-    /* Вниз тем же путём и не быстрее, чем поднимал. */
-    82%       { opacity: 1; transform: rotate(62deg) scale(.82); }
-    88%       { opacity: 1; transform: rotate(120deg) scale(.62); }
-    94%       { opacity: 1; transform: rotate(163deg) scale(.458); }
-    97%, 100% { opacity: 0; transform: rotate(163deg) scale(.458); }
-  }
-
-  /* Веко: закрытый глаз проявляется ровно на время, пока лапа у лица. Фазы
-     совпадают с mk-wipe, поэтому глаз не «открывается» из-под лапы. */
-  .empty-art .sad-lid {
-    opacity: 0;
-    animation: mk-lid 5.4s ease-in-out infinite;
-  }
-  @keyframes mk-lid {
-    0%, 38%   { opacity: 0; }
-    44%, 76%  { opacity: 1; }
-    82%, 100% { opacity: 0; }
-  }
-
-  /* Слеза набегает и скатывается. Вторая капля — со сдвигом по фазе, иначе
-     они падают синхронно и читаются как одна толстая полоса. */
-  .empty-art .sad-tear {
-    opacity: 0;
-    animation: mk-tear 5.4s ease-in infinite;
-  }
-  .empty-art .sad-tear-1 { animation-delay: 2.7s; }
-  /* Только translate и opacity. scale() здесь НЕЛЬЗЯ: у SVG-элемента без
-     заданного transform-origin масштаб считается от точки (0,0) области
-     просмотра, и капля на кадрах со scale уезжала бы в угол картинки. */
-  @keyframes mk-tear {
-    0%       { opacity: 0; transform: translate(0, -4px); }
-    10%      { opacity: .85; transform: translate(0, 0); }
-    38%      { opacity: .85; transform: translate(0, 52px); }
-    48%      { opacity: 0; transform: translate(0, 68px); }
-    100%     { opacity: 0; transform: translate(0, 68px); }
+    72%      { transform: rotate(2.5deg) translateY(3px) scaleY(.986); }
   }
 
   @media (prefers-reduced-motion: reduce) {
     .empty-art { animation: none; transform: rotate(-2deg); }
-    .empty-art .sad-arm-down { animation: none; opacity: 1; }
-    .empty-art .sad-arm-up { animation: none; opacity: 0; }
-    .empty-art .sad-lid { animation: none; opacity: 0; }
-    /* Без движения слеза так и висела бы под глазом — убираем её вовсе. */
-    .empty-art .sad-tear { animation: none; display: none; }
   }
 
   @media (prefers-reduced-motion: reduce) {
