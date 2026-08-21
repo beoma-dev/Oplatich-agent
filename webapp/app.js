@@ -203,6 +203,7 @@
   // Дата оплаты: «Срочно» → сегодня, «Обычная» → завтра,
   // «Настраиваемая» → выбор в календаре (не раньше сегодня).
   var plannedEl = $("planned");
+  var deadlineEl = $("work-deadline");
   // isoOf/todayISO/nextBusinessISO/fmtRu — в form-lib.js
   function resolvedPlannedDate() {
     // Для авто-режимов дату считает СЕРВЕР (в таймзоне приложения) —
@@ -520,6 +521,7 @@
     reqEl.value = "";
     $("article-custom").value = "";
     plannedEl.value = "";
+    deadlineEl.value = "";
     $("comment-count").textContent = "0";
     $("req-count").textContent = "0";
     $("req-warnings").classList.add("hidden");
@@ -852,6 +854,7 @@
     fd.append("counterparty", cpEl.value);
     fd.append("article", currentArticle());
     fd.append("planned_date", resolvedPlannedDate());
+    fd.append("work_deadline", deadlineEl.value);
     fd.append("comment", commentEl.value);
     // «Настраиваемая» — это про дату, для реестра срочность обычная.
     fd.append("urgency", state.urgency === "URGENT" ? "URGENT" : "NORMAL");
@@ -948,6 +951,7 @@
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
         t: Date.now(), a: amountEl.value, cur: state.currency, cp: cpEl.value,
         art: state.article, artc: $("article-custom").value, pd: plannedEl.value,
+        wd: deadlineEl.value,
         cm: commentEl.value, u: state.urgency, hi: state.hasInvoice, rq: reqEl.value
       }));
     } catch (e) { /* localStorage может быть недоступен */ }
@@ -997,6 +1001,7 @@
       setSeg("urgency-seg", d.u);
     }
     if (d.pd && d.pd >= todayISO()) { plannedEl.value = d.pd; }
+    if (d.wd) { deadlineEl.value = d.wd; }
     if (reqEl.value.trim()) setVeil(true);  // восстановленные реквизиты — скрыты
     refreshPayDate();
     if (typeof d.hi === "boolean") {
@@ -1061,6 +1066,9 @@
     }
     commentEl.value = item.comment || "";
     $("comment-count").textContent = commentEl.value.length;
+    // Срок исполнения переносим как есть: он про договор, а не про дату
+    // платежа, и у повторяющихся услуг («услуга на 6 месяцев») тот же.
+    deadlineEl.value = item.work_deadline || "";
     // Срочность переносим, а плановую дату считаем заново: прошлая — в прошлом.
     state.urgency = item.urgency === "Срочно" ? "URGENT" : "NORMAL";
     setSeg("urgency-seg", state.urgency);
@@ -1191,6 +1199,7 @@
       var dates = document.createElement("div");
       dates.className = "my-meta";
       dates.textContent = "📅 оплатить до " + (it.planned_date || "—") +
+        (it.work_deadline ? " · 📄 срок работ: " + it.work_deadline : "") +
         (it.created_at ? " · подана " + it.created_at : "");
       row.appendChild(dates);
 
@@ -1369,6 +1378,7 @@
     add("Статья", item.article);
     add("Срочность", item.urgency);
     add("Оплатить до", item.planned_date);
+    add("Срок исполнения работ", item.work_deadline);
     add("Подана", item.created_at);
     add("Сотрудник", item.sender);
     add("Комментарий", item.comment);
@@ -1724,6 +1734,7 @@
       var dates = document.createElement("div");
       dates.className = "my-meta";
       dates.textContent = "📅 оплатить до " + (it.planned_date || "—") +
+        (it.work_deadline ? " · 📄 срок работ: " + it.work_deadline : "") +
         (it.created_at ? " · подана " + it.created_at : "");
       row.appendChild(dates);
 

@@ -34,6 +34,7 @@ from bot.validators import (
     parse_planned_date,
     parse_registry_filter_date,
     validate_file,
+    validate_optional_text_field,
     validate_text_field,
 )
 from config import settings
@@ -207,6 +208,7 @@ def _as_item(row: dict[str, str], reason: str) -> dict:
         "created_at": row.get("Дата внесения в реестр", ""),
         "has_invoice": bool(row.get("Ссылка на счет", "")),
         "requisites": row.get("Реквизиты", ""),
+        "work_deadline": row.get("Срок исполнения работ по договору", ""),
         "reason": reason,
     }
 
@@ -302,6 +304,7 @@ def _matches(
         haystack = " ".join((
             row.get("Контрагент", ""), row.get("Сотрудник по заявке", ""),
             row.get("Статья", ""), row.get("Комментарий", ""), row.get("ID заявки", ""),
+            row.get("Срок исполнения работ по договору", ""),
         )).lower()
         if query not in haystack:
             return False
@@ -877,6 +880,7 @@ async def submit_invoice(
     counterparty: str = Form(...),
     article: str = Form(...),
     planned_date: str = Form(...),
+    work_deadline: str = Form(""),
     comment: str = Form(""),
     urgency: str = Form(...),
     has_invoice: str = Form(...),
@@ -918,6 +922,11 @@ async def submit_invoice(
             None if planned_date.strip() in ("", "auto")
             else parse_planned_date(planned_date)
         )
+        # Срок исполнения — свободный текст («текущий месяц», «поставка
+        # в декабре»), поэтому датой не разбирается: только длина и пробелы.
+        work_deadline_value = validate_optional_text_field(
+            work_deadline, field_name="Срок исполнения работ по договору", max_len=200
+        )
         # Комментарий необязателен: валидируем только непустой (длина).
         comment_value = (
             validate_text_field(comment, field_name="Комментарий", max_len=500)
@@ -956,6 +965,7 @@ async def submit_invoice(
         counterparty=counterparty_value,
         article=article_value,
         planned_date=planned_value,
+        work_deadline=work_deadline_value,
         comment=comment_value,
         urgency=urgency_value,
         has_invoice=with_invoice,

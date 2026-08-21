@@ -19,6 +19,42 @@ class TestSqliteRegistry:
         assert registry_sqlite.append_sync(r2) == 2
         assert not registry_sqlite.import_row_sync(r1.as_sheet_row())  # дубль ID
 
+    def test_work_deadline_roundtrip(self, tmp_paths):
+        r = make_request(telegram_id=555, work_deadline="услуга на 6 месяцев")
+        registry_sqlite.append_sync(r)
+        row = registry_sqlite.get_request_sync(r.request_id)
+        assert row is not None
+        assert row["Срок исполнения работ по договору"] == "услуга на 6 месяцев"
+
+    def test_missing_column_is_added_to_existing_table(self, tmp_paths):
+        """Боевая БД создана до появления колонки — INSERT не должен падать.
+
+        CREATE TABLE IF NOT EXISTS готовую таблицу не трогает, поэтому у уже
+        работающего бота колонка сама не появится: её досоздаёт миграция.
+        Воспроизводим ровно это — таблица «из прошлого», без новой колонки.
+        """
+        import sqlite3
+
+        path = settings.security_db_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ts REAL NOT NULL,
+                    created_at TEXT, planned_date TEXT, sender TEXT,
+                    counterparty TEXT, amount TEXT, article TEXT, status TEXT,
+                    comment TEXT, file_link TEXT, currency TEXT, urgency TEXT,
+                    requisites TEXT, request_id TEXT UNIQUE NOT NULL, telegram_id TEXT
+                )
+                """
+            )
+        r = make_request(telegram_id=556, work_deadline="поставка в декабре")
+        assert registry_sqlite.append_sync(r) == 1
+        row = registry_sqlite.get_request_sync(r.request_id)
+        assert row["Срок исполнения работ по договору"] == "поставка в декабре"
+
     def test_set_status_roundtrip(self, tmp_paths):
         r = make_request(telegram_id=777)
         registry_sqlite.append_sync(r)

@@ -35,6 +35,7 @@ _FIELDS = [
     "requisites",
     "request_id",
     "telegram_id",
+    "work_deadline",
 ]
 
 
@@ -50,10 +51,12 @@ def _connect() -> sqlite3.Connection:
             created_at TEXT, planned_date TEXT, sender TEXT,
             counterparty TEXT, amount TEXT, article TEXT, status TEXT,
             comment TEXT, file_link TEXT, currency TEXT, urgency TEXT,
-            requisites TEXT, request_id TEXT UNIQUE NOT NULL, telegram_id TEXT
+            requisites TEXT, request_id TEXT UNIQUE NOT NULL, telegram_id TEXT,
+            work_deadline TEXT
         )
         """
     )
+    _add_missing_columns(conn)
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_requests_cp ON requests (counterparty)"
     )
@@ -62,6 +65,20 @@ def _connect() -> sqlite3.Connection:
         "CREATE INDEX IF NOT EXISTS idx_requests_author ON requests (telegram_id)"
     )
     return conn
+
+
+def _add_missing_columns(conn: sqlite3.Connection) -> None:
+    """Досоздаёт колонки в УЖЕ существующей таблице.
+
+    CREATE TABLE IF NOT EXISTS не трогает готовую таблицу, поэтому у бота,
+    который уже работает с данными, новая колонка сама не появится — INSERT
+    упал бы на «no such column». Идём по _FIELDS: чего нет, то добавляем.
+    """
+    have = {row[1] for row in conn.execute("PRAGMA table_info(requests)")}
+    for field in _FIELDS:
+        if field not in have:
+            conn.execute(f"ALTER TABLE requests ADD COLUMN {field} TEXT")
+            log.info("Реестр SQLite: добавлена колонка %s", field)
 
 
 def _row_to_sheet_dict(values: tuple) -> dict[str, str]:

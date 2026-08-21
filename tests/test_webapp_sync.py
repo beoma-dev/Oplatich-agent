@@ -67,12 +67,14 @@ def test_file_size_limit_mirror():
 
 
 def test_field_limits_mirror():
-    # Длины полей: counterparty 200, comment 500, requisites 1500, article 100.
+    # Длины полей: counterparty 200, comment 500, requisites 1500,
+    # article 100, срок исполнения работ 200.
     for field_id, limit in [
         ("counterparty", 200),
         ("comment", 500),
         ("requisites", 1500),
         ("article-custom", 100),
+        ("work-deadline", 200),
     ]:
         m = re.search(rf'id="{field_id}" maxlength="(\d+)"', HTML)
         assert m, f"maxlength для #{field_id} не найден"
@@ -149,13 +151,17 @@ def test_my_requests_payload_matches_ui():
 
 def test_tooltip_class_keeps_header_icons_in_place():
     """Регрессия: .tip идёт по файлу позже .gear и при равной специфичности
-    задаёт кнопкам position. Кнопки шапки лежат в панели на flex, поэтому им
-    нужен relative — с absolute они складывались в стопку и клик по одной
-    перехватывала соседняя. Глазку и «убрать файл» absolute по-прежнему нужен.
+    задаёт кнопкам position. С absolute кнопки складывались в стопку и клик по
+    одной перехватывала соседняя; с relative подсказка крайней левой кнопки
+    уезжала за левый край экрана. Верно static: раскладку держит flex, а
+    подсказка якорится к панели. Глазку и «убрать файл» absolute нужен.
     """
     m = re.search(r"\.gear\.tip[^{]*\{([^}]*)\}", HTML)
     assert m, "нет правила, задающего position кнопкам шапки"
-    assert "position: relative" in m.group(1)
+    # static, а не relative: подсказка тогда отсчитывается от панели. У крайней
+    # левой кнопки она иначе уезжает за левый край экрана на узких телефонах.
+    assert "position: static" in m.group(1)
+    assert "max-width: calc(100vw" in HTML, "у подсказки нет предела ширины"
     m2 = re.search(r"\.eye-btn\.tip[^{]*\{([^}]*)\}", HTML)
     assert m2 and "position: absolute" in m2.group(1)
 

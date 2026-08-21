@@ -42,6 +42,7 @@
         <stop offset="0%" stop-color="#FFFFFF"/><stop offset="100%" stop-color="#EDF2EF"/>
       </linearGradient>
       <clipPath id="mk-head"><circle cx="256" cy="268" r="168"/></clipPath>
+      <clipPath id="mk-cap"><path d="M100 212C100 118 168 62 256 62C344 62 412 118 412 212Q256 252 100 212Z"/></clipPath>
     </defs>
 </svg>
 
@@ -177,8 +178,29 @@
 
                 <circle cx="256" cy="268" r="172" fill="url(#mk-fur)" stroke="#8A5F27" stroke-width="8"/>
                 <ellipse cx="256" cy="330" rx="104" ry="92" fill="#FCEFD3" opacity=".8"/>
+                <!-- Кепочка Beoma вместо козырька счетовода: тулья по голове + тот же
+                     козырёк. Швы, блик и надпись обрезаны по тулье (mk-cap) — иначе блик
+                     вылезает за силуэт и висит в воздухе над ухом. Цвет кепки, как и у
+                     козырька до неё, берётся из акцента ТЕМЫ, а не зашит: в телеграмной
+                     шкуре кепка синяя. Надпись белая — она читается на любом акценте. -->
+                <path d="M100 212C100 118 168 62 256 62C344 62 412 118 412 212Q256 252 100 212Z" fill="url(#mk-band)"
+                      stroke="color-mix(in srgb, var(--accent) 62%, #000000)" stroke-width="7" stroke-linejoin="round"/>
+                <g clip-path="url(#mk-cap)">
+                  <g fill="none" stroke="color-mix(in srgb, var(--accent) 62%, #000000)" stroke-width="4" opacity=".38">
+                    <path d="M256 64Q252 150 254 238"/><path d="M180 76Q168 152 170 224"/><path d="M332 76Q344 152 342 224"/>
+                  </g>
+                  <path d="M176 92Q256 66 336 92" fill="none" stroke="color-mix(in srgb, var(--accent) 40%, #ffffff)" stroke-width="9"
+                        stroke-linecap="round" opacity=".25"/>
+                  <path id="mk-cap-word" d="M142 150Q256 190 370 150" fill="none"/>
+                  <text font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="700" font-size="56"
+                        letter-spacing="1.5" fill="#FFFFFF">
+                    <textPath href="#mk-cap-word" startOffset="50%" text-anchor="middle">Beoma</textPath>
+                  </text>
+                </g>
+                <circle cx="256" cy="68" r="13" fill="url(#mk-brim)" stroke="color-mix(in srgb, var(--accent) 62%, #000000)" stroke-width="5"/>
+                <!-- Тень от кепки на шерсти: без неё кепка парит над головой. -->
                 <g clip-path="url(#mk-head)">
-                  <path d="M56 196Q256 146 456 196L456 228Q256 178 56 228Z" fill="url(#mk-band)"/>
+                  <path d="M96 208Q256 250 416 208L416 232Q256 274 96 232Z" fill="#7A4A2C" opacity=".18"/>
                 </g>
                 <path d="M78 222Q256 178 434 222L434 234Q256 266 78 234Z" fill="url(#mk-brim)"
                       stroke="color-mix(in srgb, var(--accent) 62%, #000000)" stroke-width="6" stroke-linejoin="round"/>
@@ -348,6 +370,15 @@
   </div>
 
   <div class="card">
+    <div class="card-title">📄 Срок исполнения работ по договору <span class="optional-mark">необязательно</span></div>
+    <input type="text" id="work-deadline" maxlength="200" placeholder="Например: текущий месяц" autocomplete="off">
+    <div class="help-text" style="margin-top:6px; font-size:12.5px; color:var(--hint)">
+      Можно датой, можно словами — как записано в договоре: «15.12.2026»,
+      «текущий месяц», «поставка в декабре», «услуга на 6 месяцев».
+    </div>
+  </div>
+
+  <div class="card">
     <div class="card-title">💬 Комментарий <span class="optional-mark">необязательно</span></div>
     <textarea id="comment" maxlength="500" placeholder="Например: аренда офиса за июль, договор №А-42"></textarea>
     <div class="counter"><span id="comment-count">0</span>/500</div>
@@ -395,6 +426,8 @@
       <b>Срочность и дата оплаты</b>: 🔴 Срочно — оплата сегодня,
       🟢 Обычная — следующий рабочий день, 🗓 Настраиваемая — своя дата
       в календаре.<br>
+      <b>Срок исполнения работ по договору</b> — датой или словами
+      («текущий месяц», «поставка в декабре»), по желанию.<br>
       <b>Комментарий</b> — по желанию.
     </div>
   </div>

@@ -1,4 +1,35 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="64 44 384 434" width="384" height="434" role="img" aria-label="Оплатыч">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" width="640" height="360" role="img" aria-label="Оплатыч — заявки на оплату счетов">
+<!-- СГЕНЕРИРОВАНО scripts/render_brand.mjs — руками не править.
+     Источник геометрии: webapp/logo.svg. Обложка Mini App 640×360 (BotFather → /newapp). Фон НЕПРОЗРАЧНЫЙ: Telegram жмёт картинку и заливает прозрачное чёрным. -->
+  <defs>
+    <linearGradient id="cover-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFA6C6"/>
+      <stop offset="52%" stop-color="#EC6493"/>
+      <stop offset="100%" stop-color="#BE3466"/>
+    </linearGradient>
+    <radialGradient id="cover-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity=".30"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="cover-halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#A82A5A" stop-opacity=".26"/>
+      <stop offset="100%" stop-color="#A82A5A" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="cover-soft" x="-60%" y="-80%" width="220%" height="260%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+  </defs>
+  <rect width="640" height="360" fill="url(#cover-bg)"/>
+  <ellipse cx="153.6" cy="43.199999999999996" rx="320" ry="180" fill="url(#cover-glow)"/>
+  <rect x="12" y="12" width="616" height="336" rx="26" fill="none" stroke="#FFFFFF" stroke-opacity=".22" stroke-width="2"/>
+  <g transform="translate(0,0) scale(1)">
+    <!-- Подложка под знаком ТЕМНЕЕ фона, а не светлее: кепка сама розовая, и
+         на светлом углу фона держалась только за счёт обводки. С тёмной
+         подложкой светлая кепка отделяется тоном, а не одной линией; текст
+         справа она не задевает, поэтому белый заголовок не теряет контраст. -->
+    <ellipse cx="142.81967213114754" cy="180" rx="153.82032786885244" ry="166.32000000000002" fill="url(#cover-halo)"/>
+    <ellipse cx="142.81967213114754" cy="302" rx="89.72852459016393" ry="16" fill="#7A1F45" opacity=".30" filter="url(#cover-soft)"/>
+    <g transform="translate(142.81967213114754,180) scale(0.5901639344262295) translate(-256,-265.5)">
   <defs>
     <radialGradient id="fur" cx="40%" cy="30%" r="76%">
       <stop offset="0%" stop-color="#F8DEA9"/>
@@ -105,4 +136,8 @@
   </g>
   <ellipse cx="336" cy="424" rx="40" ry="29" fill="url(#fur)" stroke="#8A5F27" stroke-width="7"
            transform="rotate(-14 336 424)"/>
+</g>
+    <text x="275.6393442622951" y="182.64000000000001" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'DejaVu Sans', sans-serif" font-weight="700" font-size="61.5" letter-spacing="1" fill="#FFFFFF">Оплатыч</text>
+    <text x="275.6393442622951" y="216.58" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'DejaVu Sans', sans-serif" font-weight="500" font-size="23" letter-spacing=".2" fill="#FFFFFF" fill-opacity=".86">заявки на оплату счетов</text>
+  </g>
 </svg>

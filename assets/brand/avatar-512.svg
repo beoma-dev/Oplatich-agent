@@ -1,4 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="64 44 384 434" width="384" height="434" role="img" aria-label="Оплатыч">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Оплатыч">
+<!-- СГЕНЕРИРОВАНО scripts/render_brand.mjs — руками не править.
+     Источник геометрии: webapp/logo.svg. Фото бота в Telegram: квадрат и НЕПРОЗРАЧНЫЙ фон обязательны — Telegram жмёт фото в JPEG и заливает прозрачное чёрным. -->
+  <defs>
+    <radialGradient id="bg" cx="28%" cy="20%" r="98%">
+      <stop offset="0%" stop-color="#FFFBFC"/>
+      <stop offset="60%" stop-color="#FCF0F5"/>
+      <stop offset="100%" stop-color="#F4DFE9"/>
+    </radialGradient>
+    <filter id="soft" x="-40%" y="-60%" width="180%" height="220%">
+      <feGaussianBlur stdDeviation="16"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <ellipse cx="256" cy="452" rx="150" ry="30" fill="#B8608A" opacity=".24" filter="url(#soft)"/>
+  <circle cx="256" cy="256" r="250" fill="none" stroke="#D63F73" stroke-width="12" opacity=".52"/>
+  <g transform="translate(256,256) scale(0.922) translate(-256,-261)">
   <defs>
     <radialGradient id="fur" cx="40%" cy="30%" r="76%">
       <stop offset="0%" stop-color="#F8DEA9"/>
@@ -105,4 +121,5 @@
   </g>
   <ellipse cx="336" cy="424" rx="40" ry="29" fill="url(#fur)" stroke="#8A5F27" stroke-width="7"
            transform="rotate(-14 336 424)"/>
+</g>
 </svg>

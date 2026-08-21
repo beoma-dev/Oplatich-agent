@@ -66,7 +66,12 @@ async def _drive_common(ctx, urgency_cb: str) -> None:
     assert await h.step_counterparty(_msg("ООО «Ромашка»"), ctx) == h.ARTICLE
     result = await h.step_article(_cb("ART:0"), ctx)
     assert result == h.URGENCY
-    assert await h.step_urgency_choice(_cb(urgency_cb), ctx) in (h.COMMENT, h.PLANNED_DATE)
+    assert await h.step_urgency_choice(_cb(urgency_cb), ctx) in (
+        h.WORK_DEADLINE, h.PLANNED_DATE
+    )
+    # Срок исполнения работ — шаг между датой оплаты и комментарием.
+    if ctx.user_data.get(h.K_PLANNED) is not None:
+        assert await h.step_work_deadline(_msg("текущий месяц"), ctx) == h.COMMENT
 
 
 async def test_happy_path_requisites(tmp_paths):
@@ -91,7 +96,8 @@ async def test_happy_path_requisites(tmp_paths):
 async def test_custom_date_path(tmp_paths):
     ctx = _ctx(_bot())
     await _drive_common(ctx, "URG:CUSTOM")
-    assert await h.step_planned_date(_msg("31.12.2026"), ctx) == h.COMMENT
+    assert await h.step_planned_date(_msg("31.12.2026"), ctx) == h.WORK_DEADLINE
+    assert await h.step_work_deadline(_msg("поставка в декабре"), ctx) == h.COMMENT
     assert await h.step_comment(_msg("оплата по договору"), ctx) == h.INVOICE_CHOICE
     assert await h.step_invoice_choice(_cb("INV_NO"), ctx) == h.REQUISITES
     assert await h.step_requisites(_msg("реквизиты"), ctx) == h.CONFIRM_SUBMIT

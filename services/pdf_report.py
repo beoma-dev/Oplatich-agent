@@ -355,6 +355,12 @@ def build_request_pdf(request: InvoiceRequest) -> bytes:
         story.append(Paragraph(f"Сумма прописью: <b>{e(words)}</b>", st["words"]))
         story.append(Spacer(1, 3 * mm))
     story.append(Paragraph(f"Срочность: <b>{urgency}</b>", st["words"]))
+    if request.work_deadline:
+        story.append(Spacer(1, 1.5 * mm))
+        story.append(Paragraph(
+            f"Срок исполнения работ по договору: <b>{e(request.work_deadline)}</b>",
+            st["words"],
+        ))
     story.append(Spacer(1, 4 * mm))
 
     # --- Реквизиты получателя --------------------------------------------------------

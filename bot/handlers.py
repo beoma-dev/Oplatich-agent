@@ -38,6 +38,7 @@ from bot.validators import (
     parse_amount,
     parse_planned_date,
     validate_file,
+    validate_optional_text_field,
     validate_text_field,
 )
 from config import settings
@@ -56,6 +57,7 @@ log = logging.getLogger(__name__)
     ARTICLE,
     ARTICLE_CUSTOM,
     PLANNED_DATE,
+    WORK_DEADLINE,
     COMMENT,
     URGENCY,
     INVOICE_CHOICE,
@@ -63,7 +65,7 @@ log = logging.getLogger(__name__)
     REQUISITES,
     CONFIRM_SUBMIT,
     DUP_CONFIRM,
-) = range(13)
+) = range(14)
 
 # Ключи во временном user_data (живут только в рамках одного диалога).
 K_AMOUNT = "amount"
@@ -71,6 +73,7 @@ K_CURRENCY = "currency"
 K_COUNTERPARTY = "counterparty"
 K_ARTICLE = "article"
 K_PLANNED = "planned_date"
+K_WORK_DEADLINE = "work_deadline"
 K_COMMENT = "comment"
 K_URGENCY = "urgency"
 K_HAS_INVOICE = "has_invoice"
@@ -85,6 +88,7 @@ CB_DUP_NO = "DUP_NO"
 
 # callback_data пропуска комментария (комментарий необязателен)
 CB_COMMENT_SKIP = "CMT_SKIP"
+CB_DEADLINE_SKIP = "WDL_SKIP"
 
 # callback_data экрана подтверждения (по ТЗ: запись — после подтверждения)
 CB_SUBMIT_YES = "SUB_YES"
@@ -248,6 +252,7 @@ def _build_request(context: ContextTypes.DEFAULT_TYPE, update: Update, now: date
         counterparty=context.user_data[K_COUNTERPARTY],
         article=context.user_data[K_ARTICLE],
         planned_date=context.user_data[K_PLANNED],
+        work_deadline=context.user_data.get(K_WORK_DEADLINE, ""),
         comment=context.user_data[K_COMMENT],
         urgency=context.user_data[K_URGENCY],
         has_invoice=context.user_data[K_HAS_INVOICE],
@@ -447,6 +452,8 @@ async def _post_group_button(update: Update, context: ContextTypes.DEFAULT_TYPE,
             "• статью расходов;\n"
             "• срочность и плановую дату оплаты — 🔴 срочно = сегодня, "
             "🟢 обычная = следующий рабочий день, 🗓 или своя дата;\n"
+            "• срок исполнения работ по договору — датой или словами "
+            "(«текущий месяц», «поставка в декабре»), по желанию;\n"
             "• комментарий (по желанию);\n"
             "• файл счёта <i>или</i> реквизиты (если счёта нет).\n\n"
             "🔒 Данные <b>не видны</b> в этом чате — сюда придёт только "
@@ -522,7 +529,7 @@ async def _begin_form(
         context.user_data[K_RETURN_CHAT] = return_chat_id
     await reply_to.reply_text(
         "🧾 <b>Новая заявка на оплату</b>\n\n"
-        "Шаг 1 из 7 — введите <b>сумму</b> платежа "
+        "Шаг 1 из 8 — введите <b>сумму</b> платежа "
         "(например: 125000 или 125000.50).\n\n"
         "Отменить в любой момент — /cancel",
         parse_mode=ParseMode.HTML,
@@ -693,7 +700,7 @@ async def step_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         [[InlineKeyboardButton(c, callback_data=f"CUR:{c}") for c in row] for row in rows]
     )
     await update.message.reply_text(
-        f"{_addr(update)}шаг 2 из 7 — выберите <b>валюту</b>:",
+        f"{_addr(update)}шаг 2 из 8 — выберите <b>валюту</b>:",
         parse_mode=ParseMode.HTML,
         reply_markup=keyboard,
     )
@@ -711,7 +718,7 @@ async def step_currency(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     context.user_data[K_CURRENCY] = code
     await query.edit_message_text(f"Валюта: {code}")
     await query.message.reply_text(
-        f"{_addr(update)}шаг 3 из 7 — введите <b>контрагента</b> (кому платим).",
+        f"{_addr(update)}шаг 3 из 8 — введите <b>контрагента</b> (кому платим).",
         parse_mode=ParseMode.HTML,
     )
     return COUNTERPARTY
@@ -738,7 +745,7 @@ async def step_counterparty(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     context.user_data[K_COUNTERPARTY] = value
     await update.message.reply_text(
-        f"{_addr(update)}шаг 4 из 7 — выберите <b>статью расходов</b>:",
+        f"{_addr(update)}шаг 4 из 8 — выберите <b>статью расходов</b>:",
         parse_mode=ParseMode.HTML,
         reply_markup=_article_keyboard(),
     )
@@ -767,7 +774,7 @@ async def step_article(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     context.user_data[K_ARTICLE] = article
     await query.edit_message_text(f"Статья: {article}")
     await query.message.reply_text(
-        f"{_addr(update)}шаг 5 из 7 — выберите <b>срочность</b>:",
+        f"{_addr(update)}шаг 5 из 8 — выберите <b>срочность</b>:",
         parse_mode=ParseMode.HTML,
         reply_markup=_urgency_keyboard(),
     )
@@ -783,7 +790,7 @@ async def step_article_custom(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     context.user_data[K_ARTICLE] = value
     await update.message.reply_text(
-        f"{_addr(update)}шаг 5 из 7 — выберите <b>срочность</b>:",
+        f"{_addr(update)}шаг 5 из 8 — выберите <b>срочность</b>:",
         parse_mode=ParseMode.HTML,
         reply_markup=_urgency_keyboard(),
     )
@@ -801,7 +808,20 @@ def _urgency_keyboard() -> InlineKeyboardMarkup:
     ])
 
 
-_ASK_COMMENT = "шаг 6 из 7 — введите <b>комментарий</b> (необязательно)."
+# Срок исполнения работ по договору — свободный текст: в договорах он сплошь
+# нечисловой («текущий месяц», «поставка в декабре»), датой не разбирается.
+_ASK_DEADLINE = (
+    "шаг 6 из 8 — укажите <b>срок исполнения работ по договору</b>"
+    " (необязательно).\nМожно датой, можно словами: «15.12.2026»,"
+    " «текущий месяц», «поставка в декабре», «услуга на 6 месяцев»."
+)
+_ASK_COMMENT = "шаг 7 из 8 — введите <b>комментарий</b> (необязательно)."
+
+
+def _deadline_skip_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("➡️ Пропустить", callback_data=CB_DEADLINE_SKIP)]]
+    )
 
 
 def _comment_skip_keyboard() -> InlineKeyboardMarkup:
@@ -821,7 +841,7 @@ def _invoice_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-_ASK_INVOICE = "шаг 7 из 7 — есть ли <b>файл счёта</b>?"
+_ASK_INVOICE = "шаг 8 из 8 — есть ли <b>файл счёта</b>?"
 
 
 async def step_urgency_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -853,11 +873,11 @@ async def step_urgency_choice(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"Срочность: {urgency.value} · оплата {when}, {planned.strftime('%d.%m.%Y')}"
     )
     await query.message.reply_text(
-        f"{_addr(update)}{_ASK_COMMENT}",
+        f"{_addr(update)}{_ASK_DEADLINE}",
         parse_mode=ParseMode.HTML,
-        reply_markup=_comment_skip_keyboard(),
+        reply_markup=_deadline_skip_keyboard(),
     )
-    return COMMENT
+    return WORK_DEADLINE
 
 
 async def step_planned_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -869,6 +889,38 @@ async def step_planned_date(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     context.user_data[K_PLANNED] = planned
     await update.message.reply_text(
+        f"{_addr(update)}{_ASK_DEADLINE}",
+        parse_mode=ParseMode.HTML,
+        reply_markup=_deadline_skip_keyboard(),
+    )
+    return WORK_DEADLINE
+
+
+async def step_work_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        value = validate_optional_text_field(
+            update.message.text, field_name="Срок исполнения работ по договору", max_len=200
+        )
+    except ValidationError as exc:
+        await update.message.reply_text(f"⚠️ {exc}")
+        return WORK_DEADLINE
+
+    context.user_data[K_WORK_DEADLINE] = value
+    await update.message.reply_text(
+        f"{_addr(update)}{_ASK_COMMENT}",
+        parse_mode=ParseMode.HTML,
+        reply_markup=_comment_skip_keyboard(),
+    )
+    return COMMENT
+
+
+async def work_deadline_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Кнопка «Пропустить» — у хостинга и подписок срока работ нет."""
+    query = update.callback_query
+    await query.answer()
+    context.user_data[K_WORK_DEADLINE] = ""
+    await query.edit_message_text("Срок исполнения работ: —")
+    await query.message.reply_text(
         f"{_addr(update)}{_ASK_COMMENT}",
         parse_mode=ParseMode.HTML,
         reply_markup=_comment_skip_keyboard(),
@@ -1052,6 +1104,7 @@ async def repeat_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     context.user_data[K_COUNTERPARTY] = row.get("Контрагент", "")
     context.user_data[K_ARTICLE] = row.get("Статья", "")
     context.user_data[K_COMMENT] = row.get("Комментарий", "")
+    context.user_data[K_WORK_DEADLINE] = row.get("Срок исполнения работ по договору", "")
     context.user_data[K_URGENCY] = urgency
     context.user_data[K_PLANNED] = auto_planned_date(urgency.is_urgent)
 
@@ -1064,7 +1117,8 @@ async def repeat_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         f"💰 Сумма: <b>{e(f'{amount:,.2f}')} {e(context.user_data[K_CURRENCY])}</b>\n"
         f"🏢 Контрагент: {e(context.user_data[K_COUNTERPARTY])}\n"
         f"📂 Статья: {e(context.user_data[K_ARTICLE] or '—')}\n"
-        f"📅 Оплатить до: <b>{e(planned)}</b>\n\n"
+        f"📅 Оплатить до: <b>{e(planned)}</b>\n"
+        f"📄 Срок работ: {e(context.user_data[K_WORK_DEADLINE] or '—')}\n\n"
         "Изменить что-то — /cancel и заполните форму заново.",
         parse_mode=ParseMode.HTML,
     )
@@ -1090,6 +1144,10 @@ def build_conversation_handler() -> ConversationHandler:
             ARTICLE: [CallbackQueryHandler(step_article, pattern=r"^ART:")],
             ARTICLE_CUSTOM: [MessageHandler(filters.TEXT & ~filters.COMMAND, step_article_custom)],
             PLANNED_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, step_planned_date)],
+            WORK_DEADLINE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, step_work_deadline),
+                CallbackQueryHandler(work_deadline_skip, pattern=rf"^{CB_DEADLINE_SKIP}$"),
+            ],
             COMMENT: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, step_comment),
                 CallbackQueryHandler(comment_skip, pattern=rf"^{CB_COMMENT_SKIP}$"),

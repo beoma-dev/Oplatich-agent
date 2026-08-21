@@ -1,45 +1,48 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="64 44 384 434" width="384" height="434" role="img" aria-label="Оплатыч">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Оплатыч">
+<!-- СГЕНЕРИРОВАНО scripts/render_brand.mjs — руками не править.
+     Источник геометрии: webapp/logo.svg. Знак без тона: там, где цветной спорит с окружением — ч/б печать, чужой бланк, золотисто-коричневая подложка. -->
+  <g transform="translate(256,256) scale(0.922) translate(-256,-261)">
   <defs>
     <radialGradient id="fur" cx="40%" cy="30%" r="76%">
-      <stop offset="0%" stop-color="#F8DEA9"/>
-      <stop offset="60%" stop-color="#EABF74"/>
-      <stop offset="100%" stop-color="#D09C4E"/>
+      <stop offset="0%" stop-color="#F0EEEA"/>
+      <stop offset="60%" stop-color="#D9D5CD"/>
+      <stop offset="100%" stop-color="#B5AFA4"/>
     </radialGradient>
     <linearGradient id="band" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#FF7BA6"/>
-      <stop offset="100%" stop-color="#E04D80"/>
+      <stop offset="0%" stop-color="#A7A7A2"/>
+      <stop offset="100%" stop-color="#7F7F7A"/>
     </linearGradient>
     <linearGradient id="brim" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#FF8FB4"/>
-      <stop offset="100%" stop-color="#EC6493"/>
+      <stop offset="0%" stop-color="#B5B5B0"/>
+      <stop offset="100%" stop-color="#929290"/>
     </linearGradient>
     <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#FFFFFF"/>
-      <stop offset="100%" stop-color="#EDF2EF"/>
+      <stop offset="100%" stop-color="#EFEEEB"/>
     </linearGradient>
     <clipPath id="cap"><path d="M100 212C100 118 168 62 256 62C344 62 412 118 412 212Q256 252 100 212Z"/></clipPath>
     <clipPath id="head">
       <circle cx="256" cy="268" r="168"/>
     </clipPath>
     <radialGradient id="shade" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#0B3B2C" stop-opacity=".26"/>
-      <stop offset="100%" stop-color="#0B3B2C" stop-opacity="0"/>
+      <stop offset="0%" stop-color="#3A3833" stop-opacity=".26"/>
+      <stop offset="100%" stop-color="#3A3833" stop-opacity="0"/>
     </radialGradient>
   </defs>
 
   <!-- Уши держим ВЫШЕ козырька, иначе он их съедает. -->
-  <g stroke="#8A5F27" stroke-width="7">
+  <g stroke="#55514A" stroke-width="7">
     <circle cx="132" cy="128" r="46" fill="url(#fur)"/>
     <circle cx="380" cy="128" r="46" fill="url(#fur)"/>
   </g>
-  <circle cx="132" cy="128" r="24" fill="#E9A0A6"/>
-  <circle cx="380" cy="128" r="24" fill="#E9A0A6"/>
+  <circle cx="132" cy="128" r="24" fill="#C9C4BB"/>
+  <circle cx="380" cy="128" r="24" fill="#C9C4BB"/>
 
   <!-- Тело-шар. -->
-  <circle cx="256" cy="268" r="172" fill="url(#fur)" stroke="#8A5F27" stroke-width="8"/>
+  <circle cx="256" cy="268" r="172" fill="url(#fur)" stroke="#55514A" stroke-width="8"/>
 
   <!-- Светлое пузико. -->
-  <ellipse cx="256" cy="330" rx="104" ry="92" fill="#FCEFD3" opacity=".8"/>
+  <ellipse cx="256" cy="330" rx="104" ry="92" fill="#F2F0EB" opacity=".8"/>
 
   <!-- Кепочка Beoma вместо козырька счетовода: тулья по голове + тот же
        козырёк. Швы, блик и надпись обрезаны по тулье (clip cap) — иначе блик
@@ -47,62 +50,63 @@
        по посадке: они выходят из-под неё по бокам, поэтому хомяк читается
        хомяком, а не шаром в кепке. -->
   <path d="M100 212C100 118 168 62 256 62C344 62 412 118 412 212Q256 252 100 212Z"
-        fill="url(#band)" stroke="#B83466" stroke-width="7" stroke-linejoin="round"/>
+        fill="url(#band)" stroke="#616160" stroke-width="7" stroke-linejoin="round"/>
   <g clip-path="url(#cap)">
-    <g fill="none" stroke="#B83466" stroke-width="4" opacity=".38">
+    <g fill="none" stroke="#616160" stroke-width="4" opacity=".38">
       <path d="M256 64Q252 150 254 238"/><path d="M180 76Q168 152 170 224"/><path d="M332 76Q344 152 342 224"/>
     </g>
-    <path d="M176 92Q256 66 336 92" fill="none" stroke="#FFD3E3" stroke-width="9"
+    <path d="M176 92Q256 66 336 92" fill="none" stroke="#E2E2DE" stroke-width="9"
           stroke-linecap="round" opacity=".25"/>
     <path id="cap-word" d="M142 150Q256 190 370 150" fill="none"/>
     <text font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'DejaVu Sans', sans-serif" font-weight="700" font-size="56" letter-spacing="1.5" fill="#FFFFFF">
       <textPath href="#cap-word" startOffset="50%" text-anchor="middle">Beoma</textPath>
     </text>
   </g>
-  <circle cx="256" cy="68" r="13" fill="url(#brim)" stroke="#B83466" stroke-width="5"/>
+  <circle cx="256" cy="68" r="13" fill="url(#brim)" stroke="#616160" stroke-width="5"/>
   <!-- Тень от кепки на шерсти: без неё кепка парит над головой. -->
   <g clip-path="url(#head)">
-    <path d="M96 208Q256 250 416 208L416 232Q256 274 96 232Z" fill="#7A4A2C" opacity=".18"/>
+    <path d="M96 208Q256 250 416 208L416 232Q256 274 96 232Z" fill="#4A463F" opacity=".18"/>
   </g>
   <path d="M78 222Q256 178 434 222L434 234Q256 266 78 234Z"
-        fill="url(#brim)" stroke="#B83466" stroke-width="6" stroke-linejoin="round"/>
+        fill="url(#brim)" stroke="#616160" stroke-width="6" stroke-linejoin="round"/>
   <path d="M136 226Q256 258 376 226" fill="none"
-        stroke="#FFC7DC" stroke-width="5" stroke-linecap="round" opacity=".45"/>
+        stroke="#DADAD6" stroke-width="5" stroke-linecap="round" opacity=".45"/>
 
   <!-- Глаза ниже козырька: между ними и краем козырька есть воздух. -->
   <g>
-    <ellipse cx="216" cy="316" rx="50" ry="55" fill="#FFFFFF" stroke="#8A5F27" stroke-width="6"/>
-    <ellipse cx="296" cy="316" rx="50" ry="55" fill="#FFFFFF" stroke="#8A5F27" stroke-width="6"/>
-    <circle cx="228" cy="328" r="21" fill="#2A2018"/>
-    <circle cx="284" cy="328" r="21" fill="#2A2018"/>
+    <ellipse cx="216" cy="316" rx="50" ry="55" fill="#FFFFFF" stroke="#55514A" stroke-width="6"/>
+    <ellipse cx="296" cy="316" rx="50" ry="55" fill="#FFFFFF" stroke="#55514A" stroke-width="6"/>
+    <circle cx="228" cy="328" r="21" fill="#2B2926"/>
+    <circle cx="284" cy="328" r="21" fill="#2B2926"/>
     <circle cx="235" cy="320" r="7.5" fill="#FFFFFF"/>
     <circle cx="291" cy="320" r="7.5" fill="#FFFFFF"/>
   </g>
 
   <!-- Нос и улыбка. -->
-  <ellipse cx="256" cy="374" rx="18" ry="13" fill="#7A4A2C"/>
-  <path d="M234 396q22 24 44 0" fill="none" stroke="#7A4A2C" stroke-width="8" stroke-linecap="round"/>
+  <ellipse cx="256" cy="374" rx="18" ry="13" fill="#4A463F"/>
+  <path d="M234 396q22 24 44 0" fill="none" stroke="#4A463F" stroke-width="8" stroke-linecap="round"/>
 
   <!-- Хомячьи щёки. -->
-  <circle cx="158" cy="366" r="32" fill="#E9A0A6" opacity=".5"/>
-  <circle cx="354" cy="366" r="32" fill="#E9A0A6" opacity=".5"/>
+  <circle cx="158" cy="366" r="32" fill="#C9C4BB" opacity=".5"/>
+  <circle cx="354" cy="366" r="32" fill="#C9C4BB" opacity=".5"/>
 
   <!-- Лапки. -->
-  <ellipse cx="152" cy="418" rx="42" ry="30" fill="url(#fur)" stroke="#8A5F27" stroke-width="7"/>
+  <ellipse cx="152" cy="418" rx="42" ry="30" fill="url(#fur)" stroke="#55514A" stroke-width="7"/>
 
   <!-- Счёт: сперва бумага, поверх — лапа, поэтому читается «держит». -->
   <g transform="rotate(-11 366 412)">
     <rect x="322" y="358" width="88" height="112" rx="11" fill="url(#paper)"
-          stroke="#8A5F27" stroke-width="6"/>
-    <g stroke="#BCC8C2" stroke-width="6" stroke-linecap="round">
+          stroke="#55514A" stroke-width="6"/>
+    <g stroke="#C6C2B9" stroke-width="6" stroke-linecap="round">
       <path d="M342 384h48"/>
       <path d="M342 405h48"/>
       <path d="M342 426h30"/>
     </g>
-    <circle cx="378" cy="444" r="17" fill="none" stroke="#E04D80" stroke-width="5.5"/>
-    <path d="M369.5 444l6 6.5 11.5-13" fill="none" stroke="#E04D80" stroke-width="6"
+    <circle cx="378" cy="444" r="17" fill="none" stroke="#7F7F7A" stroke-width="5.5"/>
+    <path d="M369.5 444l6 6.5 11.5-13" fill="none" stroke="#7F7F7A" stroke-width="6"
           stroke-linecap="round" stroke-linejoin="round"/>
   </g>
-  <ellipse cx="336" cy="424" rx="40" ry="29" fill="url(#fur)" stroke="#8A5F27" stroke-width="7"
+  <ellipse cx="336" cy="424" rx="40" ry="29" fill="url(#fur)" stroke="#55514A" stroke-width="7"
            transform="rotate(-14 336 424)"/>
+</g>
 </svg>
