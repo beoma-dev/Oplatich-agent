@@ -15,6 +15,7 @@ from bot.models import InvoiceRequest
 from services import alerts, audit, dedup, storage
 from services.notifier import notify_finance
 from services.pdf_report import build_request_pdf
+from services.runtime_settings import effective_finance_recipients
 
 log = logging.getLogger(__name__)
 
@@ -94,8 +95,41 @@ async def finalize_submission(
     except Exception:  # noqa: BLE001
         log.exception("Сбой уведомления финансистов по заявке %s", request.request_id)
 
+    if notified == 0:
+        # Тишины быть не должно: заявка записана, а карточку никто не увидел,
+        # и переслать её потом нечем. Раньше об этом знал только лог — так и
+        # потерялась заявка при двухминутном провале WARP. Сообщаем АДМИНУ,
+        # а не автору: чинить это ему, а не сотруднику.
+        if effective_finance_recipients():
+            title = "Карточка заявки не дошла ни одному финансисту"
+            details = (
+                f"{request.request_id}: {request.amount:.2f} {request.currency}, "
+                f"{request.counterparty}. Заявка в реестре есть, карточки нет — "
+                "статус можно поставить из панели финансиста."
+            )
+        else:
+            title = "Финансисты не настроены"
+            details = (
+                f"{request.request_id}: заявка записана, но получателей карточки "
+                "нет. Добавьте финансиста в админ-панели ⚙️."
+            )
+        try:
+            await alerts.alert_admins(bot, title, details, signature="finance-undelivered")
+        except Exception:  # noqa: BLE001 — алерт не должен ломать подачу
+            log.exception("Сбой алерта о недоставленной карточке")
+
+    # Заявка подана из группы — итог уже уходит туда, и личное подтверждение
+    # автору было бы ровно тем же текстом второй раз. Дублировать не нужно,
+    # но и молчать нельзя: предупреждение автопроверки счёта и осечку с
+    # уведомлением финансиста в групповую сводку не пишут (в ней намеренно
+    # нет ничего чувствительного), поэтому их автор получает отдельно.
     await _send_user_confirmation(
-        bot, request, pdf=pdf, notified=notified, file_warning=file_warning
+        bot,
+        request,
+        pdf=pdf,
+        notified=notified,
+        file_warning=file_warning,
+        summary_in_group=return_chat_id is not None,
     )
 
     if return_chat_id is not None:
@@ -110,25 +144,29 @@ async def _send_user_confirmation(
     pdf: bytes | None = None,
     notified: int = 0,
     file_warning: str | None = None,
+    summary_in_group: bool = False,
 ) -> None:
-    """Личное подтверждение автору — ОДНИМ сообщением: PDF с подписью."""
+    """Личное подтверждение автору — ОДНИМ сообщением: PDF с подписью.
+
+    `summary_in_group=True` — итог уже опубликован в группе, второй раз тем
+    же текстом автору не пишем. Молчим ТОЛЬКО когда сказать нечего: если
+    есть предупреждение по файлу или срочную заявку не удалось донести до
+    финансиста, автор об этом узнает — в групповую сводку это не попадает.
+    """
     e = html.escape
     if request.has_invoice:
         source_line = "Счёт сохранён в каталог «Счета на оплату»."
     else:
         source_line = "Счёта нет — оплата по указанным реквизитам."
-    # Честная строка про финансиста: только если карточка реально доставлена.
-    if notified > 0:
-        urgent_note = (
-            "\n🔴 Финансист уведомлён о срочности." if request.urgency.is_urgent else ""
-        )
-    elif request.urgency.is_urgent:
-        urgent_note = (
-            "\n⚠️ Срочная заявка, но уведомить финансиста не удалось — "
-            "финансисты не настроены. Сообщите администратору."
-        )
-    else:
-        urgent_note = ""
+    # Про финансиста автору сообщаем только хорошее: что срочную заявку
+    # реально доставили. Об осечке узнаёт АДМИН отдельным алертом — сотрудник
+    # с ней всё равно ничего не сделает, а «сообщите администратору» в чужих
+    # руках превращается в тревогу без действия.
+    urgent_note = (
+        "\n🔴 Финансист уведомлён о срочности."
+        if notified > 0 and request.urgency.is_urgent
+        else ""
+    )
     planned = request.planned_date.strftime("%d.%m.%Y") if request.planned_date else "—"
     text = (
         f"✅ <b>Заявка принята</b>\n"
@@ -140,6 +178,13 @@ async def _send_user_confirmation(
     )
     if file_warning:
         text += f"\n{e(file_warning)}"
+    if summary_in_group:
+        # Оставляем только то, чего в групповой сводке нет.
+        extras = [part for part in (urgent_note.strip(), e(file_warning) if file_warning else "") if part]
+        if not extras:
+            return
+        text = "\n".join([f"✅ Заявка {e(request.request_id)} принята.", *extras])
+        pdf = None
     try:
         if pdf is not None:
             await bot.send_document(
@@ -198,6 +243,7 @@ async def _post_group_summary(bot: Bot, request: InvoiceRequest, chat_id: int) -
         f"📂 Статья: {e(request.article or '—')}\n"
         f"📄 Срок работ: {e(request.work_deadline or '—')}\n"
         f"📅 Срок исполнения: <b>{e(planned)}</b>\n"
+        f"💬 Комментарий: {e(request.comment or '—')}\n"
         f"{urgency_mark} · {source}"
     )
     try:

@@ -16,6 +16,26 @@ const HINTS = {
   "/api/access": { allowed: true, pending: false, has_admins: true },
 };
 
+
+/** Заполняет всё обязательное: сумма, контрагент, статья, срок работ и
+ *  реквизиты (вариант «счёта нет» — файл в тесте не приложить). */
+async function fillRequired(page) {
+  await page.evaluate(() => {
+    const set = (id, value) => {
+      const el = document.getElementById(id);
+      el.value = value;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    set("amount", "1000");
+    set("counterparty", "ООО «Ромашка»");
+    set("article-custom", "Аренда");
+    set("work-deadline", "текущий месяц");
+    document.querySelector('#invoice-seg button[data-value="0"]').click();
+    set("requisites", "ИНН 7707083893");
+  });
+  await page.waitForTimeout(250);
+}
+
 let browser;
 test.before(async () => { browser = await launch(); });
 test.after(async () => { await browser.close(); });
@@ -131,11 +151,74 @@ test("подсказки статей и контрагентов одного �
   }
 });
 
-test("родная кнопка Telegram красится акцентом шкуры", async () => {
+test("родная кнопка серая на пустой форме и акцентная на заполненной", async () => {
+  // Пустая форма — кнопка неготова: красим токеном подсказки. Гасить её нельзя,
+  // погашенную не нажать, и человек не узнает, чего не хватает.
   const neon = await openApp(browser, { skin: "neon", routes: HINTS });
-  assert.deepEqual(await neon.evaluate(() => window.__params),
-    [{ color: "#10b981", text_color: "#04140d" }]);
+  assert.deepEqual((await neon.evaluate(() => window.__params))[0],
+    { color: "#8fa09b", text_color: "#04140d" }, "пустая форма — серая кнопка");
+
+  await fillRequired(neon);
+  const params = await neon.evaluate(() => window.__params);
+  assert.deepEqual(params[params.length - 1],
+    { color: "#10b981", text_color: "#04140d" }, "заполненная — акцентная");
   await neon.close();
+});
+
+test("незаполненная форма объясняет, чего не хватает", async () => {
+  const page = await openApp(browser, { skin: "neon", routes: HINTS });
+
+  // Подсказка видна сразу, без нажатий, и перечисляет обязательные поля.
+  const hint = await page.evaluate(() => {
+    const box = document.getElementById("gaps-hint");
+    return { hidden: box.classList.contains("hidden"), text: box.textContent };
+  });
+  assert.equal(hint.hidden, false, "подсказка должна быть видна на пустой форме");
+  for (const label of ["Сумма", "Контрагент", "Статья расходов", "Срок исполнения"]) {
+    assert.ok(hint.text.includes(label), `в подсказке нет «${label}»: ${hint.text}`);
+  }
+
+  // Кнопка-заглушка серая — тот же признак неготовности вне Telegram.
+  assert.ok(await page.evaluate(() =>
+    document.getElementById("submit-fallback").classList.contains("incomplete")));
+
+  // Нажатие открывает окно со списком, а не молчит.
+  await page.evaluate(() => document.getElementById("submit-fallback").click());
+  await page.waitForTimeout(200);
+  const modal = await page.evaluate(() => ({
+    shown: document.getElementById("modal").classList.contains("shown"),
+    title: document.getElementById("modal-title").textContent,
+    items: [...document.querySelectorAll("#modal-text .modal-gaps li")]
+      .map((li) => li.textContent),
+    inView: (() => {
+      const r = document.querySelector("#modal .modal-box").getBoundingClientRect();
+      return r.top >= 0 && r.bottom <= window.innerHeight;
+    })(),
+    box: (() => {
+      const r = document.querySelector("#modal .modal-box").getBoundingClientRect();
+      return { top: Math.round(r.top), bottom: Math.round(r.bottom) };
+    })(),
+  }));
+  assert.equal(modal.shown, true, "окно со списком не открылось");
+  // Окно, до которого надо доскроллить, — не окно: панель обязана попадать
+  // в экран целиком, иначе список остаётся непрочитанным.
+  assert.equal(modal.inView, true, `панель окна вне экрана: ${JSON.stringify(modal.box)}`);
+  assert.ok(modal.items.includes("Контрагент"), `в окне нет контрагента: ${modal.items}`);
+  assert.ok(modal.items.length >= 4, `в окне мало пунктов: ${modal.items}`);
+
+  await page.close();
+});
+
+test("заполненная форма прячет подсказку и красит кнопку", async () => {
+  const page = await openApp(browser, { skin: "neon", routes: HINTS });
+  await fillRequired(page);
+  const state = await page.evaluate(() => ({
+    hintHidden: document.getElementById("gaps-hint").classList.contains("hidden"),
+    grey: document.getElementById("submit-fallback").classList.contains("incomplete"),
+  }));
+  assert.equal(state.hintHidden, true, "подсказка осталась на заполненной форме");
+  assert.equal(state.grey, false, "кнопка осталась серой на заполненной форме");
+  await page.close();
 });
 
 test("счёт стоит первым блоком формы", async () => {

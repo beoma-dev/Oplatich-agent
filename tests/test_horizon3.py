@@ -4,11 +4,13 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from telegram.error import Forbidden, NetworkError
 from telegram.ext import ApplicationHandlerStop
 
 import bot.finance_actions as fa
+from bot.models import Urgency
 from config import settings
-from services import cards, notifier, registry_sqlite, registry_xlsx, storage
+from services import cards, intake, notifier, registry_sqlite, registry_xlsx, storage
 from tests.conftest import make_request
 
 
@@ -203,3 +205,153 @@ class TestMigration:
         assert registry_sqlite.has_request_sync(r1.request_id)
         imported2, skipped2 = migrate()   # повторный запуск безопасен
         assert (imported2, skipped2) == (0, 2)
+
+
+class TestCardRetry:
+    """Повтор отправки карточки на сетевых сбоях.
+
+    Канал до Telegram идёт через WARP и пропадает на минуты. Заявка уже
+    в реестре, а карточку потом никто не перешлёт — однократный сбой сети
+    не должен её стоить.
+    """
+
+    async def test_second_attempt_succeeds(self, monkeypatch):
+        monkeypatch.setattr(notifier.asyncio, "sleep", AsyncMock())
+        calls = []
+
+        async def flaky():
+            calls.append(1)
+            if len(calls) == 1:
+                raise NetworkError("proxy unreachable")
+            return "ok"
+
+        assert await notifier._send_with_retry(flaky, 42) == "ok"
+        assert len(calls) == 2
+
+    async def test_gives_up_after_the_budget(self, monkeypatch):
+        monkeypatch.setattr(notifier.asyncio, "sleep", AsyncMock())
+        calls = []
+
+        async def always_down():
+            calls.append(1)
+            raise NetworkError("proxy unreachable")
+
+        with pytest.raises(NetworkError):
+            await notifier._send_with_retry(always_down, 42)
+        assert len(calls) == len(notifier._RETRY_PAUSES) + 1
+
+    async def test_meaningful_refusals_are_not_retried(self, monkeypatch):
+        """Бот заблокирован или чат не найден — повторять бессмысленно."""
+        monkeypatch.setattr(notifier.asyncio, "sleep", AsyncMock())
+        calls = []
+
+        async def forbidden():
+            calls.append(1)
+            raise Forbidden("bot was blocked by the user")
+
+        with pytest.raises(Forbidden):
+            await notifier._send_with_retry(forbidden, 42)
+        assert len(calls) == 1
+
+
+class TestNotifications:
+    """Кому что уходит после подачи заявки."""
+
+    @staticmethod
+    def _bot():
+        bot = MagicMock()
+        bot.send_message = AsyncMock()
+        bot.send_document = AsyncMock()
+        # Итог в группу публикуется только участнику чата: return_chat_id
+        # приходит из ссылки и может быть подделан.
+        member = MagicMock()
+        member.status = "member"
+        bot.get_chat_member = AsyncMock(return_value=member)
+        return bot
+
+    async def test_group_summary_carries_the_comment(self, tmp_paths):
+        bot = self._bot()
+        request = make_request(comment="аренда офиса за август", work_deadline="текущий месяц")
+        await intake._post_group_summary(bot, request, -100123)
+        text = bot.send_message.await_args.kwargs["text"]
+        assert "аренда офиса за август" in text
+        assert "текущий месяц" in text
+
+    async def test_group_summary_shows_a_dash_without_comment(self, tmp_paths):
+        bot = self._bot()
+        await intake._post_group_summary(bot, make_request(comment=""), -100123)
+        assert "Комментарий: —" in bot.send_message.await_args.kwargs["text"]
+
+    async def test_author_gets_nothing_when_the_group_already_knows(self):
+        """Итог уже в группе — вторым сообщением тот же текст автору не пишем."""
+        bot = self._bot()
+        await intake._send_user_confirmation(
+            bot, make_request(), pdf=b"%PDF-1.4", summary_in_group=True
+        )
+        bot.send_message.assert_not_awaited()
+        bot.send_document.assert_not_awaited()
+
+    async def test_admin_is_alerted_when_the_card_reached_nobody(self, tmp_paths, monkeypatch):
+        """Заявка записана, карточки нет — тишины быть не должно.
+
+        Именно так потерялась заявка при двухминутном провале WARP: сбой
+        видел только лог.
+        """
+        from services import alerts
+
+        monkeypatch.setattr(intake, "effective_finance_recipients", lambda: ["7"])
+        seen = {}
+
+        async def fake_alert(bot, title, details="", *, signature=None):
+            seen["title"], seen["details"] = title, details
+            return 1
+
+        monkeypatch.setattr(alerts, "alert_admins", fake_alert)
+        bot = self._bot()
+        monkeypatch.setattr(intake, "notify_finance", AsyncMock(return_value=0))
+        await intake.finalize_submission(bot, make_request(), invoice_file=None)
+        assert "не дошла" in seen["title"]
+
+    async def test_admin_is_alerted_when_no_financiers_configured(self, tmp_paths, monkeypatch):
+        from services import alerts
+
+        monkeypatch.setattr(intake, "effective_finance_recipients", lambda: [])
+        seen = {}
+
+        async def fake_alert(bot, title, details="", *, signature=None):
+            seen["title"] = title
+            return 1
+
+        monkeypatch.setattr(alerts, "alert_admins", fake_alert)
+        monkeypatch.setattr(intake, "notify_finance", AsyncMock(return_value=0))
+        await intake.finalize_submission(self._bot(), make_request(), invoice_file=None)
+        assert "не настроены" in seen["title"]
+
+    async def test_author_is_not_told_about_the_financier_failure(self):
+        """Осечку чинит админ — сотруднику про неё не пишем."""
+        bot = self._bot()
+        await intake._send_user_confirmation(
+            bot, make_request(urgency=Urgency.URGENT), pdf=b"%PDF-1.4", notified=0
+        )
+        caption = bot.send_document.await_args.kwargs["caption"]
+        assert "не удалось" not in caption
+        assert "администратору" not in caption
+
+    async def test_author_still_hears_about_a_file_warning(self):
+        """В групповую сводку предупреждения не пишут — автор узнаёт лично."""
+        bot = self._bot()
+        await intake._send_user_confirmation(
+            bot,
+            make_request(),
+            pdf=b"%PDF-1.4",
+            file_warning="⚠️ Сумма в счёте не совпала",
+            summary_in_group=True,
+        )
+        bot.send_document.assert_not_awaited()
+        assert "не совпала" in bot.send_message.await_args.kwargs["text"]
+
+    async def test_without_a_group_the_author_gets_the_full_confirmation(self):
+        bot = self._bot()
+        await intake._send_user_confirmation(bot, make_request(), pdf=b"%PDF-1.4")
+        bot.send_document.assert_awaited()
+        assert "Заявка принята" in bot.send_document.await_args.kwargs["caption"]

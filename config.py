@@ -129,6 +129,12 @@ class Settings(BaseSettings):
     # Реквизиты организации строкой — вторая строка шапки PDF. Пусто —
     # печатается нейтральная подпись «Финансовый документ».
     org_details: str = Field("", alias="ORG_DETAILS")
+    # ИНН НАШИХ юрлиц и ИП через запятую. Нужен автозаполнению: мы сами не
+    # можем быть контрагентом, платим не себе. В счетах наша сторона стоит
+    # рядом с чужой и выглядит так же («ИП Иванов И.И.»), а PDF-слой к тому
+    # же путает колонки и подставляет метку поставщика к строке покупателя —
+    # без этого списка отличить их нечем. Пусто = проверка выключена.
+    org_inn: str = Field("", alias="ORG_INN")
     # Напоминания о сроках: финансистам — что оплатить завтра, админам —
     # что просрочено. Раз в сутки в reminder_time (в TIMEZONE).
     reminders_enabled: bool = Field(True, alias="REMINDERS_ENABLED")
@@ -180,6 +186,15 @@ class Settings(BaseSettings):
 
     def employee_name_for(self, user_id: int) -> str | None:
         return self.employee_names.get(user_id)
+
+    @property
+    def own_inn(self) -> set[str]:
+        """ИНН наших организаций (только цифры) — множество для проверок."""
+        return {
+            digits
+            for part in self.org_inn.split(",")
+            if (digits := "".join(ch for ch in part if ch.isdigit()))
+        }
 
     @property
     def webapp_enabled(self) -> bool:

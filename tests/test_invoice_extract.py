@@ -98,6 +98,61 @@ class TestRequisites:
         assert fields["corr_account"] == "30101810400000000225"
 
 
+class TestAmountOnRealLayouts:
+    """Итог в живых счетах: метка и число редко стоят рядом."""
+
+    def test_number_on_the_next_line(self):
+        """«Всего к оплате:» и число PDF-слой разносит по строкам."""
+        assert ex.find_amount("Всего к оплате:\n14 612,00\n") == ex.Decimal("14612.00")
+
+    def test_junk_between_label_and_number(self):
+        """«Итого с НДС 7%: 8 759,00» — между меткой и итогом ещё цифры."""
+        assert ex.find_amount("Итого с НДС 7%: 8 759,00") == ex.Decimal("8759.00")
+
+    def test_stem_without_ending(self):
+        """В счетах встречается «Итог к оплате», а не только «Итого»."""
+        assert ex.find_amount("Итог к оплате: 105 000,00 ₽") == ex.Decimal("105000.00")
+
+    def test_total_wins_over_its_parts(self):
+        text = "Итого: 683 453,00\nВ том числе НДС 5%: 32 545,38\nВсего к оплате: 683 453,00"
+        assert ex.find_amount(text) == ex.Decimal("683453.00")
+
+    def test_account_number_is_not_an_amount(self):
+        """Рядом с «Сумма» может лежать номер счёта — он отсекается по величине."""
+        assert ex.find_amount("Сумма\n40802810703500018523") is None
+
+
+class TestSettlementAccount:
+    def test_correspondent_account_is_not_the_settlement_one(self):
+        """Р/с и к/с путать нельзя: в тексте к/с часто стоит выше.
+
+        Пока «301…» входил в шаблон расчётного счёта, в поле «Р/с» уезжал
+        корреспондентский счёт банка — платёж по таким реквизитам не уйдёт.
+        """
+        text = (
+            "Банк получателя ООО «Банк Точка»\n"
+            "Кор. Счёт 30101810745374525104\n"
+            "ИНН 3808195187 КПП 772001001 Счёт 40702810720000175971\n"
+        )
+        fields = ex.extract_fields(text)
+        assert fields["account"] == "40702810720000175971"
+        assert fields["corr_account"] == "30101810745374525104"
+
+
+class TestBikAndInnOnBrokenLayouts:
+    def test_bik_offset_from_its_label(self):
+        """Число, к/с и метка «БИК» оказались на трёх разных строках."""
+        text = "Банк получателя\n044525974\n30101810145250000974\nАО «ТБанк» БИК\n"
+        assert ex.find_bik(text) == "044525974"
+
+    def test_bik_by_label_still_wins(self):
+        assert ex.find_bik("БИК 044525225\nАО «ТБанк» 044525974") == "044525225"
+
+    def test_inn_glued_before_its_label(self):
+        """В платёжном поручении номер стоит ПЕРЕД меткой и склеен с ней."""
+        assert ex.find_inn("7810945525ИНН") == "7810945525"
+
+
 class TestCounterparty:
     def test_supplier_not_buyer(self):
         """Платим поставщику: покупателя подставлять нельзя."""
@@ -270,6 +325,76 @@ class TestCounterpartyOnRealLayouts:
         """Название банка содержит «банк» — в запасном пути это отсев."""
         text = "ООО «Банк Точка» г. Москва\nСч. № 30101810745374525104\n"
         assert ex.find_counterparty(text) is None
+
+
+class TestCounterpartyIsNeverOurOwnSide:
+    """Мы сами не можем быть контрагентом: платим не себе.
+
+    В форме СберБизнеса PDF-слой рассыпает колонки — метка «Поставщик:»
+    оказывается над строкой ПОКУПАТЕЛЯ, и идти за меткой нельзя. Отличить
+    свою сторону от чужой по виду невозможно, обе выглядят как «ИП с ФИО»,
+    поэтому опираемся на ИНН из ORG_INN.
+    """
+
+    # Раскладка снята с реального счёта: метка врёт, имя получателя лежит
+    # выше, рядом со своим ИНН, и разорвано переносом строки.
+    SCRAMBLED = (
+        "Создано в СберБизнес\n"
+        "ПАО Сбербанк, генеральная лицензия № 1481\n"
+        " Банк получателя\n"
+        "БИК\n"
+        "Счёт на оплату № 25 от 21.08.2026\n"
+        "ИНН 500100732259\n"
+        "ПАО Сбербанк 044525225\n"
+        "Получатель\n"
+        "30101 810 4 0000 0000225\n"
+        "24 августа 2026\n"
+        "ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ СИДОРОВА\n"
+        "ТАТЬЯНА ВАЛЕРЬЕВНА\n"
+        "ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ СИДОРОВА ТАТЬЯНА ВАЛЕРЬЕВНА, ИНН\n"
+        "500100732259\n"
+        "Поставщик:\n"
+        "Индивидуальный предприниматель Петров Пётр Петрович, ИНН 771234567890, 183008\n"
+        "Покупатель:\n"
+    )
+
+    def test_label_pointing_at_us_is_skipped(self, monkeypatch):
+        """Метка ведёт на нас — значит колонки перепутаны, ищем дальше."""
+        monkeypatch.setattr(ex.settings, "org_inn", "771234567890")
+        assert ex.find_counterparty(self.SCRAMBLED) == (
+            "ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ СИДОРОВА ТАТЬЯНА ВАЛЕРЬЕВНА"
+        )
+
+    def test_without_org_inn_nothing_changes(self, monkeypatch):
+        """ORG_INN пуст — проверка выключена, поведение прежнее."""
+        monkeypatch.setattr(ex.settings, "org_inn", "")
+        assert ex.find_counterparty(self.SCRAMBLED) == (
+            "Индивидуальный предприниматель Петров Пётр Петрович"
+        )
+
+
+class TestInnLength:
+    def test_twelve_digit_inn_is_not_truncated(self):
+        """У предпринимателя ИНН из 12 цифр.
+
+        В альтернативе «(\\d{10}|\\d{12})» движок брал первые десять,
+        контрольные числа не сходились — и ИНН у любого ИП не определялся.
+        """
+        assert ex.find_inn("ИНН 500100732259") == "500100732259"
+
+    def test_ten_digit_inn_still_works(self):
+        assert ex.find_inn("ИНН 7707083893") == "7707083893"
+
+
+class TestGluedTail:
+    def test_inn_glued_to_the_name_is_cut(self):
+        """PDF-слой склеивает хвост с именем: «…РЕНАТОВИЧИНН 7712…»."""
+        text = "Поставщик: ИП ПЕТРОВ ПЁТР ПЕТРОВИЧИНН 771234567890"
+        assert ex.find_counterparty(text) == "ИП ПЕТРОВ ПЁТР ПЕТРОВИЧ"
+
+    def test_name_ending_in_inn_survives(self):
+        """«ООО ФИНН» не должно превратиться в «ООО Ф» — цифр после нет."""
+        assert ex.find_counterparty("Поставщик: ООО ФИНН") == "ООО ФИНН"
 
 
 class TestInvoiceNumber:
