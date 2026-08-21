@@ -151,6 +151,42 @@ test("подсказки статей и контрагентов одного �
   }
 });
 
+test("брак в поле виден сразу, а не после отправки", async () => {
+  // «ннннннннн» сервер отклонит и сам, но человек узнавал бы об этом только
+  // после нажатия, а печатая — не видел ничего.
+  const page = await openApp(browser, { skin: "tg", routes: HINTS });
+  await fillRequired(page);
+  const set = (id, v) => page.evaluate(([i, x]) => {
+    const el = document.getElementById(i);
+    el.value = x;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  }, [id, v]);
+  const hint = () => page.evaluate(() => ({
+    text: document.getElementById("gaps-hint").textContent,
+    hidden: document.getElementById("gaps-hint").classList.contains("hidden"),
+    grey: document.getElementById("submit-fallback").classList.contains("incomplete"),
+  }));
+
+  await set("counterparty", "н".repeat(22));
+  await page.waitForTimeout(200);
+  let state = await hint();
+  assert.match(state.text, /повторяется/, `не назвали причину: ${state.text}`);
+  assert.equal(state.grey, true, "кнопка должна погаснуть");
+
+  await set("counterparty", "12321432132132132");
+  await page.waitForTimeout(200);
+  state = await hint();
+  assert.match(state.text, /нет ни одной буквы/, `не назвали причину: ${state.text}`);
+
+  // Кириллица — это буквы: \W в JS работает по ASCII и когда-то их не считал.
+  await set("counterparty", "ООО «Ромашка»");
+  await page.waitForTimeout(200);
+  state = await hint();
+  assert.equal(state.hidden, true, `подсказка осталась: ${state.text}`);
+  assert.equal(state.grey, false, "кнопка осталась серой на верном значении");
+  await page.close();
+});
+
 test("подозрительный текст спрашивает подтверждение, а не отказывает", async () => {
   // Сервер отвечает 409 «похоже на набор символов»: эвристика иногда
   // ошибётся, и сорванная оплата дороже одной кривой строки.

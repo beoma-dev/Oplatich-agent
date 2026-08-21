@@ -750,13 +750,38 @@
    *  а нажать её и спросить было нельзя — погашенная кнопка не нажимается.
    *  Список нужен и кнопке (красить ли серым), и окну «что дозаполнить».
    *  Комментарий необязателен и здесь не проверяется. */
+  /** Зеркало looks_broken из bot/validators.py — жёсткие правила, которые не
+   *  могут ошибиться. Держим на клиенте, чтобы реакция была СРАЗУ: сервер
+   *  такое тоже отклонит, но человек узнавал об этом только после отправки,
+   *  а печатая «ннннннннн», не видел ничего. Менять — синхронно с сервером.
+   *  requireLetter=false — для срока работ: его законно пишут датой. */
+  function brokenReason(value, requireLetter) {
+    var text = (value || "").trim();
+    if (!text) return null;                       // пустое — это «не заполнено»
+    if (text.length < 2) return "слишком короткое значение";
+    // \p{L}, а не [^\W\d_]: в JS класс \W работает по ASCII, и кириллица
+    // считалась бы «не буквой» — «Аренда» получала бы отказ.
+    if (requireLetter !== false && !/\p{L}/u.test(text)) {
+      return "нет ни одной буквы";
+    }
+    if (/(.)\1{5,}/u.test(text)) return "один символ повторяется шесть раз подряд";
+    return null;
+  }
+
   function missingFields() {
     var gaps = [];
     function gap(label, el) { gaps.push({ label: label, el: el || null }); }
+    function checkBroken(label, value, el, requireLetter) {
+      var why = brokenReason(value, requireLetter);
+      if (why) gap(label + " — " + why, el);
+    }
     if (parseAmount(amountEl.value) === null) gap("Сумма", amountEl);
     if (!cpEl.value.trim()) gap("Контрагент", cpEl);
+    else checkBroken("Контрагент", cpEl.value, cpEl, true);
     if (!currentArticle()) gap("Статья расходов", $("article-custom"));
+    else checkBroken("Статья расходов", currentArticle(), $("article-custom"), true);
     if (!deadlineEl.value.trim()) gap("Срок исполнения работ по договору", deadlineEl);
+    else checkBroken("Срок исполнения работ", deadlineEl.value, deadlineEl, false);
     if (state.urgency === "CUSTOM" && !plannedEl.value) gap("Плановая дата оплаты", plannedEl);
     else if (state.urgency === "CUSTOM" && plannedEl.value < todayISO()) {
       gap("Дата оплаты — она не может быть в прошлом", plannedEl);
@@ -785,7 +810,12 @@
     }
     box.innerHTML = "";
     var head = document.createElement("b");
-    head.textContent = gaps.length === 1
+    // Среди пунктов бывает не только «не заполнено», но и «заполнено плохо»,
+    // поэтому заголовок нейтральный, когда есть хотя бы один разбор причины.
+    var hasReason = gaps.some(function (g) { return g.label.indexOf(" — ") !== -1; });
+    head.textContent = hasReason
+      ? "Проверьте поля:"
+      : gaps.length === 1
       ? "Осталось заполнить одно поле:"
       : "Осталось заполнить " + gaps.length + " " + plural(gaps.length, "поле", "поля", "полей") + ":";
     box.appendChild(head);

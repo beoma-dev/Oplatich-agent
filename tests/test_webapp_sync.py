@@ -453,6 +453,30 @@ def test_main_button_follows_the_skin():
     assert "paintMainButton();" in skin[:900]
 
 
+def test_hard_text_rules_mirror():
+    """Жёсткие правила текста продублированы в JS — иначе реакция запоздает.
+
+    Сервер такое тоже отклонит, но человек узнавал бы об этом только после
+    отправки: печатая «ннннннннн», он не видел ничего. Правила простые и
+    детерминированные, поэтому зеркалятся; эвристика «похоже на мусор»
+    намеренно осталась только на сервере — дублировать её значит развести
+    два разных мнения о том, что считать мусором.
+    """
+    from bot.validators import _REPEAT_RE, looks_broken
+
+    assert "function brokenReason(" in HTML
+    # Порог повтора один и тот же с обеих сторон.
+    assert "{5,}" in _REPEAT_RE.pattern
+    assert "/(.)\\1{5,}/u" in HTML, "в JS другой порог повтора"
+    # Буквы проверяются юникодным классом: \W в JS работает по ASCII, и
+    # кириллица считалась бы «не буквой».
+    assert "/\\p{L}/u" in HTML
+    # Обе стороны согласны на конкретных значениях.
+    assert looks_broken("н" * 22)
+    assert looks_broken("12321432132")
+    assert looks_broken("ООО «Ромашка»") is None
+
+
 def test_registry_card_opens_sheet_and_drive():
     """В карточке реестра — и таблица, и папка Диска с файлами счетов."""
     assert 'id="open-sheet"' in HTML
