@@ -190,8 +190,19 @@ test("незаполненная форма объясняет, чего не х
     title: document.getElementById("modal-title").textContent,
     items: [...document.querySelectorAll("#modal-text .modal-gaps li")]
       .map((li) => li.textContent),
+    inView: (() => {
+      const r = document.querySelector("#modal .modal-box").getBoundingClientRect();
+      return r.top >= 0 && r.bottom <= window.innerHeight;
+    })(),
+    box: (() => {
+      const r = document.querySelector("#modal .modal-box").getBoundingClientRect();
+      return { top: Math.round(r.top), bottom: Math.round(r.bottom) };
+    })(),
   }));
   assert.equal(modal.shown, true, "окно со списком не открылось");
+  // Окно, до которого надо доскроллить, — не окно: панель обязана попадать
+  // в экран целиком, иначе список остаётся непрочитанным.
+  assert.equal(modal.inView, true, `панель окна вне экрана: ${JSON.stringify(modal.box)}`);
   assert.ok(modal.items.includes("Контрагент"), `в окне нет контрагента: ${modal.items}`);
   assert.ok(modal.items.length >= 4, `в окне мало пунктов: ${modal.items}`);
 
