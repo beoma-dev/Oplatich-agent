@@ -257,7 +257,7 @@
     var v = parseAmount(this.value);
     if (v !== null) this.value = formatAmount(v);
   });
-  [cpEl, commentEl, reqEl].forEach(function (el) {
+  [cpEl, commentEl, reqEl, deadlineEl].forEach(function (el) {
     el.addEventListener("input", function () {
       el.classList.remove("invalid");
       markDirty();
@@ -743,19 +743,75 @@
   // parseAmount/formatAmount — в form-lib.js
 
   // --- Валидация формы целиком --------------------------------------------------
-  function validationError(markFields) {
-    var err = null, el = null;
-    if (parseAmount(amountEl.value) === null) { err = "Введите корректную сумму."; el = amountEl; }
-    else if (!cpEl.value.trim()) { err = "Укажите контрагента."; el = cpEl; }
-    else if (!currentArticle()) { err = "Выберите статью расходов."; el = $("article-custom"); }
-    else if (!deadlineEl.value.trim()) { err = "Укажите срок исполнения работ по договору."; el = deadlineEl; }
-    else if (state.urgency === "CUSTOM" && !plannedEl.value) { err = "Выберите дату оплаты в календаре."; el = plannedEl; }
-    else if (state.urgency === "CUSTOM" && plannedEl.value < todayISO()) { err = "Дата оплаты не может быть в прошлом."; el = plannedEl; }
-    // Комментарий необязателен.
-    else if (state.hasInvoice && !state.file) { err = "Прикрепите файл счёта."; }
-    else if (!state.hasInvoice && !reqEl.value.trim()) { err = "Укажите реквизиты для оплаты."; el = reqEl; }
-    if (markFields && el) el.classList.add("invalid");
-    return err;
+  /** Чего не хватает, СПИСКОМ: [{label, el}].
+   *
+   *  Раньше проверка возвращала только ПЕРВУЮ ошибку, а кнопка отправки просто
+   *  гасла. Человек видел серый прямоугольник и не знал, чего от него хотят,
+   *  а нажать её и спросить было нельзя — погашенная кнопка не нажимается.
+   *  Список нужен и кнопке (красить ли серым), и окну «что дозаполнить».
+   *  Комментарий необязателен и здесь не проверяется. */
+  function missingFields() {
+    var gaps = [];
+    function gap(label, el) { gaps.push({ label: label, el: el || null }); }
+    if (parseAmount(amountEl.value) === null) gap("Сумма", amountEl);
+    if (!cpEl.value.trim()) gap("Контрагент", cpEl);
+    if (!currentArticle()) gap("Статья расходов", $("article-custom"));
+    if (!deadlineEl.value.trim()) gap("Срок исполнения работ по договору", deadlineEl);
+    if (state.urgency === "CUSTOM" && !plannedEl.value) gap("Плановая дата оплаты", plannedEl);
+    else if (state.urgency === "CUSTOM" && plannedEl.value < todayISO()) {
+      gap("Дата оплаты — она не может быть в прошлом", plannedEl);
+    }
+    if (state.hasInvoice && !state.file) gap("Файл счёта");
+    if (!state.hasInvoice && !reqEl.value.trim()) gap("Реквизиты для оплаты", reqEl);
+    return gaps;
+  }
+
+  /** Живая подсказка над кнопкой: видно, чего не хватает, ещё до нажатия. */
+  function updateGapsHint(gaps) {
+    var box = $("gaps-hint");
+    if (!box) return;
+    if (!gaps.length || canSubmit === false) {
+      box.classList.add("hidden");
+      box.textContent = "";
+      return;
+    }
+    box.innerHTML = "";
+    var head = document.createElement("b");
+    head.textContent = gaps.length === 1
+      ? "Осталось заполнить одно поле:"
+      : "Осталось заполнить " + gaps.length + ":";
+    box.appendChild(head);
+    var list = document.createElement("div");
+    list.className = "gap-item";
+    list.textContent = gaps.map(function (g) { return g.label; }).join(" · ");
+    box.appendChild(list);
+    box.classList.remove("hidden");
+  }
+
+  /** Окно со списком незаполненного + подсветка полей и переход к первому. */
+  function showGapsModal(gaps) {
+    gaps.forEach(function (g) { if (g.el) g.el.classList.add("invalid"); });
+    var box = document.createElement("div");
+    var lead = document.createElement("div");
+    lead.textContent = gaps.length === 1
+      ? "Чтобы отправить заявку, заполните это поле:"
+      : "Чтобы отправить заявку, заполните эти поля:";
+    box.appendChild(lead);
+    var list = document.createElement("ul");
+    list.className = "modal-gaps";
+    gaps.forEach(function (g) {
+      var li = document.createElement("li");
+      li.textContent = g.label;
+      list.appendChild(li);
+    });
+    box.appendChild(list);
+    showModal("Не всё заполнено", box, [{ text: "Заполнить" }]);
+    var first = gaps.filter(function (g) { return g.el; })[0];
+    if (first) {
+      try { first.el.focus({ preventScroll: true }); } catch (e) { first.el.focus(); }
+      first.el.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("warning");
   }
 
   // Доступ к подаче: null — ещё не спросили, false — отказано.
@@ -772,11 +828,18 @@
   }
 
   function refreshMainButton() {
-    var ok = validationError(false) === null && canSubmit !== false;
+    var gaps = missingFields();
+    var ok = gaps.length === 0 && canSubmit !== false;
+    updateGapsHint(gaps);
+    var fb = $("submit-fallback");
+    if (fb) fb.classList.toggle("incomplete", !ok && canSubmit !== false);
     if (tg && insideTelegram) {
       if (canSubmit === false) { tg.MainButton.hide(); return; }
       tg.MainButton.setText("Отправить заявку");
-      if (ok && !state.submitting) tg.MainButton.enable(); else tg.MainButton.disable();
+      // Гасим ТОЛЬКО во время отправки. При незаполненной форме кнопка серая,
+      // но живая: по нажатию открывается список того, чего не хватает.
+      if (state.submitting) tg.MainButton.disable(); else tg.MainButton.enable();
+      paintMainButton(ok);
       if (!tg.MainButton.isVisible) tg.MainButton.show();
     }
   }
@@ -785,11 +848,17 @@
    *  «Отправить заявку» оставалась синей и выбивалась из изумруда. Берём цвет
    *  из тех же токенов, что и вся страница: в телеграмной шкуре --accent и
    *  есть кнопочный цвет темы, так что там ничего не меняется. */
-  function paintMainButton() {
+  function paintMainButton(ready) {
     if (!tg || !insideTelegram || !tg.MainButton || !tg.MainButton.setParams) return;
+    // Вызов без аргумента (например, при смене шкуры) не должен возвращать
+    // акцентный цвет незаполненной форме — считаем готовность сами.
+    if (ready === undefined) ready = missingFields().length === 0 && canSubmit !== false;
+    // ready === false — форма не заполнена: красим серым токеном подсказки,
+    // чтобы кнопка выглядела неготовой, оставаясь нажимаемой.
+    var bg = ready === false ? "var(--hint)" : "var(--accent)";
     var probe = document.createElement("span");
     probe.style.cssText = "position:absolute;left:-9999px;" +
-      "color:var(--accent);background-color:var(--accent-text)";
+      "color:" + bg + ";background-color:var(--accent-text)";
     document.body.appendChild(probe);
     var st = getComputedStyle(probe);
     var color = cssHex(st.color);
@@ -840,8 +909,8 @@
 
   function submit(force) {
     if (state.submitting) return;
-    var err = validationError(true);
-    if (err) { showError(err); return; }
+    var gaps = missingFields();
+    if (gaps.length) { showGapsModal(gaps); return; }
     hideError();
     state.submitting = true;
     if (tg && insideTelegram) { tg.MainButton.showProgress(); tg.MainButton.disable(); }

@@ -442,8 +442,11 @@ def test_main_button_follows_the_skin():
     """Родная кнопка Telegram красится темой клиента и в неоне была синей."""
     assert "function paintMainButton(" in HTML
     assert "tg.MainButton.setParams({ color: color, text_color: textColor })" in HTML
-    # Цвет берём из тех же токенов, что и вся страница.
-    assert "color:var(--accent);background-color:var(--accent-text)" in HTML
+    # Цвет берём из тех же токенов, что и вся страница, и он ЗАВИСИТ от
+    # готовности формы: незаполненная — серый токен подсказки, заполненная —
+    # акцент. Гасить кнопку нельзя, погашенную не нажать и не спросить.
+    assert 'ready === false ? "var(--hint)" : "var(--accent)"' in HTML
+    assert 'color:" + bg + ";background-color:var(--accent-text)' in HTML
     assert "function cssHex(" in HTML, "setParams принимает только hex"
     # Перекрашивать надо при каждой смене шкуры, а не один раз на старте.
     skin = HTML[HTML.index("function applySkin("):]

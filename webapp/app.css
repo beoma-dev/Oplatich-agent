@@ -1382,6 +1382,35 @@
     transition: transform .12s ease, opacity .15s ease;
   }
   #submit-fallback:active { transform: scale(.98); }
+  /* Незаполненная форма: кнопка серая, но НАЖИМАЕМАЯ — по нажатию открывается
+     список того, чего не хватает. Погашенную кнопку нажать нельзя, и человек
+     оставался с серым прямоугольником без объяснений. */
+  #submit-fallback.incomplete {
+    background: color-mix(in srgb, var(--hint) 45%, var(--bg2));
+    color: var(--hint);
+  }
+
+  /* Что осталось заполнить — видно без нажатия. */
+  #gaps-hint {
+    margin-top: 10px;
+    padding: 11px 13px;
+    border-radius: var(--radius);
+    border: 1px solid color-mix(in srgb, var(--hint) 32%, transparent);
+    background: color-mix(in srgb, var(--hint) 10%, var(--bg));
+    color: var(--text);
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+  #gaps-hint b { font-weight: 600; }
+  #gaps-hint .gap-item { color: var(--hint); }
+
+  /* Список незаполненного в модальном окне. */
+  .modal-gaps {
+    margin: 8px 0 0;
+    padding-left: 20px;
+    line-height: 1.6;
+  }
+  .modal-gaps li { margin-bottom: 2px; }
 
   /* ---------- Успех ---------- */
   #success {
