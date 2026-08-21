@@ -34,7 +34,7 @@ from bot.validators import (
     parse_planned_date,
     parse_registry_filter_date,
     validate_file,
-    validate_optional_text_field,
+    validate_line_field,
     validate_text_field,
 )
 from config import settings
@@ -924,8 +924,12 @@ async def submit_invoice(
         )
         # Срок исполнения — свободный текст («текущий месяц», «поставка
         # в декабре»), поэтому датой не разбирается: только длина и пробелы.
-        work_deadline_value = validate_optional_text_field(
-            work_deadline, field_name="Срок исполнения работ по договору", max_len=200
+        # Поле ОБЯЗАТЕЛЬНОЕ: пустое значение отклоняем.
+        work_deadline_value = validate_line_field(
+            work_deadline,
+            field_name="Срок исполнения работ по договору",
+            max_len=200,
+            required=True,
         )
         # Комментарий необязателен: валидируем только непустой (длина).
         comment_value = (

@@ -13,7 +13,7 @@ from bot.validators import (
     parse_planned_date,
     parse_registry_filter_date,
     validate_file,
-    validate_optional_text_field,
+    validate_line_field,
     validate_text_field,
 )
 
@@ -127,25 +127,30 @@ class TestRegistryFilterDate:
             parse_registry_filter_date("позавчера")
 
 
-class TestOptionalTextField:
-    """Срок исполнения работ: свободный текст, пустое значение допустимо."""
+class TestLineField:
+    """Срок исполнения работ: свободный текст в одну строку."""
 
     def test_free_text_passes(self):
         for value in ("текущий месяц", "поставка в декабре", "услуга на 6 месяцев",
                       "15.12.2026"):
-            assert validate_optional_text_field(value, field_name="Срок") == value
+            assert validate_line_field(value, field_name="Срок") == value
 
-    def test_empty_is_allowed(self):
-        assert validate_optional_text_field("", field_name="Срок") == ""
-        assert validate_optional_text_field("   ", field_name="Срок") == ""
-        assert validate_optional_text_field(None, field_name="Срок") == ""
+    def test_empty_allowed_when_not_required(self):
+        assert validate_line_field("", field_name="Срок") == ""
+        assert validate_line_field("   ", field_name="Срок") == ""
+        assert validate_line_field(None, field_name="Срок") == ""
+
+    def test_empty_rejected_when_required(self):
+        for value in ("", "   ", None):
+            with pytest.raises(ValidationError):
+                validate_line_field(value, field_name="Срок", required=True)
 
     def test_newlines_collapse(self):
         """Поле однострочное: в карточке и PDF многострочный ввод разъезжается."""
-        assert validate_optional_text_field(
+        assert validate_line_field(
             " поставка\n  в декабре ", field_name="Срок"
         ) == "поставка в декабре"
 
     def test_too_long_is_rejected(self):
         with pytest.raises(ValidationError):
-            validate_optional_text_field("я" * 201, field_name="Срок", max_len=200)
+            validate_line_field("я" * 201, field_name="Срок", max_len=200)

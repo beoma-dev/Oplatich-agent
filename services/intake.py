@@ -94,8 +94,18 @@ async def finalize_submission(
     except Exception:  # noqa: BLE001
         log.exception("Сбой уведомления финансистов по заявке %s", request.request_id)
 
+    # Заявка подана из группы — итог уже уходит туда, и личное подтверждение
+    # автору было бы ровно тем же текстом второй раз. Дублировать не нужно,
+    # но и молчать нельзя: предупреждение автопроверки счёта и осечку с
+    # уведомлением финансиста в групповую сводку не пишут (в ней намеренно
+    # нет ничего чувствительного), поэтому их автор получает отдельно.
     await _send_user_confirmation(
-        bot, request, pdf=pdf, notified=notified, file_warning=file_warning
+        bot,
+        request,
+        pdf=pdf,
+        notified=notified,
+        file_warning=file_warning,
+        summary_in_group=return_chat_id is not None,
     )
 
     if return_chat_id is not None:
@@ -110,8 +120,15 @@ async def _send_user_confirmation(
     pdf: bytes | None = None,
     notified: int = 0,
     file_warning: str | None = None,
+    summary_in_group: bool = False,
 ) -> None:
-    """Личное подтверждение автору — ОДНИМ сообщением: PDF с подписью."""
+    """Личное подтверждение автору — ОДНИМ сообщением: PDF с подписью.
+
+    `summary_in_group=True` — итог уже опубликован в группе, второй раз тем
+    же текстом автору не пишем. Молчим ТОЛЬКО когда сказать нечего: если
+    есть предупреждение по файлу или срочную заявку не удалось донести до
+    финансиста, автор об этом узнает — в групповую сводку это не попадает.
+    """
     e = html.escape
     if request.has_invoice:
         source_line = "Счёт сохранён в каталог «Счета на оплату»."
@@ -140,6 +157,13 @@ async def _send_user_confirmation(
     )
     if file_warning:
         text += f"\n{e(file_warning)}"
+    if summary_in_group:
+        # Оставляем только то, чего в групповой сводке нет.
+        extras = [part for part in (urgent_note.strip(), e(file_warning) if file_warning else "") if part]
+        if not extras:
+            return
+        text = "\n".join([f"✅ Заявка {e(request.request_id)} принята.", *extras])
+        pdf = None
     try:
         if pdf is not None:
             await bot.send_document(
@@ -198,6 +222,7 @@ async def _post_group_summary(bot: Bot, request: InvoiceRequest, chat_id: int) -
         f"📂 Статья: {e(request.article or '—')}\n"
         f"📄 Срок работ: {e(request.work_deadline or '—')}\n"
         f"📅 Срок исполнения: <b>{e(planned)}</b>\n"
+        f"💬 Комментарий: {e(request.comment or '—')}\n"
         f"{urgency_mark} · {source}"
     )
     try:

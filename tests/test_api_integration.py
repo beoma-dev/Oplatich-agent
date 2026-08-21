@@ -67,6 +67,7 @@ def _form(**overrides) -> dict:
         "counterparty": "ООО «Ромашка»",
         "article": "Аренда",
         "planned_date": "auto",
+        "work_deadline": "текущий месяц",
         "comment": "аренда за июль",
         "urgency": "NORMAL",
         "has_invoice": "0",
@@ -95,14 +96,22 @@ class TestWorkDeadline:
         ws = load_workbook(settings.registry_path).active
         assert ws.cell(2, len(SHEET_HEADERS)).value == "поставка в декабре"
 
-    async def test_absent_field_is_accepted(self, api, monkeypatch):
-        """Старая версия Mini App из кеша поля не пришлёт — это не должно быть 422."""
+    async def test_absent_field_is_rejected(self, api, monkeypatch):
+        """Поле обязательное: без него заявку не принимаем."""
         client, _ = api
         _allow(monkeypatch)
         data = _form()
         data.pop("work_deadline", None)
         resp = await client.post("/api/invoice", data=data, headers=_auth())
-        assert resp.status_code == 200, resp.text
+        assert resp.status_code == 422
+
+    async def test_blank_field_is_rejected(self, api, monkeypatch):
+        client, _ = api
+        _allow(monkeypatch)
+        resp = await client.post(
+            "/api/invoice", data=_form(work_deadline="   "), headers=_auth()
+        )
+        assert resp.status_code == 422
 
     async def test_too_long_is_rejected(self, api, monkeypatch):
         client, _ = api

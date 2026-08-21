@@ -38,7 +38,11 @@ def test_work_deadline_is_the_last_column(tmp_paths):
 
 
 def test_work_deadline_may_be_empty(tmp_paths):
-    """У хостинга и подписок срока работ нет — поле необязательное."""
+    """Заявки, поданные до появления поля, читаются и пишутся без него.
+
+    В форме поле обязательное, но в модели остаётся пустая строка — иначе
+    прежние строки реестра перестали бы открываться.
+    """
     append_sync(make_request(), _reg())
     ws = load_workbook(settings.registry_path).active
     assert (ws.cell(2, len(SHEET_HEADERS)).value or "") == ""

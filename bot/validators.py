@@ -143,14 +143,17 @@ def validate_text_field(raw: str, *, field_name: str, max_len: int = 500) -> str
     return value
 
 
-def validate_optional_text_field(raw: str, *, field_name: str, max_len: int = 500) -> str:
-    """То же, что validate_text_field, но пустое значение допустимо.
+def validate_line_field(
+    raw: str, *, field_name: str, max_len: int = 500, required: bool = False
+) -> str:
+    """Однострочное поле: переводы строк сворачиваются в пробел.
 
-    Переводы строк сворачиваем в пробел: поле однострочное, а в карточку и
-    в PDF оно попадает в одну строку — многострочный ввод там разъезжается.
+    Свернуть их обязательно — значение попадает в карточку и в PDF одной
+    строкой, а многострочный ввод там разъезжается. `required=False`
+    разрешает пустое значение и возвращает пустую строку.
     """
     value = re.sub(r"\s+", " ", (raw or "").strip())
-    if not value:
+    if not value and not required:
         return ""
     return validate_text_field(value, field_name=field_name, max_len=max_len)
 

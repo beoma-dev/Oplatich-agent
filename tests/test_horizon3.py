@@ -8,7 +8,7 @@ from telegram.ext import ApplicationHandlerStop
 
 import bot.finance_actions as fa
 from config import settings
-from services import cards, notifier, registry_sqlite, registry_xlsx, storage
+from services import cards, intake, notifier, registry_sqlite, registry_xlsx, storage
 from tests.conftest import make_request
 
 
@@ -203,3 +203,60 @@ class TestMigration:
         assert registry_sqlite.has_request_sync(r1.request_id)
         imported2, skipped2 = migrate()   # повторный запуск безопасен
         assert (imported2, skipped2) == (0, 2)
+
+
+class TestNotifications:
+    """Кому что уходит после подачи заявки."""
+
+    @staticmethod
+    def _bot():
+        bot = MagicMock()
+        bot.send_message = AsyncMock()
+        bot.send_document = AsyncMock()
+        # Итог в группу публикуется только участнику чата: return_chat_id
+        # приходит из ссылки и может быть подделан.
+        member = MagicMock()
+        member.status = "member"
+        bot.get_chat_member = AsyncMock(return_value=member)
+        return bot
+
+    async def test_group_summary_carries_the_comment(self, tmp_paths):
+        bot = self._bot()
+        request = make_request(comment="аренда офиса за август", work_deadline="текущий месяц")
+        await intake._post_group_summary(bot, request, -100123)
+        text = bot.send_message.await_args.kwargs["text"]
+        assert "аренда офиса за август" in text
+        assert "текущий месяц" in text
+
+    async def test_group_summary_shows_a_dash_without_comment(self, tmp_paths):
+        bot = self._bot()
+        await intake._post_group_summary(bot, make_request(comment=""), -100123)
+        assert "Комментарий: —" in bot.send_message.await_args.kwargs["text"]
+
+    async def test_author_gets_nothing_when_the_group_already_knows(self):
+        """Итог уже в группе — вторым сообщением тот же текст автору не пишем."""
+        bot = self._bot()
+        await intake._send_user_confirmation(
+            bot, make_request(), pdf=b"%PDF-1.4", summary_in_group=True
+        )
+        bot.send_message.assert_not_awaited()
+        bot.send_document.assert_not_awaited()
+
+    async def test_author_still_hears_about_a_file_warning(self):
+        """В групповую сводку предупреждения не пишут — автор узнаёт лично."""
+        bot = self._bot()
+        await intake._send_user_confirmation(
+            bot,
+            make_request(),
+            pdf=b"%PDF-1.4",
+            file_warning="⚠️ Сумма в счёте не совпала",
+            summary_in_group=True,
+        )
+        bot.send_document.assert_not_awaited()
+        assert "не совпала" in bot.send_message.await_args.kwargs["text"]
+
+    async def test_without_a_group_the_author_gets_the_full_confirmation(self):
+        bot = self._bot()
+        await intake._send_user_confirmation(bot, make_request(), pdf=b"%PDF-1.4")
+        bot.send_document.assert_awaited()
+        assert "Заявка принята" in bot.send_document.await_args.kwargs["caption"]

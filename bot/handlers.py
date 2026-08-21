@@ -38,7 +38,7 @@ from bot.validators import (
     parse_amount,
     parse_planned_date,
     validate_file,
-    validate_optional_text_field,
+    validate_line_field,
     validate_text_field,
 )
 from config import settings
@@ -88,7 +88,6 @@ CB_DUP_NO = "DUP_NO"
 
 # callback_data пропуска комментария (комментарий необязателен)
 CB_COMMENT_SKIP = "CMT_SKIP"
-CB_DEADLINE_SKIP = "WDL_SKIP"
 
 # callback_data экрана подтверждения (по ТЗ: запись — после подтверждения)
 CB_SUBMIT_YES = "SUB_YES"
@@ -453,7 +452,7 @@ async def _post_group_button(update: Update, context: ContextTypes.DEFAULT_TYPE,
             "• срочность и плановую дату оплаты — 🔴 срочно = сегодня, "
             "🟢 обычная = следующий рабочий день, 🗓 или своя дата;\n"
             "• срок исполнения работ по договору — датой или словами "
-            "(«текущий месяц», «поставка в декабре»), по желанию;\n"
+            "(«текущий месяц», «поставка в декабре»);\n"
             "• комментарий (по желанию);\n"
             "• файл счёта <i>или</i> реквизиты (если счёта нет).\n\n"
             "🔒 Данные <b>не видны</b> в этом чате — сюда придёт только "
@@ -811,17 +810,11 @@ def _urgency_keyboard() -> InlineKeyboardMarkup:
 # Срок исполнения работ по договору — свободный текст: в договорах он сплошь
 # нечисловой («текущий месяц», «поставка в декабре»), датой не разбирается.
 _ASK_DEADLINE = (
-    "шаг 6 из 8 — укажите <b>срок исполнения работ по договору</b>"
-    " (необязательно).\nМожно датой, можно словами: «15.12.2026»,"
-    " «текущий месяц», «поставка в декабре», «услуга на 6 месяцев»."
+    "шаг 6 из 8 — укажите <b>срок исполнения работ по договору</b>."
+    "\nМожно датой, можно словами: «15.12.2026», «текущий месяц»,"
+    " «поставка в декабре», «услуга на 6 месяцев»."
 )
 _ASK_COMMENT = "шаг 7 из 8 — введите <b>комментарий</b> (необязательно)."
-
-
-def _deadline_skip_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        [[InlineKeyboardButton("➡️ Пропустить", callback_data=CB_DEADLINE_SKIP)]]
-    )
 
 
 def _comment_skip_keyboard() -> InlineKeyboardMarkup:
@@ -875,7 +868,6 @@ async def step_urgency_choice(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.message.reply_text(
         f"{_addr(update)}{_ASK_DEADLINE}",
         parse_mode=ParseMode.HTML,
-        reply_markup=_deadline_skip_keyboard(),
     )
     return WORK_DEADLINE
 
@@ -891,15 +883,17 @@ async def step_planned_date(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await update.message.reply_text(
         f"{_addr(update)}{_ASK_DEADLINE}",
         parse_mode=ParseMode.HTML,
-        reply_markup=_deadline_skip_keyboard(),
     )
     return WORK_DEADLINE
 
 
 async def step_work_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     try:
-        value = validate_optional_text_field(
-            update.message.text, field_name="Срок исполнения работ по договору", max_len=200
+        value = validate_line_field(
+            update.message.text,
+            field_name="Срок исполнения работ по договору",
+            max_len=200,
+            required=True,
         )
     except ValidationError as exc:
         await update.message.reply_text(f"⚠️ {exc}")
@@ -907,20 +901,6 @@ async def step_work_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     context.user_data[K_WORK_DEADLINE] = value
     await update.message.reply_text(
-        f"{_addr(update)}{_ASK_COMMENT}",
-        parse_mode=ParseMode.HTML,
-        reply_markup=_comment_skip_keyboard(),
-    )
-    return COMMENT
-
-
-async def work_deadline_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Кнопка «Пропустить» — у хостинга и подписок срока работ нет."""
-    query = update.callback_query
-    await query.answer()
-    context.user_data[K_WORK_DEADLINE] = ""
-    await query.edit_message_text("Срок исполнения работ: —")
-    await query.message.reply_text(
         f"{_addr(update)}{_ASK_COMMENT}",
         parse_mode=ParseMode.HTML,
         reply_markup=_comment_skip_keyboard(),
@@ -1145,8 +1125,7 @@ def build_conversation_handler() -> ConversationHandler:
             ARTICLE_CUSTOM: [MessageHandler(filters.TEXT & ~filters.COMMAND, step_article_custom)],
             PLANNED_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, step_planned_date)],
             WORK_DEADLINE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, step_work_deadline),
-                CallbackQueryHandler(work_deadline_skip, pattern=rf"^{CB_DEADLINE_SKIP}$"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, step_work_deadline)
             ],
             COMMENT: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, step_comment),

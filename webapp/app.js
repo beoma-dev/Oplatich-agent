@@ -748,6 +748,7 @@
     if (parseAmount(amountEl.value) === null) { err = "Введите корректную сумму."; el = amountEl; }
     else if (!cpEl.value.trim()) { err = "Укажите контрагента."; el = cpEl; }
     else if (!currentArticle()) { err = "Выберите статью расходов."; el = $("article-custom"); }
+    else if (!deadlineEl.value.trim()) { err = "Укажите срок исполнения работ по договору."; el = deadlineEl; }
     else if (state.urgency === "CUSTOM" && !plannedEl.value) { err = "Выберите дату оплаты в календаре."; el = plannedEl; }
     else if (state.urgency === "CUSTOM" && plannedEl.value < todayISO()) { err = "Дата оплаты не может быть в прошлом."; el = plannedEl; }
     // Комментарий необязателен.
