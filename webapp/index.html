@@ -662,26 +662,36 @@
   </div>
 
   <div class="pane hidden" id="pane-beta" role="tabpanel" aria-labelledby="tab-beta">
+    <!-- ОДНА карточка на одну тему. Раньше их было две — личная и админская, —
+         с почти одинаковыми заголовками, и читалось это как дубль. Область
+         действия теперь подписана внутри: «у меня» и «для всех». -->
     <div class="card">
-      <div class="card-title">🧪 Чтение счёта — у меня <button type="button" class="help-q" data-help-title="Чтение счёта у меня" data-help="Это ВАША настройка, она ни на кого больше не влияет. Выключите, если распознавание мешает: форма вернётся к обычному ручному вводу. Если функцию выключил администратор для всех, ваш выбор ничего не изменит.">?</button></div>
+      <div class="card-title">🧪 Чтение счёта <span class="optional-mark">бета</span> <button type="button" class="help-q" data-help-title="Чтение счёта" data-help="По приложенному файлу бот распознаёт сумму, контрагента, ИНН и банковские реквизиты и ПРЕДЛАГАЕТ ими заполнить ПУСТЫЕ поля формы. Сам ничего не подставляет — решение за вами. Выключите, если распознавание мешает: форма вернётся к обычному ручному вводу.">?</button></div>
+      <div class="counter" style="text-align:left; margin-bottom:10px">
+        По приложенному файлу бот распознаёт сумму, контрагента и реквизиты
+        и ПРЕДЛАГАЕТ ими заполнить пустые поля. Решение всегда за вами.
+      </div>
+
+      <label class="field-label">У меня</label>
       <div class="seg seg-even" id="my-autofill-seg">
         <button type="button" data-value="on" class="active">Включено</button>
         <button type="button" data-value="off">Выключено</button>
       </div>
       <div class="counter" style="text-align:left; margin-top:6px" id="my-autofill-note">
-        По приложенному файлу бот распознаёт сумму, контрагента и реквизиты
-        и ПРЕДЛАГАЕТ ими заполнить пустые поля. Решение всегда за вами.
+        Ваша настройка — ни на кого больше не влияет.
       </div>
-    </div>
 
-    <div class="card hidden" data-admin="1">
-      <div class="card-title">🧪 Бета: чтение счёта <button type="button" class="help-q" data-help-title="Чтение счёта" data-help="По приложенному файлу бот распознаёт сумму, контрагента, ИНН и банковские реквизиты и ПРЕДЛАГАЕТ заполнить ими форму. Сам ничего не подставляет — решение за сотрудником, и заполняются только пустые поля. Выключите, если распознавание мешает: форма вернётся к обычному ручному вводу.">?</button></div>
-      <div class="seg seg-even" id="autofill-seg">
-        <button type="button" data-value="on" class="active">Включено</button>
-        <button type="button" data-value="off">Выключено</button>
-      </div>
-      <div class="counter" style="text-align:left; margin-top:6px">
-        Функция в бете: подставленные значения всегда стоит проверить глазами.
+      <!-- Общий выключатель главнее личного: выключенный, он гасит функцию
+           у всех. Поэтому он и остаётся, но только у админа. -->
+      <div class="hidden" data-admin="1" style="margin-top:14px">
+        <label class="field-label">Для всех</label>
+        <div class="seg seg-even" id="autofill-seg">
+          <button type="button" data-value="on" class="active">Включено</button>
+          <button type="button" data-value="off">Выключено</button>
+        </div>
+        <div class="counter" style="text-align:left; margin-top:6px">
+          Выключит распознавание у всех сотрудников, чей бы личный выбор ни был.
+        </div>
       </div>
     </div>
   </div>

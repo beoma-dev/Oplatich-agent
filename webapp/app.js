@@ -1207,10 +1207,62 @@
       var el = art.querySelector("#" + id);
       if (el) el.setAttribute("display", "none");
     });
-    // Правая лапа вытирает глаз. Класс, а не id: id со копии снимаются, иначе
+    // Правая лапа вытирает глаз. Класс, а не id: id с копии снимаются, иначе
     // они делятся с шапкой на весь документ.
+    // Опущенная рука гаснет, поднятая проявляется. Двигать саму руку нельзя:
+    // сдвиг группы уносит и плечо, лапа отрывается от корпуса, а до глаза
+    // такой рукой не дотянуться и поворотом — она короче, чем расстояние до
+    // лица. Поэтому две позы и переключение прозрачностью.
     var wiping = art.querySelector("#mk-paw-doc");
-    if (wiping) wiping.setAttribute("class", "sad-wipe");
+    if (wiping && wiping.parentNode) {
+      wiping.setAttribute("class", "sad-arm-down");
+      var up = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      up.setAttribute("class", "sad-arm-up");
+      // Те же две обводки, что у родной руки: тёмный контур и шерсть поверх.
+      [["#8A5F27", 56], ["#E8BE72", 42]].forEach(function (pair) {
+        var arm = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        arm.setAttribute("d", "M336 452 L306 356");
+        arm.setAttribute("fill", "none");
+        arm.setAttribute("stroke", pair[0]);
+        arm.setAttribute("stroke-width", String(pair[1]));
+        arm.setAttribute("stroke-linecap", "round");
+        up.appendChild(arm);
+      });
+      var paw = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+      paw.setAttribute("cx", "306");
+      paw.setAttribute("cy", "350");
+      paw.setAttribute("rx", "42");
+      paw.setAttribute("ry", "31");
+      paw.setAttribute("fill", "url(#mk-fur)");
+      paw.setAttribute("stroke", "#8A5F27");
+      paw.setAttribute("stroke-width", "8");
+      paw.setAttribute("transform", "rotate(-38 306 350)");
+      up.appendChild(paw);
+      wiping.parentNode.insertBefore(up, wiping.nextSibling);
+    }
+    // Под лапой глаз ЗАКРЫВАЕТСЯ, иначе лицо остаётся каменным и жест не
+    // читается. Веко — дуга цвета шерсти поверх глаза плюс заливка белка;
+    // показываем их прозрачностью, она не зависит от transform-origin.
+    var eyeR = art.querySelector("#mk-eye-r");
+    if (eyeR && eyeR.parentNode) {
+      var lid = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      lid.setAttribute("class", "sad-lid");
+      var fill = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+      fill.setAttribute("cx", "296");
+      fill.setAttribute("cy", "316");
+      fill.setAttribute("rx", "52");
+      fill.setAttribute("ry", "57");
+      fill.setAttribute("fill", "url(#mk-fur)");
+      lid.appendChild(fill);
+      var line = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      line.setAttribute("d", "M258 322q38 26 76 -2");
+      line.setAttribute("fill", "none");
+      line.setAttribute("stroke", "#8A5F27");
+      line.setAttribute("stroke-width", "9");
+      line.setAttribute("stroke-linecap", "round");
+      lid.appendChild(line);
+      eyeR.parentNode.insertBefore(lid, eyeR.nextSibling);
+    }
     // Слёзы под левым глазом — тем, который лапа не трогает.
     var eye = art.querySelector("#mk-eye-l");
     if (eye && eye.parentNode) {
