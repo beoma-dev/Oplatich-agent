@@ -103,6 +103,15 @@ test("в пустом списке герой расстроен и не зан�
       lookingDown: [...el.querySelectorAll(".pup")]
         .every((p) => (p.getAttribute("transform") || "").indexOf("translate") === 0),
       innerIds: el.querySelectorAll("[id]").length,
+      wipes: getComputedStyle(el.querySelector(".sad-wipe") || el).animationName === "mk-wipe",
+      tears: el.querySelectorAll(".sad-tear").length,
+      papersHidden: el.querySelectorAll('[display="none"]').length >= 4,
+      tearScales: [...document.styleSheets].some((sh) => {
+        try {
+          return [...sh.cssRules].some((r) => r.name === "mk-tear"
+            && [...r.cssRules].some((k) => /scale\(/.test(k.style.transform)));
+        } catch (e) { return false; }
+      }),
     };
   });
   assert.ok(art, "марки в пустом списке нет");
@@ -111,6 +120,12 @@ test("в пустом списке герой расстроен и не зан�
   assert.equal(art.anim, "mk-sad", "нет анимации расстроенного вида");
   assert.equal(art.mouth, true, "уголки рта не опущены");
   assert.equal(art.lookingDown, true, "взгляд не опущен");
+  assert.equal(art.wipes, true, "лапа не вытирает глаз");
+  assert.equal(art.tears, 2, `слёз ${art.tears}, а не две`);
+  assert.equal(art.papersHidden, true, "бумаги в лапах остались — заявок-то нет");
+  // scale() у слезы недопустим: у SVG-элемента без transform-origin масштаб
+  // считается от точки (0,0) области просмотра, и капля уезжает в угол.
+  assert.equal(art.tearScales, false, "в анимации слезы появился scale()");
   // Копия и шапка не должны делить одни id на документ.
   assert.equal(art.innerIds, 0, "в копии остались внутренние id");
   await page.close();

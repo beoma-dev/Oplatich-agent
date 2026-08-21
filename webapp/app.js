@@ -1201,10 +1201,30 @@
       pup.setAttribute("transform", "translate(0 9)");
     });
     // Подмигивание и большой палец — про хорошее настроение, здесь лишние.
-    ["mk-wink", "mk-thumb"].forEach(function (id) {
+    // Бумаги в лапах тоже: заявок нет, держать нечего — и лапа освобождается,
+    // чтобы вытирать слёзы.
+    ["mk-wink", "mk-thumb", "mk-held-l", "mk-held-r"].forEach(function (id) {
       var el = art.querySelector("#" + id);
       if (el) el.setAttribute("display", "none");
     });
+    // Правая лапа вытирает глаз. Класс, а не id: id со копии снимаются, иначе
+    // они делятся с шапкой на весь документ.
+    var wiping = art.querySelector("#mk-paw-doc");
+    if (wiping) wiping.setAttribute("class", "sad-wipe");
+    // Слёзы под левым глазом — тем, который лапа не трогает.
+    var eye = art.querySelector("#mk-eye-l");
+    if (eye && eye.parentNode) {
+      [0, 1].forEach(function (n) {
+        var drop = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+        drop.setAttribute("cx", "222");
+        drop.setAttribute("cy", "366");
+        drop.setAttribute("rx", "8");
+        drop.setAttribute("ry", "11");
+        drop.setAttribute("fill", "#8FD3FF");
+        drop.setAttribute("class", "sad-tear sad-tear-" + n);
+        eye.parentNode.insertBefore(drop, eye.nextSibling);
+      });
+    }
   }
 
   function showMyMsg(text, isErr) {

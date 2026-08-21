@@ -270,7 +270,15 @@
     header.icons-5 .mark { height: 74px; }
     .brand { min-height: 86px; }
   }
-  header p { color: var(--hint); font-size: 14px; margin-top: 2px; }
+  /* text-wrap: balance — чтобы подзаголовок не оставлял одно слово на
+     последней строке. Строки распределяются ровно; браузеры без поддержки
+     свойство игнорируют и переносят как раньше. */
+  header p {
+    color: var(--hint);
+    font-size: 14px;
+    margin-top: 2px;
+    text-wrap: balance;
+  }
 
   /* Носитель градиентов марки: в потоке не участвует, но отрисовывается —
      иначе браузер не отдаёт из него заливки. */
@@ -552,17 +560,53 @@
     animation: mk-sad 4.2s ease-in-out infinite;
   }
 
-  /* Понурился и вздохнул: плечи опускаются, лёгкое покачивание из стороны
-     в сторону, без резких движений — это фон, а не аттракцион. */
+  /* Понурился и вздохнул: лёгкое покачивание, без резких движений — это фон,
+     а не аттракцион. Цикл общий с вытиранием слёз, чтобы движения не спорили. */
   @keyframes mk-sad {
-    0%, 100% { transform: rotate(-2.5deg) translateY(0) scaleY(1); }
-    22%      { transform: rotate(-2.5deg) translateY(3px) scaleY(.982); }
+    0%, 100% { transform: rotate(-2deg) translateY(0) scaleY(1); }
+    22%      { transform: rotate(-2deg) translateY(3px) scaleY(.985); }
     46%      { transform: rotate(-1deg) translateY(1px) scaleY(1); }
-    72%      { transform: rotate(2.5deg) translateY(3px) scaleY(.986); }
+    72%      { transform: rotate(2deg) translateY(3px) scaleY(.988); }
+  }
+
+  /* Лапа поднимается к глазу и потирает его дважды. Только translate: он не
+     зависит от transform-origin, а transform-box с координатами viewBox
+     поддержан не во всех WebView — на нём анимация уехала бы мимо лица. */
+  .empty-art .sad-wipe {
+    animation: mk-wipe 4.2s ease-in-out infinite;
+  }
+  @keyframes mk-wipe {
+    0%, 26%   { transform: translate(0, 0); }
+    40%       { transform: translate(-62px, -142px); }
+    50%       { transform: translate(-48px, -136px); }
+    60%       { transform: translate(-64px, -144px); }
+    70%       { transform: translate(-50px, -137px); }
+    84%, 100% { transform: translate(0, 0); }
+  }
+
+  /* Слеза набегает и скатывается. Вторая капля — со сдвигом по фазе, иначе
+     они падают синхронно и читаются как одна толстая полоса. */
+  .empty-art .sad-tear {
+    opacity: 0;
+    animation: mk-tear 4.2s ease-in infinite;
+  }
+  .empty-art .sad-tear-1 { animation-delay: 2.1s; }
+  /* Только translate и opacity. scale() здесь НЕЛЬЗЯ: у SVG-элемента без
+     заданного transform-origin масштаб считается от точки (0,0) области
+     просмотра, и капля на кадрах со scale уезжала бы в угол картинки. */
+  @keyframes mk-tear {
+    0%       { opacity: 0; transform: translate(0, -4px); }
+    10%      { opacity: .85; transform: translate(0, 0); }
+    38%      { opacity: .85; transform: translate(0, 52px); }
+    48%      { opacity: 0; transform: translate(0, 68px); }
+    100%     { opacity: 0; transform: translate(0, 68px); }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .empty-art { animation: none; transform: rotate(-2.5deg); }
+    .empty-art { animation: none; transform: rotate(-2deg); }
+    .empty-art .sad-wipe { animation: none; }
+    /* Без движения слеза так и висела бы под глазом — убираем её вовсе. */
+    .empty-art .sad-tear { animation: none; display: none; }
   }
 
   @media (prefers-reduced-motion: reduce) {
