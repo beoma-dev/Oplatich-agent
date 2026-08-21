@@ -24,6 +24,7 @@ import logging
 import re
 from decimal import Decimal, InvalidOperation
 
+from config import settings
 from services.invoice_check import _inn_valid
 
 log = logging.getLogger(__name__)
@@ -82,7 +83,10 @@ def find_amount(text: str) -> Decimal | None:
 
 
 # ── Реквизиты ──────────────────────────────────────────────────────────────
-_INN_RE = re.compile(r"ИНН\D{0,6}(\d{10}|\d{12})", re.I)
+# Порядок альтернатив значим: 12 цифр ПЕРЕД 10. С «(\d{10}|\d{12})» движок
+# брал первые десять цифр двенадцатизначного ИНН предпринимателя, контрольные
+# числа не сходились — и ИНН у любого ИП не определялся вообще.
+_INN_RE = re.compile(r"ИНН\D{0,6}(\d{12}|\d{10})", re.I)
 _KPP_RE = re.compile(r"КПП\D{0,6}(\d{9})", re.I)
 _BIK_RE = re.compile(r"БИК\D{0,6}(\d{9})", re.I)
 # Расчётный счёт: 40702…, 40802… — 20 цифр, возможно с пробелами после OCR.
@@ -224,6 +228,55 @@ _FIO_START_RE = re.compile(
 _BANK_LINE_RE = re.compile(r"банк|бик|к/с|корр", re.I)
 
 
+def _is_own_side(raw: str) -> bool:
+    """Наша ли это сторона. Мы не можем быть контрагентом: платим не себе.
+
+    Сверяем по ИНН из ORG_INN — он в счёте стоит рядом с названием, и это
+    единственный надёжный признак: по виду наша «ИП Иванов И.И.» ничем не
+    отличается от чужой, а метку поставщика PDF-слой ставит куда попало.
+    """
+    own = settings.own_inn
+    if not own:
+        return False
+    digits = _digits(raw)
+    return any(inn in digits for inn in own)
+
+
+def _name_in(line: str) -> str | None:
+    """Имя из одной строки: форма в начале, ФИО, форма в любом месте."""
+    for pattern in (_ORG_START_RE, _FIO_START_RE, _ORG_ANY_RE):
+        m = pattern.search(line)
+        if m:
+            return _tidy_org(m.group(1))
+    return None
+
+
+def _by_payee_inn(lines: list[str]) -> str | None:
+    """Имя рядом с ИНН ПОЛУЧАТЕЛЯ — когда метки врут.
+
+    В форме СберБизнеса PDF-слой рассыпает колонки: метка «Поставщик:»
+    оказывается над строкой покупателя, и идти за меткой нельзя. Зато ИНН
+    получателя стоит в шапке (блок «Банк получателя / Счёт № / ИНН»), а имя —
+    в той же строке или в соседней. Свой ИНН пропускаем.
+    """
+    text = "\n".join(lines)
+    for candidate in _INN_RE.findall(text):
+        if not _inn_valid(candidate) or candidate in settings.own_inn:
+            continue
+        for i, line in enumerate(lines):
+            if candidate not in _digits(line):
+                continue
+            # Сама строка, затем соседние: имя часто переносится отдельно.
+            for probe in (line, lines[i - 1] if i else "",
+                         lines[i + 1] if i + 1 < len(lines) else ""):
+                if not probe.strip() or _BANK_LINE_RE.search(probe):
+                    continue
+                name = _name_in(probe)
+                if name and not _is_own_side(probe):
+                    return name
+    return None
+
+
 def find_counterparty(text: str) -> str | None:
     """Название получателя платежа.
 
@@ -235,10 +288,17 @@ def find_counterparty(text: str) -> str | None:
     отрабатывает как обычно.
     """
     for raw in _SUPPLIER_RE.findall(text):
+        if _is_own_side(raw):
+            continue  # метка ведёт на нас — значит колонки перепутаны
         for pattern in (_ORG_START_RE, _FIO_START_RE, _ORG_ANY_RE):
             m = pattern.search(raw)
             if m:
                 return _tidy_org(m.group(1))
+    # Метки нет или они врут — пробуем ИНН получателя как якорь.
+    lines = text.splitlines()
+    by_inn = _by_payee_inn(lines)
+    if by_inn:
+        return by_inn
     # Запасной путь: метки нет вовсе (платёжное поручение, кривой PDF-слой).
     # Идём по строкам и пропускаем ДВА блока: банковский и плательщика.
     # Плательщика мало пометить по его же строке — в платёжке и в счёте его
@@ -253,6 +313,8 @@ def find_counterparty(text: str) -> str | None:
         payer_above = is_payer
         if skip:
             continue
+        if _is_own_side(line):
+            continue
         m = _ORG_ANY_RE.search(line)
         # Имя со словом «банк» внутри — сам банк, а не получатель платежа.
         if m and not _BANK_LINE_RE.search(m.group(1)):
@@ -264,7 +326,10 @@ def _tidy_org(value: str) -> str:
     value = _clean(value).strip(" ,;")
     value = re.sub(r"\s{2,}", " ", value)
     # Хвосты вида «ИНН 7707…», приклеенные OCR к названию.
-    value = re.split(r"\s+(?:ИНН|КПП|тел\.?)\b", value, flags=re.I)[0]
+    # Хвост отрезаем и когда PDF-слой склеил его с именем без пробела
+    # («…РЕНАТОВИЧИНН 784809946092»): требуем цифры после метки, иначе
+    # пострадали бы названия, которые сами кончаются на «ИНН».
+    value = re.split(r"\s*(?:ИНН|КПП)(?=[\s:№]*\d)|\s+тел\.?\b", value, flags=re.I)[0]
     value = value.strip(" ,;")
     # Точку срезаем только на конце фразы, но не у инициала: «Сидоров П. И.»
     # без неё выглядит обрубком.

@@ -272,6 +272,76 @@ class TestCounterpartyOnRealLayouts:
         assert ex.find_counterparty(text) is None
 
 
+class TestCounterpartyIsNeverOurOwnSide:
+    """Мы сами не можем быть контрагентом: платим не себе.
+
+    В форме СберБизнеса PDF-слой рассыпает колонки — метка «Поставщик:»
+    оказывается над строкой ПОКУПАТЕЛЯ, и идти за меткой нельзя. Отличить
+    свою сторону от чужой по виду невозможно, обе выглядят как «ИП с ФИО»,
+    поэтому опираемся на ИНН из ORG_INN.
+    """
+
+    # Раскладка снята с реального счёта: метка врёт, имя получателя лежит
+    # выше, рядом со своим ИНН, и разорвано переносом строки.
+    SCRAMBLED = (
+        "Создано в СберБизнес\n"
+        "ПАО Сбербанк, генеральная лицензия № 1481\n"
+        " Банк получателя\n"
+        "БИК\n"
+        "Счёт на оплату № 25 от 21.08.2026\n"
+        "ИНН 500100732259\n"
+        "ПАО Сбербанк 044525225\n"
+        "Получатель\n"
+        "30101 810 4 0000 0000225\n"
+        "24 августа 2026\n"
+        "ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ СИДОРОВА\n"
+        "ТАТЬЯНА ВАЛЕРЬЕВНА\n"
+        "ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ СИДОРОВА ТАТЬЯНА ВАЛЕРЬЕВНА, ИНН\n"
+        "500100732259\n"
+        "Поставщик:\n"
+        "Индивидуальный предприниматель Петров Пётр Петрович, ИНН 771234567890, 183008\n"
+        "Покупатель:\n"
+    )
+
+    def test_label_pointing_at_us_is_skipped(self, monkeypatch):
+        """Метка ведёт на нас — значит колонки перепутаны, ищем дальше."""
+        monkeypatch.setattr(ex.settings, "org_inn", "771234567890")
+        assert ex.find_counterparty(self.SCRAMBLED) == (
+            "ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ СИДОРОВА ТАТЬЯНА ВАЛЕРЬЕВНА"
+        )
+
+    def test_without_org_inn_nothing_changes(self, monkeypatch):
+        """ORG_INN пуст — проверка выключена, поведение прежнее."""
+        monkeypatch.setattr(ex.settings, "org_inn", "")
+        assert ex.find_counterparty(self.SCRAMBLED) == (
+            "Индивидуальный предприниматель Петров Пётр Петрович"
+        )
+
+
+class TestInnLength:
+    def test_twelve_digit_inn_is_not_truncated(self):
+        """У предпринимателя ИНН из 12 цифр.
+
+        В альтернативе «(\\d{10}|\\d{12})» движок брал первые десять,
+        контрольные числа не сходились — и ИНН у любого ИП не определялся.
+        """
+        assert ex.find_inn("ИНН 500100732259") == "500100732259"
+
+    def test_ten_digit_inn_still_works(self):
+        assert ex.find_inn("ИНН 7707083893") == "7707083893"
+
+
+class TestGluedTail:
+    def test_inn_glued_to_the_name_is_cut(self):
+        """PDF-слой склеивает хвост с именем: «…РЕНАТОВИЧИНН 7712…»."""
+        text = "Поставщик: ИП ПЕТРОВ ПЁТР ПЕТРОВИЧИНН 771234567890"
+        assert ex.find_counterparty(text) == "ИП ПЕТРОВ ПЁТР ПЕТРОВИЧ"
+
+    def test_name_ending_in_inn_survives(self):
+        """«ООО ФИНН» не должно превратиться в «ООО Ф» — цифр после нет."""
+        assert ex.find_counterparty("Поставщик: ООО ФИНН") == "ООО ФИНН"
+
+
 class TestInvoiceNumber:
     def test_number_and_date(self):
         assert ex.find_invoice_number(INVOICE) == ("118", "04 августа 2026")
