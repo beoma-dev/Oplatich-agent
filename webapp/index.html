@@ -497,7 +497,7 @@
 <div id="admin-view" class="hidden">
   <header>
     <h1>⚙️ Настройки</h1>
-    <p>Напоминания настраивает каждый себе; остальное — админам</p>
+    <p>Тема и бета — личные; напоминания и данные — по правам</p>
   </header>
 
   <div id="admin-msg"></div>
@@ -526,7 +526,7 @@
       </div>
 
       <label class="field-label">Присылать напоминания</label>
-      <div class="seg" id="my-rem-seg">
+      <div class="seg seg-even" id="my-rem-seg">
         <button type="button" data-value="on" class="active">Да</button>
         <button type="button" data-value="off">Нет</button>
       </div>
@@ -536,11 +536,11 @@
         <input type="time" id="my-rem-time" value="09:30">
 
         <label class="field-label">Что присылать</label>
-        <div class="seg" id="my-rem-due-seg">
+        <div class="seg seg-even" id="my-rem-due-seg">
           <button type="button" data-value="on" class="active">📅 Скоро к оплате</button>
           <button type="button" data-value="off">Не нужно</button>
         </div>
-        <div class="seg" id="my-rem-overdue-seg" style="margin-top:6px">
+        <div class="seg seg-even" id="my-rem-overdue-seg" style="margin-top:6px">
           <button type="button" data-value="on" class="active">⚠️ Просроченные</button>
           <button type="button" data-value="off">Не нужно</button>
         </div>
@@ -552,7 +552,7 @@
         </div>
 
         <label class="field-label">Выходные</label>
-        <div class="seg" id="my-rem-weekdays-seg">
+        <div class="seg seg-even" id="my-rem-weekdays-seg">
           <button type="button" data-value="off" class="active">Присылать</button>
           <button type="button" data-value="on">Только по будням</button>
         </div>
@@ -641,7 +641,7 @@
          видна финансисту до первого ответа о правах. -->
     <div class="card hidden" data-admin="1">
       <div class="card-title">💾 Бэкап данных <button type="button" class="help-q" data-help-title="Бэкап" data-help="Ежедневный архив всех данных (реестр, файлы счетов, журнал безопасности, настройки) в указанное время — приходит админам в Telegram. «Сейчас» — собрать немедленно. Настройки применяются без рестарта.">?</button></div>
-      <div class="seg" id="backup-seg">
+      <div class="seg seg-even" id="backup-seg">
         <button type="button" data-value="on" class="active">Включён</button>
         <button type="button" data-value="off">Выключен</button>
       </div>
@@ -664,7 +664,7 @@
   <div class="pane hidden" id="pane-beta" role="tabpanel" aria-labelledby="tab-beta">
     <div class="card">
       <div class="card-title">🧪 Чтение счёта — у меня <button type="button" class="help-q" data-help-title="Чтение счёта у меня" data-help="Это ВАША настройка, она ни на кого больше не влияет. Выключите, если распознавание мешает: форма вернётся к обычному ручному вводу. Если функцию выключил администратор для всех, ваш выбор ничего не изменит.">?</button></div>
-      <div class="seg" id="my-autofill-seg">
+      <div class="seg seg-even" id="my-autofill-seg">
         <button type="button" data-value="on" class="active">Включено</button>
         <button type="button" data-value="off">Выключено</button>
       </div>
@@ -676,7 +676,7 @@
 
     <div class="card hidden" data-admin="1">
       <div class="card-title">🧪 Бета: чтение счёта <button type="button" class="help-q" data-help-title="Чтение счёта" data-help="По приложенному файлу бот распознаёт сумму, контрагента, ИНН и банковские реквизиты и ПРЕДЛАГАЕТ заполнить ими форму. Сам ничего не подставляет — решение за сотрудником, и заполняются только пустые поля. Выключите, если распознавание мешает: форма вернётся к обычному ручному вводу.">?</button></div>
-      <div class="seg" id="autofill-seg">
+      <div class="seg seg-even" id="autofill-seg">
         <button type="button" data-value="on" class="active">Включено</button>
         <button type="button" data-value="off">Выключено</button>
       </div>
@@ -709,7 +709,7 @@
 
     <div class="card" id="skin-anim-card">
       <div class="card-title">✨ Живой фон <button type="button" class="help-q" data-help-title="Живой фон" data-help="Анимированная сеть на фоне формы: узлы, связи и бегущие огоньки. Выключите, если хотите беречь батарею или предпочитаете спокойный экран. При системной настройке «уменьшить движение» анимация не запускается в любом случае.">?</button></div>
-      <div class="seg" id="skin-anim-seg">
+      <div class="seg seg-even" id="skin-anim-seg">
         <button type="button" data-value="on" class="active">Включён</button>
         <button type="button" data-value="off">Выключен</button>
       </div>

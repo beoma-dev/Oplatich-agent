@@ -356,3 +356,41 @@ test("на узких экранах ничего не вылезает из к�
     await page.close();
   }
 });
+
+test("ряды переключателей в настройках делятся ровно пополам", async () => {
+  // При flex: 1 0 auto кнопки росли от своей надписи, и граница в каждом ряду
+  // вставала по-своему (157|164, 196|125, 141|180) — столбик рядов шёл
+  // зигзагом и читался как съехавший блок.
+  const page = await openApp(browser, { skin: "tg", width: 393, routes: ADMIN });
+  await page.evaluate(() => document.getElementById("admin-btn").click());
+  await page.waitForTimeout(350);
+  await page.evaluate(() => {
+    document.querySelectorAll("#admin-view [data-admin], #admin-view [data-recipient]")
+      .forEach((el) => el.classList.remove("hidden"));
+    document.getElementById("tab-fin").click();
+  });
+  await page.waitForTimeout(300);
+  const rows = await page.evaluate(() =>
+    [...document.querySelectorAll("#pane-fin .seg.seg-even")].map((seg) => ({
+      id: seg.id,
+      widths: [...seg.children].map((b) => Math.round(b.getBoundingClientRect().width)),
+    })));
+  assert.ok(rows.length >= 4, `рядов с равными долями мало: ${rows.length}`);
+  rows.forEach((r) => {
+    const [a, b] = r.widths;
+    assert.ok(Math.abs(a - b) <= 1, `${r.id}: доли не равны — ${r.widths}`);
+  });
+  await page.close();
+});
+
+test("равные доли не применяются там, где надпись длинная", async () => {
+  // Равные трети обрезали «🗓 Настраиваемая» в форме — это было бы хуже
+  // зигзага, поэтому класс ставится только на короткие ряды.
+  const page = await openApp(browser, { skin: "tg", width: 393, routes: ADMIN });
+  const bad = await page.evaluate(() =>
+    [...document.querySelectorAll("#form-view .seg button")]
+      .filter((b) => b.scrollWidth > b.clientWidth + 1)
+      .map((b) => b.textContent.trim()));
+  assert.deepEqual(bad, [], "надписи в форме обрезаны");
+  await page.close();
+});
