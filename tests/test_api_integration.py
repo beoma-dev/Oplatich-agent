@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+from datetime import date, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -424,9 +425,13 @@ class TestFinancePanel:
         monkeypatch.setattr(settings, "finance_chat_ids_raw", ids)
 
     async def _submit(self, client, monkeypatch, **overrides):
-        return await client.post(
+        resp = await client.post(
             "/api/invoice", data=_form(**overrides), headers=_auth(42)
         )
+        # Молчаливый отказ уводил расследование не туда: заявка не создавалась,
+        # а падала проверка выборки строк на тридцать ниже.
+        assert resp.status_code == 200, f"заявка не создана: {resp.text[:200]}"
+        return resp
 
     async def test_outsider_gets_403(self, api, monkeypatch):
         client, _ = api
@@ -534,16 +539,24 @@ class TestFinancePanel:
         client, _ = api
         _allow(monkeypatch)
         self._financiers(monkeypatch, "42")
-        await self._submit(client, monkeypatch, planned_date="20.08.2026")
+        # Даты считаем от сегодняшнего дня: зашитая «20.08.2026» однажды стала
+        # вчерашней, валидатор отверг заявку, и тест начал падать сам по себе.
+        target = date.today() + timedelta(days=5)
+        await self._submit(
+            client, monkeypatch, planned_date=target.strftime("%d.%m.%Y")
+        )
 
+        lo = (target - timedelta(days=2)).strftime("%d.%m.%Y")
+        hi = (target + timedelta(days=2)).strftime("%d.%m.%Y")
         inside = (await client.get(
-            "/api/finance/requests?date_from=01.08.2026&date_to=31.08.2026",
+            f"/api/finance/requests?date_from={lo}&date_to={hi}",
             headers=_auth(42),
         )).json()
         assert inside["total_found"] == 1
 
+        after = (target + timedelta(days=30)).strftime("%d.%m.%Y")
         outside = (await client.get(
-            "/api/finance/requests?date_from=01.09.2026", headers=_auth(42)
+            f"/api/finance/requests?date_from={after}", headers=_auth(42)
         )).json()
         assert outside["total_found"] == 0
 
