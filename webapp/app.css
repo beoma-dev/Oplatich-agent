@@ -557,7 +557,7 @@
     opacity: .85;
     filter: saturate(.75);
     transform-origin: 50% 92%;
-    animation: mk-sad 4.2s ease-in-out infinite;
+    animation: mk-sad 5.4s ease-in-out infinite;
   }
 
   /* Понурился и вздохнул: лёгкое покачивание, без резких движений — это фон,
@@ -569,40 +569,54 @@
     72%      { transform: rotate(2deg) translateY(3px) scaleY(.988); }
   }
 
-  /* Две позы руки, переключаемые прозрачностью: опущенная гаснет, поднятая
-     проявляется. Сдвигать саму руку нельзя — уезжает плечо и лапа отрывается
-     от корпуса; повернуть тоже: рука короче расстояния до лица. */
-  .empty-art .sad-arm-down { animation: mk-arm-down 4.2s steps(1, end) infinite; }
+  /* Рука идёт к глазу ДУГОЙ вокруг плеча, а не подменяется кадром: подмена
+     читалась как рывок. Поворот и масштаб взяты так, чтобы стартовая поза
+     поднятой руки в точности совпала с опущенной (163° и 0.458 — посчитано
+     по координатам плеч и лап), поэтому переключение прозрачности незаметно,
+     а дальше рука сама разгибается и поднимается.
+     Отсчёт — от ПЛЕЧА: transform-origin у SVG-элемента задаётся в единицах
+     viewBox, и без него точкой отсчёта был бы угол картинки. */
+  .empty-art .sad-arm-down { animation: mk-arm-down 5.4s ease-in-out infinite; }
   .empty-art .sad-arm-up {
     opacity: 0;
-    animation: mk-arm-up 4.2s ease-in-out infinite;
+    transform-origin: 336px 452px;
+    /* ease-in-out на всю дорожку: у крутых кривых каждый интервал начинается
+       рывком, и замер ловил до 44 px за 100 мс на потирании. */
+    animation: mk-arm-up 5.4s ease-in-out infinite;
   }
   @keyframes mk-arm-down {
-    0%, 33%   { opacity: 1; }
-    34%, 79%  { opacity: 0; }
-    80%, 100% { opacity: 1; }
+    0%, 18%   { opacity: 1; }
+    24%, 94%  { opacity: 0; }
+    97%, 100% { opacity: 1; }
   }
-  /* Проявившись, поднятая рука ещё и потирает глаз: короткий сдвиг туда-сюда.
-     Только translate — он от transform-origin не зависит. */
   @keyframes mk-arm-up {
-    0%, 32%   { opacity: 0; transform: translate(0, 6px); }
-    38%       { opacity: 1; transform: translate(0, 0); }
-    50%       { opacity: 1; transform: translate(7px, 4px); }
-    62%       { opacity: 1; transform: translate(-2px, -1px); }
-    74%       { opacity: 1; transform: translate(6px, 3px); }
-    80%       { opacity: 0; transform: translate(0, 6px); }
-    100%      { opacity: 0; transform: translate(0, 6px); }
+    0%, 18%   { opacity: 0; transform: rotate(163deg) scale(.458); }
+    24%       { opacity: 1; transform: rotate(163deg) scale(.458); }
+    /* Подъём — почти секунда на дугу, с замедлением у лица. */
+    30%       { opacity: 1; transform: rotate(120deg) scale(.62); }
+    36%       { opacity: 1; transform: rotate(62deg) scale(.82); }
+    44%       { opacity: 1; transform: rotate(0deg) scale(1); }
+    /* Потёр — два коротких движения, мельче прежних: те давали рывок. */
+    52%       { opacity: 1; transform: rotate(-3deg) scale(1.015); }
+    60%       { opacity: 1; transform: rotate(2deg) scale(.993); }
+    68%       { opacity: 1; transform: rotate(-2deg) scale(1.008); }
+    74%       { opacity: 1; transform: rotate(0deg) scale(1); }
+    /* Вниз тем же путём и не быстрее, чем поднимал. */
+    82%       { opacity: 1; transform: rotate(62deg) scale(.82); }
+    88%       { opacity: 1; transform: rotate(120deg) scale(.62); }
+    94%       { opacity: 1; transform: rotate(163deg) scale(.458); }
+    97%, 100% { opacity: 0; transform: rotate(163deg) scale(.458); }
   }
 
   /* Веко: закрытый глаз проявляется ровно на время, пока лапа у лица. Фазы
      совпадают с mk-wipe, поэтому глаз не «открывается» из-под лапы. */
   .empty-art .sad-lid {
     opacity: 0;
-    animation: mk-lid 4.2s ease-in-out infinite;
+    animation: mk-lid 5.4s ease-in-out infinite;
   }
   @keyframes mk-lid {
-    0%, 30%   { opacity: 0; }
-    38%, 76%  { opacity: 1; }
+    0%, 38%   { opacity: 0; }
+    44%, 76%  { opacity: 1; }
     82%, 100% { opacity: 0; }
   }
 
@@ -610,9 +624,9 @@
      они падают синхронно и читаются как одна толстая полоса. */
   .empty-art .sad-tear {
     opacity: 0;
-    animation: mk-tear 4.2s ease-in infinite;
+    animation: mk-tear 5.4s ease-in infinite;
   }
-  .empty-art .sad-tear-1 { animation-delay: 2.1s; }
+  .empty-art .sad-tear-1 { animation-delay: 2.7s; }
   /* Только translate и opacity. scale() здесь НЕЛЬЗЯ: у SVG-элемента без
      заданного transform-origin масштаб считается от точки (0,0) области
      просмотра, и капля на кадрах со scale уезжала бы в угол картинки. */
