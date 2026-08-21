@@ -57,9 +57,13 @@ test("шапка держится в одну строку при всех ик�
         .filter((g) => !g.classList.contains("hidden"));
       const box = brand.getBoundingClientRect();
       const mid = box.top + box.height / 2;
+      // Меряем САМОГО героя, а не рамку .brand: отступ под панель кнопок
+      // теперь лежит внутри .brand, и её рамка по определению доходит до
+      // иконок. Наложение — это когда на них налезает содержимое.
+      const art = document.getElementById("brand-mark").getBoundingClientRect();
       return {
         wrapped: name.getClientRects().length > 1,
-        overlap: box.right > Math.min(...gears.map((g) => g.getBoundingClientRect().left)),
+        overlap: art.right > Math.min(...gears.map((g) => g.getBoundingClientRect().left)) + 1,
         offset: Math.max(...gears.map((g) => {
           const r = g.getBoundingClientRect();
           return Math.abs(r.top + r.height / 2 - mid);
@@ -436,5 +440,51 @@ test("марка в пустом списке рисуется полность�
   assert.ok(art, "персонажа в пустом списке нет");
   assert.ok(art.width > 40 && art.height > 40, "марка схлопнулась");
   assert.ok(art.fur, "клон потерял заливку шерсти");
+  await page.close();
+});
+
+test("подписи экранов умещаются в одну строку", async () => {
+  // Отступ под панель кнопок стоял на ВСЕЙ шапке, хотя панель занимает только
+  // строку с героем (48…88) и подписи (118…159) не мешает. Из-за этого подписи
+  // доставалось 128 px из 288, и любая осмысленная фраза ломалась надвое.
+  const lines = (page, view) => page.evaluate((v) => {
+    const p = document.querySelector("#" + v + " header p");
+    const node = p.firstChild;
+    const rng = document.createRange();
+    const tops = new Set();
+    for (let i = 0; i < node.length; i++) {
+      rng.setStart(node, i); rng.setEnd(node, i + 1);
+      const r = rng.getBoundingClientRect();
+      if (r.width || r.height) tops.add(Math.round(r.top));
+    }
+    return { rows: tops.size, text: p.textContent.trim() };
+  }, view);
+
+  for (const width of [320, 360, 393, 430]) {
+    const page = await openApp(browser, { skin: "tg", width, height: 800, routes: HINTS });
+    const form = await lines(page, "form-view");
+    assert.equal(form.rows, 1, `${width}px: «${form.text}» в ${form.rows} строки`);
+
+    await page.evaluate(() => document.getElementById("my-btn").click());
+    await page.waitForTimeout(300);
+    const my = await lines(page, "my-view");
+    assert.equal(my.rows, 1, `${width}px: «${my.text}» в ${my.rows} строки`);
+    await page.close();
+  }
+});
+
+test("панель кнопок не налезает на строку с героем", async () => {
+  // Отступ переехал с шапки на .brand — проверяем, что он там и работает.
+  const page = await openApp(browser, { skin: "tg", width: 320, routes: HINTS });
+  await page.evaluate(() => ["fin-btn", "admin-btn"].forEach((id) =>
+    document.getElementById(id).classList.remove("hidden")));
+  await page.evaluate(() => window.dispatchEvent(new Event("resize")));
+  await page.waitForTimeout(350);
+  const ok = await page.evaluate(() => {
+    const mark = document.getElementById("brand-mark").getBoundingClientRect();
+    const panel = document.getElementById("header-icons").getBoundingClientRect();
+    return mark.right <= panel.left + 1;
+  });
+  assert.equal(ok, true, "герой налез на панель кнопок");
   await page.close();
 });
