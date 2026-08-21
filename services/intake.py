@@ -15,6 +15,7 @@ from bot.models import InvoiceRequest
 from services import alerts, audit, dedup, storage
 from services.notifier import notify_finance
 from services.pdf_report import build_request_pdf
+from services.runtime_settings import effective_finance_recipients
 
 log = logging.getLogger(__name__)
 
@@ -94,6 +95,29 @@ async def finalize_submission(
     except Exception:  # noqa: BLE001
         log.exception("Сбой уведомления финансистов по заявке %s", request.request_id)
 
+    if notified == 0:
+        # Тишины быть не должно: заявка записана, а карточку никто не увидел,
+        # и переслать её потом нечем. Раньше об этом знал только лог — так и
+        # потерялась заявка при двухминутном провале WARP. Сообщаем АДМИНУ,
+        # а не автору: чинить это ему, а не сотруднику.
+        if effective_finance_recipients():
+            title = "Карточка заявки не дошла ни одному финансисту"
+            details = (
+                f"{request.request_id}: {request.amount:.2f} {request.currency}, "
+                f"{request.counterparty}. Заявка в реестре есть, карточки нет — "
+                "статус можно поставить из панели финансиста."
+            )
+        else:
+            title = "Финансисты не настроены"
+            details = (
+                f"{request.request_id}: заявка записана, но получателей карточки "
+                "нет. Добавьте финансиста в админ-панели ⚙️."
+            )
+        try:
+            await alerts.alert_admins(bot, title, details, signature="finance-undelivered")
+        except Exception:  # noqa: BLE001 — алерт не должен ломать подачу
+            log.exception("Сбой алерта о недоставленной карточке")
+
     # Заявка подана из группы — итог уже уходит туда, и личное подтверждение
     # автору было бы ровно тем же текстом второй раз. Дублировать не нужно,
     # но и молчать нельзя: предупреждение автопроверки счёта и осечку с
@@ -134,18 +158,15 @@ async def _send_user_confirmation(
         source_line = "Счёт сохранён в каталог «Счета на оплату»."
     else:
         source_line = "Счёта нет — оплата по указанным реквизитам."
-    # Честная строка про финансиста: только если карточка реально доставлена.
-    if notified > 0:
-        urgent_note = (
-            "\n🔴 Финансист уведомлён о срочности." if request.urgency.is_urgent else ""
-        )
-    elif request.urgency.is_urgent:
-        urgent_note = (
-            "\n⚠️ Срочная заявка, но уведомить финансиста не удалось — "
-            "финансисты не настроены. Сообщите администратору."
-        )
-    else:
-        urgent_note = ""
+    # Про финансиста автору сообщаем только хорошее: что срочную заявку
+    # реально доставили. Об осечке узнаёт АДМИН отдельным алертом — сотрудник
+    # с ней всё равно ничего не сделает, а «сообщите администратору» в чужих
+    # руках превращается в тревогу без действия.
+    urgent_note = (
+        "\n🔴 Финансист уведомлён о срочности."
+        if notified > 0 and request.urgency.is_urgent
+        else ""
+    )
     planned = request.planned_date.strftime("%d.%m.%Y") if request.planned_date else "—"
     text = (
         f"✅ <b>Заявка принята</b>\n"
