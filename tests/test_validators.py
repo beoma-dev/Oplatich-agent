@@ -9,6 +9,9 @@ import pytest
 from bot.validators import (
     MAX_FILE_SIZE_BYTES,
     ValidationError,
+    has_profanity,
+    looks_broken,
+    looks_like_gibberish,
     parse_amount,
     parse_planned_date,
     parse_registry_filter_date,
@@ -154,3 +157,76 @@ class TestLineField:
     def test_too_long_is_rejected(self):
         with pytest.raises(ValidationError):
             validate_line_field("я" * 201, field_name="Срок", max_len=200)
+
+
+class TestLooksBroken:
+    """Жёсткий слой: только правила, которые не могут ошибиться."""
+
+    def test_digits_only_rejected(self):
+        """Название контрагента без единой буквы не существует."""
+        assert looks_broken("12321432132132132131253542365432565324634")
+
+    def test_single_character_rejected(self):
+        assert looks_broken(".")
+
+    def test_repeated_character_rejected(self):
+        assert looks_broken("аааааааааааа")
+        assert looks_broken("111111111")
+
+    def test_normal_names_pass(self):
+        for value in ("ООО «Ромашка»", "ИП Хайрулин Владислав Ренатович",
+                      "Адвокат ЗУБЕНКО АНДРЕЙ ИГОРЕВИЧ", "ФГБОУ ВО «МГУ»",
+                      "АО", "Аренда"):
+            assert looks_broken(value) is None, value
+
+    def test_date_passes_where_letters_are_not_required(self):
+        """Срок работ законно пишут датой — букв там нет и не должно быть."""
+        assert looks_broken("15.12.2026") is not None
+        assert looks_broken("15.12.2026", require_letter=False) is None
+
+
+class TestLooksLikeGibberish:
+    """Мягкий слой: повод спросить, а не отказать."""
+
+    def test_keyboard_mash_caught(self):
+        # Ровно то, что пришло в настоящей заявке.
+        assert looks_like_gibberish("лрнпдлдбншопнл")
+
+    def test_digits_swamping_the_text_caught(self):
+        """Строка из ОДНИХ цифр ловится жёстким слоем, сюда не доходит —
+        здесь случай, где цифр больше, чем букв, и их много."""
+        assert looks_like_gibberish("Ромашка 12321432132132132131253542365")
+        assert not looks_like_gibberish("12321432132132132131253542365432565324634")
+
+    def test_real_values_pass(self):
+        for value in ("ООО «Ромашка»", "текущий месяц", "поставка в декабре",
+                      "услуга на 6 месяцев", "Аренда офиса за август",
+                      "ИП Хайрулин Владислав Ренатович", "15.12.2026",
+                      "Договор 1202/2-2026", "ФГБОУ ВО «МГУ»"):
+            assert not looks_like_gibberish(value), value
+
+    def test_short_abbreviations_are_not_judged(self):
+        """«ТД», «АО», «МГУ» — гласных мало, но судить тут не по чему."""
+        for value in ("ТД", "АО", "МГУ", "ООО"):
+            assert not looks_like_gibberish(value), value
+
+
+class TestProfanity:
+    """Мат: сигнал админу, отправку не блокирует."""
+
+    def test_caught(self):
+        for value in ("хуйня", "заебал", "пиздец", "бля", "мудак", "нахуй",
+                      "п.и.з.д.е.ц", "xyйня", "долбоёб"):
+            assert has_profanity(value), value
+
+    def test_ordinary_words_are_not_profanity(self):
+        """Корни сидят внутри обычных слов — подстрокой искать нельзя."""
+        for value in ("потребность", "требование", "требовать", "хлебный",
+                      "гребной", "погребение", "мудрый", "мудрость", "область",
+                      "сукно", "хуже", "небо", "перебои", "употребление",
+                      "Херсон", "херес", "ООО «Ромашка»", "Аренда офиса"):
+            assert not has_profanity(value), value
+
+    def test_empty_is_safe(self):
+        assert not has_profanity("")
+        assert not has_profanity(None)

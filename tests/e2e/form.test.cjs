@@ -151,6 +151,103 @@ test("подсказки статей и контрагентов одного �
   }
 });
 
+test("подозрительный текст спрашивает подтверждение, а не отказывает", async () => {
+  // Сервер отвечает 409 «похоже на набор символов»: эвристика иногда
+  // ошибётся, и сорванная оплата дороже одной кривой строки.
+  const page = await openApp(browser, {
+    skin: "tg",
+    routes: {
+      ...HINTS,
+      "/api/invoice": {
+        __status: 409, suspicious: true, fields: ["Контрагент"],
+        detail: "Похоже на случайный набор символов: Контрагент",
+      },
+    },
+  });
+  await fillRequired(page);
+  await page.evaluate(() => document.getElementById("submit-fallback").click());
+  await page.waitForTimeout(400);
+
+  const modal = await page.evaluate(() => ({
+    shown: document.getElementById("modal").classList.contains("shown"),
+    title: document.getElementById("modal-title").textContent,
+    text: document.getElementById("modal-text").textContent,
+    marked: document.getElementById("counterparty").classList.contains("invalid"),
+    actions: [...document.querySelectorAll("#modal-actions button")].map((b) => b.textContent),
+  }));
+  assert.equal(modal.shown, true, "окно подтверждения не открылось");
+  assert.match(modal.title, /Проверьте/, `неожиданный заголовок: ${modal.title}`);
+  assert.match(modal.text, /Контрагент/, "в окне не назвали поле");
+  assert.equal(modal.marked, true, "поле не подсвечено");
+  assert.ok(modal.actions.some((t) => /Всё равно отправить/.test(t)),
+    `нет кнопки подтверждения: ${modal.actions}`);
+
+  // Подтверждение уходит отдельным флагом — общий force заодно отключал бы
+  // проверку на дубль.
+  const before = await page.evaluate(() => window.__posts.length);
+  await page.evaluate(() => [...document.querySelectorAll("#modal-actions button")]
+    .find((b) => /Всё равно отправить/.test(b.textContent)).click());
+  await page.waitForTimeout(400);
+  const sent = await page.evaluate((n) => {
+    const body = window.__posts[n][1];
+    return { confirm: body.get("confirm_text"), force: body.get("force") };
+  }, before);
+  assert.equal(sent.confirm, "1", "подтверждение текста не ушло");
+  assert.equal(sent.force, "0", "подтверждение текста не должно снимать проверку дубля");
+  await page.close();
+});
+
+test("герой остаётся на месте после возврата с вкладки", async () => {
+  // Пересчёт шапки прилетает асинхронно (ответ доступа, опрос финансиста).
+  // Попав на скрытую форму, он мерил нули: отступ схлопывался, и герой
+  // уезжал на 80 с лишним пикселей, налезая на панель кнопок.
+  const page = await openApp(browser, { skin: "tg", routes: HINTS });
+  const geom = () => page.evaluate(() => {
+    const h = document.querySelector("#form-view header");
+    return { pad: getComputedStyle(h).paddingRight,
+             left: Math.round(document.getElementById("brand-mark").getBoundingClientRect().left) };
+  });
+  const before = await geom();
+  await page.evaluate(() => document.getElementById("my-btn").click());
+  await page.waitForTimeout(250);
+  // пересчёт на скрытой форме
+  await page.evaluate(() => {
+    document.getElementById("fin-btn").classList.remove("hidden");
+    window.dispatchEvent(new Event("resize"));
+  });
+  await page.waitForTimeout(350);
+  await page.evaluate(() => document.getElementById("my-close").click());
+  await page.waitForTimeout(350);
+  const after = await geom();
+  assert.equal(after.left, before.left,
+    `герой съехал: было ${before.left}px (${before.pad}), стало ${after.left}px (${after.pad})`);
+  await page.close();
+});
+
+test("кнопки отправки нет на инструкции даже после пересчёта", async () => {
+  const page = await openApp(browser, { skin: "tg", routes: HINTS });
+  const visible = () => page.evaluate(() => window.Telegram.WebApp.MainButton.isVisible);
+  assert.equal(await visible(), true, "на форме кнопка должна быть");
+
+  await page.evaluate(() => document.getElementById("help-btn").click());
+  await page.waitForTimeout(250);
+  assert.equal(await visible(), false, "инструкция открылась, а кнопка осталась");
+
+  // Асинхронный пересчёт возвращал кнопку поверх чужого экрана.
+  await page.evaluate(() => {
+    const el = document.getElementById("counterparty");
+    el.value = "ООО «Ромашка»";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await page.waitForTimeout(300);
+  assert.equal(await visible(), false, "кнопка всплыла на инструкции после пересчёта");
+
+  await page.evaluate(() => document.getElementById("help-close").click());
+  await page.waitForTimeout(300);
+  assert.equal(await visible(), true, "вернулись на форму, а кнопки нет");
+  await page.close();
+});
+
 test("родная кнопка серая на пустой форме и акцентная на заполненной", async () => {
   // Пустая форма — кнопка неготова: красим токеном подсказки. Гасить её нельзя,
   // погашенную не нажать, и человек не узнает, чего не хватает.

@@ -30,6 +30,8 @@ from bot.scheduling import auto_planned_date
 from bot.validators import (
     MAX_FILE_SIZE_BYTES,
     ValidationError,
+    looks_broken,
+    looks_like_gibberish,
     parse_amount,
     parse_planned_date,
     parse_registry_filter_date,
@@ -887,6 +889,7 @@ async def submit_invoice(
     requisites: str = Form(""),
     return_chat: str = Form(""),
     force: str = Form("0"),
+    confirm_text: str = Form("0"),
     file: UploadFile | None = File(None),
 ):
     # --- Аутентификация и доступ -------------------------------------------
@@ -931,6 +934,18 @@ async def submit_invoice(
             max_len=200,
             required=True,
         )
+        # Слой безошибочных правил: название без единой буквы не существует,
+        # как и контрагент из одного символа. Отказываем сразу — ошибиться
+        # эти правила не могут. У срока работ буквы не требуем: его законно
+        # пишут датой.
+        for label, value, need_letter in (
+            ("Контрагент", counterparty_value, True),
+            ("Статья", article_value, True),
+            ("Срок исполнения работ по договору", work_deadline_value, False),
+        ):
+            broken = looks_broken(value, require_letter=need_letter)
+            if broken:
+                raise ValidationError(f"Поле «{label}»: {broken}.")
         # Комментарий необязателен: валидируем только непустой (длина).
         comment_value = (
             validate_text_field(comment, field_name="Комментарий", max_len=500)
@@ -976,6 +991,31 @@ async def submit_invoice(
         created_at=now,
         request_id=new_request_id(now, user["id"]),
     )
+
+    # --- Похоже на случайный набор символов --------------------------------
+    # Это ПРЕДУПРЕЖДЕНИЕ, а не отказ: эвристика иногда ошибётся, а сорванная
+    # оплата дороже одной кривой строки. Отдельный флаг, не общий force, —
+    # иначе подтверждение мусора заодно отключало бы проверку на дубль.
+    if confirm_text != "1":
+        odd = [
+            label
+            for label, value in (
+                ("Контрагент", counterparty_value),
+                ("Статья", article_value),
+                ("Срок исполнения работ по договору", work_deadline_value),
+                ("Комментарий", comment_value),
+            )
+            if looks_like_gibberish(value)
+        ]
+        if odd:
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "suspicious": True,
+                    "fields": odd,
+                    "detail": "Похоже на случайный набор символов: " + ", ".join(odd),
+                },
+            )
 
     # --- Дедуп: не подавалась ли такая же заявка недавно ---------------------
     if force != "1":

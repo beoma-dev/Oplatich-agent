@@ -835,7 +835,21 @@
     if (show) loadMyReminders();
   }
 
+  /** Видна ли сейчас форма. Открыта другая вкладка — форма скрыта. */
+  function formVisible() {
+    var view = $("form-view");
+    return !!view && view.style.display !== "none";
+  }
+
   function refreshMainButton() {
+    // На инструкции, «Моих заявках», панели и настройках кнопки быть не
+    // должно: там нечего отправлять. Вкладки её прячут при открытии, но
+    // пересчёт прилетает асинхронно (опрос доступа, ответ /api/finance),
+    // и show() возвращал её поверх чужого экрана.
+    if (!formVisible()) {
+      if (tg && insideTelegram) tg.MainButton.hide();
+      return;
+    }
     var gaps = missingFields();
     var ok = gaps.length === 0 && canSubmit !== false;
     updateGapsHint(gaps);
@@ -905,17 +919,40 @@
   }
 
   // --- Отправка ---------------------------------------------------------------------
-  function askDuplicate(message) {
+  /** confirmText прокидывается насквозь: сервер проверяет текст ДО дубля,
+   *  и без этого подтверждение дубля сбросило бы подтверждение текста —
+   *  два окна пошли бы по кругу. */
+  function askDuplicate(message, confirmText) {
     askConfirm(
       "⚠️ Похоже на дубль",
       (message || "Похожая заявка уже подавалась.") + "\n\nОтправить ещё раз?",
       "Всё равно отправить",
-      function () { submit(true); },
+      function () { submit(true, confirmText); },
       true
     );
   }
 
-  function submit(force) {
+  /** Похоже на случайный набор символов. Не отказ: спрашиваем и отправляем,
+   *  если человек подтвердил. Отдельный флаг, не общий force, — иначе вместе
+   *  с мусором подтвердился бы и дубль. */
+  function askSuspicious(message, fields, force) {
+    (fields || []).forEach(function (label) {
+      var el = { "Контрагент": cpEl, "Статья": $("article-custom"),
+                 "Срок исполнения работ по договору": deadlineEl,
+                 "Комментарий": commentEl }[label];
+      if (el) el.classList.add("invalid");
+    });
+    askConfirm(
+      "⚠️ Проверьте, что написали",
+      (message || "Значение похоже на случайный набор символов.") +
+        "\n\nОтправить как есть?",
+      "Всё равно отправить",
+      function () { submit(force, true); },
+      true
+    );
+  }
+
+  function submit(force, confirmText) {
     if (state.submitting) return;
     var gaps = missingFields();
     if (gaps.length) { showGapsModal(gaps); return; }
@@ -927,6 +964,7 @@
 
     var fd = new FormData();
     fd.append("force", force ? "1" : "0");
+    fd.append("confirm_text", confirmText ? "1" : "0");
     fd.append("amount", amountEl.value);
     fd.append("currency", state.currency);
     fd.append("counterparty", cpEl.value);
@@ -956,6 +994,15 @@
     })
     .then(function (resp) {
       return resp.json().catch(function () { return {}; }).then(function (data) {
+        if (resp.status === 409 && data.suspicious) {
+          state.submitting = false;
+          fb.disabled = false; fb.style.opacity = "";
+          if (tg && insideTelegram) { tg.MainButton.hideProgress(); }
+          refreshMainButton();
+          if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("warning");
+          askSuspicious(data.detail, data.fields, force);
+          return null;
+        }
         if (resp.status === 409 && data.duplicate) {
           // Дедуп: похожая заявка уже подавалась — спрашиваем подтверждение.
           state.submitting = false;
@@ -963,7 +1010,7 @@
           if (tg && insideTelegram) { tg.MainButton.hideProgress(); }
           refreshMainButton();
           if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("warning");
-          askDuplicate(data.detail);
+          askDuplicate(data.detail, confirmText);
           return null;
         }
         if (!resp.ok) {
@@ -1400,6 +1447,7 @@
   function closeMy() {
     $("my-view").classList.add("hidden");
     $("form-view").style.display = "";
+    relayoutHeaderIfPending();
     if (tg && insideTelegram) {
       tg.BackButton.hide();
       tg.BackButton.offClick(closeMy);
@@ -1616,6 +1664,12 @@
   // дыра, а от лишнего padding заголовок переносился на вторую строку.
   var HEADER_ICONS = ["help-btn", "my-btn", "fin-btn", "admin-btn"];
 
+  /** Возврат на форму: если пересчёт шапки откладывался (форма была скрыта),
+   *  выполняем его теперь, когда размеры снова настоящие. */
+  function relayoutHeaderIfPending() {
+    if (layoutHeaderIcons._pending) layoutHeaderIcons();
+  }
+
   function layoutHeaderIcons() {
     var panel = $("header-icons");
     var header = panel && panel.closest("header");
@@ -1632,6 +1686,13 @@
     // Отступ под панель меряем по факту: её ширина зависит от числа видимых
     // кнопок и от их размера в текущей медиа-ветке.
     var box = panel.getBoundingClientRect();
+    // Форма скрыта — открыта другая вкладка. Тогда getBoundingClientRect
+    // отдаёт нули, и шапка пересчитывается в мусор: отступ схлопывается,
+    // герой съезжает с места и налезает на панель кнопок. Пересчёт приходит
+    // асинхронно (ответ /api/finance/access, опрос доступа), поэтому попасть
+    // на скрытую форму — обычное дело. Откладываем до возвращения на форму.
+    if (!box.width || !box.height) { layoutHeaderIcons._pending = true; return; }
+    layoutHeaderIcons._pending = false;
     header.style.paddingRight = (Math.ceil(box.width) + 8) + "px";
     // Вертикаль: панель встаёт по центру строки с маркой. Считаем ПОСЛЕ
     // класса плотности — он меняет высоту марки, а с ней и высоту строки.
@@ -2126,6 +2187,7 @@
   function closeFinance() {
     $("fin-view").classList.add("hidden");
     $("form-view").style.display = "";
+    relayoutHeaderIfPending();
     if (tg && insideTelegram) {
       tg.BackButton.hide();
       tg.BackButton.offClick(closeFinance);
@@ -2607,6 +2669,7 @@
   function closeAdmin() {
     $("admin-view").classList.add("hidden");
     $("form-view").style.display = "";
+    relayoutHeaderIfPending();
     if (tg && insideTelegram) {
       tg.BackButton.hide();
       tg.BackButton.offClick(closeAdmin);
@@ -2630,6 +2693,7 @@
   function closeHelp() {
     $("help-view").classList.add("hidden");
     $("form-view").style.display = "";
+    relayoutHeaderIfPending();
     if (tg && insideTelegram) {
       tg.BackButton.hide();
       tg.BackButton.offClick(closeHelp);

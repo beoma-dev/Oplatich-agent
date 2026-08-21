@@ -12,6 +12,7 @@ from telegram import Bot
 from telegram.constants import ParseMode
 
 from bot.models import InvoiceRequest
+from bot.validators import has_profanity
 from services import alerts, audit, dedup, storage
 from services.notifier import notify_finance
 from services.pdf_report import build_request_pdf
@@ -94,6 +95,31 @@ async def finalize_submission(
         )
     except Exception:  # noqa: BLE001
         log.exception("Сбой уведомления финансистов по заявке %s", request.request_id)
+
+    # Мат не блокируем: запрет провоцирует обходы и ложные срабатывания,
+    # а заявка неанонимна — в реестре, карточке и PDF стоит имя автора.
+    # Поэтому просто говорим админу: дальше это разговор, а не техника.
+    profane = [
+        label
+        for label, value in (
+            ("контрагент", request.counterparty),
+            ("статья", request.article),
+            ("срок работ", request.work_deadline),
+            ("комментарий", request.comment),
+        )
+        if has_profanity(value)
+    ]
+    if profane:
+        try:
+            await alerts.alert_admins(
+                bot,
+                "Мат в заявке",
+                f"{request.request_id} от {request.sender_username} "
+                f"({request.sender_name}): {', '.join(profane)}.",
+                signature=f"profanity-{request.telegram_id}",
+            )
+        except Exception:  # noqa: BLE001 — алерт не должен ломать подачу
+            log.exception("Сбой алерта о мате в заявке %s", request.request_id)
 
     if notified == 0:
         # Тишины быть не должно: заявка записана, а карточку никто не увидел,

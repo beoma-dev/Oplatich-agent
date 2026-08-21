@@ -35,6 +35,8 @@ from bot.my_requests import CB_REPEAT, my_command
 from bot.scheduling import auto_planned_date
 from bot.validators import (
     ValidationError,
+    looks_broken,
+    looks_like_gibberish,
     parse_amount,
     parse_planned_date,
     validate_file,
@@ -74,6 +76,9 @@ K_COUNTERPARTY = "counterparty"
 K_ARTICLE = "article"
 K_PLANNED = "planned_date"
 K_WORK_DEADLINE = "work_deadline"
+# Значение, на которое человеку уже показали «похоже на набор символов».
+# Повторил то же самое — принимаем: он подтвердил осознанно.
+K_ODD_CONFIRM = "odd_confirm"
 K_COMMENT = "comment"
 K_URGENCY = "urgency"
 K_HAS_INVOICE = "has_invoice"
@@ -742,6 +747,9 @@ async def step_counterparty(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await update.message.reply_text(f"⚠️ {exc}")
         return COUNTERPARTY
 
+    if await _text_objection(update, context, "Контрагент", value):
+        return COUNTERPARTY
+
     context.user_data[K_COUNTERPARTY] = value
     await update.message.reply_text(
         f"{_addr(update)}шаг 4 из 8 — выберите <b>статью расходов</b>:",
@@ -785,6 +793,9 @@ async def step_article_custom(update: Update, context: ContextTypes.DEFAULT_TYPE
         value = validate_text_field(update.message.text, field_name="Статья", max_len=100)
     except ValidationError as exc:
         await update.message.reply_text(f"⚠️ {exc}")
+        return ARTICLE_CUSTOM
+
+    if await _text_objection(update, context, "Статья расходов", value):
         return ARTICLE_CUSTOM
 
     context.user_data[K_ARTICLE] = value
@@ -887,6 +898,29 @@ async def step_planned_date(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return WORK_DEADLINE
 
 
+async def _text_objection(update: Update, context: ContextTypes.DEFAULT_TYPE,
+                          label: str, value: str, *, need_letter: bool = True) -> bool:
+    """Возражения к тексту. True — шаг надо повторить.
+
+    Жёсткие правила отказывают сразу, «похоже на мусор» — только предупреждает
+    и принимает то же значение со второго раза. Так чат-форма ведёт себя как
+    Mini App, где на это есть окно с подтверждением.
+    """
+    broken = looks_broken(value, require_letter=need_letter)
+    if broken:
+        await update.message.reply_text(f"⚠️ {label}: {broken}. Повторите ввод.")
+        return True
+    if looks_like_gibberish(value) and context.user_data.get(K_ODD_CONFIRM) != value:
+        context.user_data[K_ODD_CONFIRM] = value
+        await update.message.reply_text(
+            f"⚠️ «{value}» похоже на случайный набор символов.\n"
+            "Если так и надо — пришлите это же значение ещё раз."
+        )
+        return True
+    context.user_data[K_ODD_CONFIRM] = None
+    return False
+
+
 async def step_work_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     try:
         value = validate_line_field(
@@ -897,6 +931,11 @@ async def step_work_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
     except ValidationError as exc:
         await update.message.reply_text(f"⚠️ {exc}")
+        return WORK_DEADLINE
+
+    if await _text_objection(
+        update, context, "Срок исполнения работ", value, need_letter=False
+    ):
         return WORK_DEADLINE
 
     context.user_data[K_WORK_DEADLINE] = value
