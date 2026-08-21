@@ -546,7 +546,12 @@ def test_settings_are_open_to_everyone_but_admin_tabs_are_not():
     assert recipient_tabs == ["fin", "data"], recipient_tabs
     # Бэкап лежит на вкладке получателя, но это архив ВСЕХ данных с рассылкой
     # админам — карточка обязана оставаться админской.
-    assert '<div class="card hidden" data-admin="1">' in HTML, "бэкап должен быть скрыт в разметке"
+    # ЛЮБОЙ data-admin обязан иметь hidden и в разметке: applyAdmin при старте
+    # ничего не переключает (значение не изменилось), и без этого карточка
+    # мелькнёт у того, кому не положена. На этом я уже попался дважды.
+    for tag in re.findall(r'<(?:div|button)[^>]*data-admin="1"[^>]*>', MARKUP):
+        classes = re.search(r'class="([^"]*)"', tag)
+        assert classes and "hidden" in classes.group(1), tag
     # Бета открыта всем: личный выключатель чтения счёта.
     assert 'data-pane="beta"' in HTML and 'data-pane="beta" data-admin' not in HTML
     assert 'id="my-autofill-seg"' in HTML

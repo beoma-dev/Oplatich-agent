@@ -318,3 +318,41 @@ test("финансист настраивает напоминания себе,
   assert.deepEqual(await page.evaluate(() => window.__saved), { action: "test" });
   await page.close();
 });
+
+test("на узких экранах ничего не вылезает из карточек настроек", async () => {
+  // 320–375 px — это iPhone с включённым увеличением дисплея, а не экзотика.
+  // Кнопка «⏰ Проверить на себе» не могла сжаться ниже своей надписи, ряд не
+  // переносился, и она уезжала за карточку на 30 px.
+  for (const width of [320, 360, 375, 393]) {
+    const page = await openApp(browser, { skin: "tg", width, height: 800, routes: ADMIN });
+    await page.evaluate(() => document.getElementById("admin-btn").click());
+    await page.waitForTimeout(350);
+    for (const pane of ["fin", "data", "skin", "beta"]) {
+      await page.evaluate((p) => {
+        document.querySelectorAll("#admin-view [data-admin], #admin-view [data-recipient]")
+          .forEach((el) => el.classList.remove("hidden"));
+        document.getElementById("tab-" + p).click();
+      }, pane);
+      await page.waitForTimeout(180);
+      const out = await page.evaluate((p) => {
+        const bad = [];
+        document.querySelectorAll("#pane-" + p + " .card").forEach((card) => {
+          const cb = card.getBoundingClientRect();
+          const pad = parseFloat(getComputedStyle(card).paddingLeft);
+          card.querySelectorAll("*").forEach((el) => {
+            const r = el.getBoundingClientRect();
+            if (!r.width) return;
+            if (r.right > cb.right - pad + 1 || r.left < cb.left + pad - 1) {
+              bad.push((el.id || el.tagName) + " " + Math.round(r.left) + "…" + Math.round(r.right));
+            }
+          });
+        });
+        return bad;
+      }, pane);
+      assert.deepEqual(out, [], `${width}px, вкладка ${pane}: вылезло за карточку`);
+    }
+    const scrollW = await page.evaluate(() => document.documentElement.scrollWidth);
+    assert.equal(scrollW, width, `${width}px: появилась горизонтальная прокрутка`);
+    await page.close();
+  }
+});
