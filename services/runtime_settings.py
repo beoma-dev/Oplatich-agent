@@ -43,6 +43,10 @@ _DEFAULTS: dict = {
     # менял, — иначе новый финансист остался бы вовсе без напоминаний.
     "reminders_by_user": {},
     "autofill": {},
+    # Личный выключатель чтения счёта: {"<id>": true|false}. Общая настройка
+    # остаётся значением по умолчанию — бета есть бета, и человек, которому
+    # распознавание мешает, не должен идти за этим к админу.
+    "autofill_by_user": {},
 }
 
 
@@ -89,6 +93,7 @@ def _load_locked() -> dict:
     _cache.setdefault("reminders", {})
     _cache.setdefault("reminders_by_user", {})
     _cache.setdefault("autofill", {})
+    _cache.setdefault("autofill_by_user", {})
     return _cache
 
 
@@ -539,6 +544,34 @@ def autofill_enabled() -> bool:
     with _lock:
         override = _load_locked().get("autofill", {})
     return bool(override.get("enabled", settings.invoice_autofill))
+
+
+def personal_autofill(user_id: int) -> bool:
+    """Читать ли счёт ДЛЯ ЭТОГО человека.
+
+    Общая настройка — значение по умолчанию; личный выбор перекрывает её
+    только для него. Общий выключатель при этом остаётся главным: выключили
+    для всех — не работает ни у кого, даже у того, кто включил себе.
+    """
+    if not autofill_enabled():
+        return False
+    with _lock:
+        own = _load_locked().get("autofill_by_user", {}).get(str(user_id))
+    return True if own is None else bool(own)
+
+
+def set_personal_autofill(user_id: int, enabled: bool | None) -> bool:
+    """Сохраняет личный выбор. None — вернуться к общей настройке."""
+    with _lock:
+        data = _load_locked()
+        by_user = data.setdefault("autofill_by_user", {})
+        if enabled is None:
+            by_user.pop(str(user_id), None)
+        else:
+            by_user[str(user_id)] = bool(enabled)
+        _save_locked()
+    log.info("Чтение счёта для %s: %s", user_id, enabled)
+    return personal_autofill(user_id)
 
 
 def set_autofill(enabled: bool) -> bool:

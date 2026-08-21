@@ -23,10 +23,11 @@ MARKUP = _read("index.html")
 CSS = _read("app.css")
 JS = _read("app.js")
 FIELD = _read("skin-field.js")
+LIB = _read("form-lib.js")
 # Большинству проверок неважно, в каком файле лежит правило или функция, —
 # важно, что они есть и согласованы между собой. Разбор по файлам делают
 # те тесты, где это существенно (порядок правил, состав разметки).
-HTML = "\n".join((MARKUP, CSS, JS, FIELD))
+HTML = "\n".join((MARKUP, CSS, JS, FIELD, LIB))
 
 
 def _media_blocks(query: str) -> list[str]:
@@ -491,7 +492,10 @@ def test_registry_card_opens_sheet_and_drive():
 def test_admin_settings_are_split_into_tabs():
     """Настройки разложены по вкладкам, каждая кнопка ведёт в свою панель."""
     panes = re.findall(r'<button[^>]*class="tab[^"]*"[^>]*data-pane="(\w+)"', HTML)
-    assert panes == ["fin", "access", "data", "beta", "skin"], panes
+    # «Бета» стоит ПОСЛЕ «Оформления» намеренно: обычный пользователь видит
+    # обе, и открываться настройки должны на оформлении, а не на нишевом
+    # выключателе распознавания.
+    assert panes == ["fin", "access", "data", "skin", "beta"], panes
     for name in panes:
         assert f'id="pane-{name}"' in HTML, f"нет панели для вкладки {name}"
         assert f'id="tab-{name}"' in HTML
@@ -533,8 +537,19 @@ def test_settings_are_open_to_everyone_but_admin_tabs_are_not():
     """Шестерёнка есть у всех — за ней «Оформление»; остальное по правам."""
     m = re.search(r'<button[^>]*id="admin-btn"[^>]*>', HTML, re.S)
     assert m and "hidden" not in re.search(r'class="([^"]*)"', m.group(0)).group(1)
+    # Права раздаются по трём уровням, и уровень виден прямо в разметке.
     admin_tabs = re.findall(r'data-pane="(\w+)" data-admin="1"', HTML)
-    assert admin_tabs == ["access", "data", "beta"], admin_tabs
+    assert admin_tabs == ["access"], admin_tabs
+    # Получателю — финансисту или админу: свои напоминания и реестр, который
+    # он открывает каждый день. Полная админ-панель ему при этом не положена.
+    recipient_tabs = re.findall(r'data-pane="(\w+)" data-recipient="1"', HTML)
+    assert recipient_tabs == ["fin", "data"], recipient_tabs
+    # Бэкап лежит на вкладке получателя, но это архив ВСЕХ данных с рассылкой
+    # админам — карточка обязана оставаться админской.
+    assert '<div class="card hidden" data-admin="1">' in HTML, "бэкап должен быть скрыт в разметке"
+    # Бета открыта всем: личный выключатель чтения счёта.
+    assert 'data-pane="beta"' in HTML and 'data-pane="beta" data-admin' not in HTML
+    assert 'id="my-autofill-seg"' in HTML
     # Напоминания настраивает получатель — финансист тоже, не только админ.
     assert 'data-pane="fin" data-recipient="1"' in MARKUP
     assert "function applyRecipientTab(" in JS

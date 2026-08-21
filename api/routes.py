@@ -514,17 +514,7 @@ async def admin_settings(request: Request) -> dict:
          "username": username_for(i)}
         for i in rs.effective_admin_ids()
     ]
-    registry_url = (
-        f"https://docs.google.com/spreadsheets/d/{settings.google_sheet_id}"
-        if settings.storage_is_google and settings.google_sheet_id
-        else None
-    )
-    # Папка Диска, куда складываются файлы счетов, — рядом с реестром.
-    drive_url = (
-        f"https://drive.google.com/drive/folders/{settings.google_drive_folder_id}"
-        if settings.storage_is_google and settings.google_drive_folder_id
-        else None
-    )
+    registry_url, drive_url = _registry_links()
     return {
         "autofill": rs.autofill_enabled(),
         "financiers": financiers,
@@ -640,6 +630,74 @@ async def admin_backup(request: Request) -> dict:
         }
 
     raise HTTPException(status_code=422, detail="Некорректный запрос.")
+
+
+def _registry_links() -> tuple[str | None, str | None]:
+    """Ссылки на Google-таблицу реестра и папку Диска со счетами.
+
+    Обе — None в локальном режиме: там реестр лежит в SQLite с xlsx-зеркалом,
+    и открывать в браузере нечего.
+    """
+    registry = (
+        f"https://docs.google.com/spreadsheets/d/{settings.google_sheet_id}"
+        if settings.storage_is_google and settings.google_sheet_id
+        else None
+    )
+    # Папка Диска, куда складываются файлы счетов, — рядом с реестром.
+    drive = (
+        f"https://drive.google.com/drive/folders/{settings.google_drive_folder_id}"
+        if settings.storage_is_google and settings.google_drive_folder_id
+        else None
+    )
+    return registry, drive
+
+
+@router.get("/registry/links")
+async def registry_links(request: Request) -> dict:
+    """Ссылки на реестр и папку счетов — финансистам и админам.
+
+    Финансист работает с этим реестром каждый день, но полная админ-панель
+    ему не положена: там состав админов, whitelist и бэкапы. Поэтому ссылки
+    отдаём отдельной ручкой, а не открываем ему `/admin/settings`.
+    """
+    user = validate_init_data(
+        request.headers.get("X-Telegram-Init-Data", ""), settings.telegram_bot_token
+    )
+    uid = user["id"]
+    if not (is_financier(uid) or await is_bot_admin(request.app.state.bot, uid)):
+        raise HTTPException(status_code=403, detail="Только для финансистов и админов.")
+    registry, drive = _registry_links()
+    return {"registry_url": registry, "drive_url": drive}
+
+
+@router.get("/autofill/me")
+async def my_autofill(request: Request) -> dict:
+    """Личный выключатель чтения счёта. Доступен ЛЮБОМУ, у кого есть доступ.
+
+    Бета есть бета: тот, кому распознавание мешает, отключает его себе сам,
+    не обращаясь к админу. Общая настройка остаётся значением по умолчанию
+    и главным выключателем — выключенная, она гасит функцию у всех.
+    """
+    user = await _authorized_user(request)
+    return {
+        "enabled": rs.personal_autofill(user["id"]),
+        "available": rs.autofill_enabled(),
+    }
+
+
+@router.post("/autofill/me")
+async def set_my_autofill(request: Request, enabled: str = Form(...)) -> dict:
+    user = await _authorized_user(request)
+    value = enabled.strip().lower()
+    if value not in ("1", "0", "default"):
+        raise HTTPException(status_code=422, detail="Некорректное значение.")
+    await asyncio.to_thread(
+        rs.set_personal_autofill, user["id"], None if value == "default" else value == "1"
+    )
+    return {
+        "enabled": rs.personal_autofill(user["id"]),
+        "available": rs.autofill_enabled(),
+    }
 
 
 @router.get("/reminders/me")
@@ -869,7 +927,7 @@ async def check_file(
     # Бета: разбираем УЖЕ распознанный текст — второго прогона OCR нет.
     # Форма ничего не подставляет сама, только показывает предложение.
     autofill: dict = {}
-    if rs.autofill_enabled() and text:
+    if rs.personal_autofill(user["id"]) and text:
         autofill = await asyncio.to_thread(invoice_extract.extract_fields, text)
     return {"warning": warning, "autofill": autofill}
 

@@ -750,24 +750,7 @@
    *  а нажать её и спросить было нельзя — погашенная кнопка не нажимается.
    *  Список нужен и кнопке (красить ли серым), и окну «что дозаполнить».
    *  Комментарий необязателен и здесь не проверяется. */
-  /** Зеркало looks_broken из bot/validators.py — жёсткие правила, которые не
-   *  могут ошибиться. Держим на клиенте, чтобы реакция была СРАЗУ: сервер
-   *  такое тоже отклонит, но человек узнавал об этом только после отправки,
-   *  а печатая «ннннннннн», не видел ничего. Менять — синхронно с сервером.
-   *  requireLetter=false — для срока работ: его законно пишут датой. */
-  function brokenReason(value, requireLetter) {
-    var text = (value || "").trim();
-    if (!text) return null;                       // пустое — это «не заполнено»
-    if (text.length < 2) return "слишком короткое значение";
-    // \p{L}, а не [^\W\d_]: в JS класс \W работает по ASCII, и кириллица
-    // считалась бы «не буквой» — «Аренда» получала бы отказ.
-    if (requireLetter !== false && !/\p{L}/u.test(text)) {
-      return "нет ни одной буквы";
-    }
-    if (/(.)\1{5,}/u.test(text)) return "один символ повторяется шесть раз подряд";
-    return null;
-  }
-
+  // brokenReason — в form-lib.js (чистая функция, гоняется в node --test)
   function missingFields() {
     var gaps = [];
     function gap(label, el) { gaps.push({ label: label, el: el || null }); }
@@ -789,14 +772,6 @@
     if (state.hasInvoice && !state.file) gap("Файл счёта");
     if (!state.hasInvoice && !reqEl.value.trim()) gap("Реквизиты для оплаты", reqEl);
     return gaps;
-  }
-
-  /** Русское склонение после числа: 2 поля, 5 полей, 21 поле. */
-  function plural(n, one, few, many) {
-    var mod10 = n % 10, mod100 = n % 100;
-    if (mod10 === 1 && mod100 !== 11) return one;
-    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
-    return many;
   }
 
   /** Живая подсказка над кнопкой: видно, чего не хватает, ещё до нажатия. */
@@ -858,11 +833,38 @@
   var isFinancier = false;
 
   /** Вкладка «Напоминания» есть у получателей: настраивают её себе сами. */
+  var recipientShown = null;
+
+  /** Вкладки получателя — финансиста или админа: «Напоминания» и «Данные».
+   *  Раньше здесь была только одна вкладка, теперь их несколько, поэтому
+   *  идём по разметке, а не по идентификатору. */
   function applyRecipientTab(show) {
-    var tab = $("tab-fin");
-    if (!tab || tab.classList.contains("hidden") === !show) return;
-    tab.classList.toggle("hidden", !show);
-    if (show) loadMyReminders();
+    show = !!show;
+    if (recipientShown === show) return;
+    recipientShown = show;
+    [].forEach.call(document.querySelectorAll("#admin-view [data-recipient]"), function (el) {
+      el.classList.toggle("hidden", !show);
+    });
+    if (show) {
+      loadMyReminders();
+      loadRegistryLinks();
+    }
+  }
+
+  /** Ссылки на реестр и папку счетов. Админ получает их вместе с остальными
+   *  настройками, финансисту — отдельная ручка: полная админ-панель ему не
+   *  положена, а реестр он открывает каждый день. */
+  function loadRegistryLinks() {
+    if (!insideTelegram) return;
+    fetch("/api/registry/links", { headers: { "X-Telegram-Init-Data": tg.initData } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) return;
+        wireOpenLink("open-sheet", d.registry_url);
+        wireOpenLink("open-drive", d.drive_url);
+        $("registry-note").classList.toggle("hidden", !!(d.registry_url || d.drive_url));
+      })
+      .catch(function () { /* нет прав или сеть — карточка останется пустой */ });
   }
 
   /** Видна ли сейчас форма. Открыта другая вкладка — форма скрыта. */
@@ -2524,6 +2526,40 @@
       : "Пока действуют настройки по умолчанию. Измените — станут вашими.";
   }
 
+  /** Личный выключатель чтения счёта. Доступен ВСЕМ: бета есть бета, и тот,
+   *  кому распознавание мешает, отключает его себе сам. */
+  function loadMyAutofill() {
+    if (!insideTelegram) return;
+    fetch("/api/autofill/me", { headers: { "X-Telegram-Init-Data": tg.initData } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d) fillMyAutofill(d); })
+      .catch(function () { /* нет доступа — карточка останется как есть */ });
+  }
+
+  function fillMyAutofill(d) {
+    setSeg("my-autofill-seg", d.enabled ? "on" : "off");
+    var note = $("my-autofill-note");
+    if (!note) return;
+    // Общий выключатель главнее личного: выключенный, он гасит функцию у всех.
+    note.textContent = d.available
+      ? "По приложенному файлу бот распознаёт сумму, контрагента и реквизиты"
+        + " и ПРЕДЛАГАЕТ ими заполнить пустые поля. Решение всегда за вами."
+      : "Сейчас чтение счёта выключено администратором для всех — ваш выбор"
+        + " начнёт действовать, когда его включат обратно.";
+  }
+
+  bindSeg("my-autofill-seg", function (value) {
+    if (!insideTelegram) return;
+    var body = new FormData();
+    body.append("enabled", value === "on" ? "1" : "0");
+    fetch("/api/autofill/me", {
+      method: "POST", headers: { "X-Telegram-Init-Data": tg.initData }, body: body
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d) fillMyAutofill(d); })
+      .catch(function () { /* сеть — настройка применится при следующем входе */ });
+  });
+
   function loadMyReminders() {
     fetch("/api/reminders/me", { headers: { "X-Telegram-Init-Data": tg.initData } })
       .then(function (r) { return r.ok ? r.json() : null; })
@@ -2682,12 +2718,14 @@
   function openAdmin() {
     $("form-view").style.display = "none";
     $("admin-view").classList.remove("hidden");
-    // Открываем первую доступную вкладку: админу — «Финансисты», всем
-    // остальным — «Оформление», единственную, которая им видна.
+    // Открываем первую доступную вкладку: админу — «Финансисты», обычному
+    // пользователю — «Оформление». «Бета» стоит после неё намеренно: это
+    // нишевый выключатель, а не то, с чего начинают настройки.
     var first = $("admin-tabs").querySelector(".tab:not(.hidden)");
     showAdminTab(first ? first.dataset.pane : "skin");
     markSkinChoice();
     setSeg("skin-anim-seg", skinAnimation ? "on" : "off");
+    loadMyAutofill();
     if (tg && insideTelegram) {
       tg.MainButton.hide();
       tg.BackButton.onClick(closeAdmin);

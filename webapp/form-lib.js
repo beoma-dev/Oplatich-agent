@@ -111,6 +111,29 @@ function fmtRu(iso) {
 }
 
 /* Экспорт для node --test; в браузере функции просто глобальные. */
+/* ---------- Осмысленность текста (зеркало bot/validators.py) ---------- */
+
+/** Жёсткие правила, которые НЕ МОГУТ ошибиться. Причина отказа или null.
+ *  requireLetter=false — для срока работ: его законно пишут датой. */
+function brokenReason(value, requireLetter) {
+  var text = String(value == null ? "" : value).trim();
+  if (!text) return null;                       // пустое — это «не заполнено»
+  if (text.length < 2) return "слишком короткое значение";
+  // \p{L}, а не [^\W\d_]: в JS класс \W работает по ASCII, и кириллица
+  // считалась бы «не буквой» — «Аренда» получала бы отказ.
+  if (requireLetter !== false && !/\p{L}/u.test(text)) return "нет ни одной буквы";
+  if (/(.)\1{5,}/u.test(text)) return "один символ повторяется шесть раз подряд";
+  return null;
+}
+
+/** Русское склонение после числа: 2 поля, 5 полей, 21 поле. */
+function plural(n, one, few, many) {
+  var mod10 = n % 10, mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     parseAmount: parseAmount,
@@ -124,6 +147,8 @@ if (typeof module !== "undefined" && module.exports) {
     isoOf: isoOf,
     todayISO: todayISO,
     nextBusinessISO: nextBusinessISO,
-    fmtRu: fmtRu
+    fmtRu: fmtRu,
+    brokenReason: brokenReason,
+    plural: plural
   };
 }

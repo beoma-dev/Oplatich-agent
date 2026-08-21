@@ -260,7 +260,7 @@
               </g>
             </svg>
     </h1>
-    <p>Заявка на оплату — финансист получит всё необходимое</p>
+    <p>Заполните форму — заявка уйдёт финансисту на оплату</p>
     <!-- Кнопки собраны в одну панель: радиус тот же, что у карточек формы. -->
     <div class="gears" id="header-icons">
       <button type="button" id="admin-btn" class="gear tip" aria-label="Настройки"
@@ -508,13 +508,13 @@
             aria-selected="false" id="tab-fin" aria-controls="pane-fin">Напоминания</button>
     <button type="button" class="tab hidden" role="tab" data-pane="access" data-admin="1"
             aria-selected="false" id="tab-access" aria-controls="pane-access">Доступ</button>
-    <button type="button" class="tab hidden" role="tab" data-pane="data" data-admin="1"
+    <button type="button" class="tab hidden" role="tab" data-pane="data" data-recipient="1"
             aria-selected="false" id="tab-data" aria-controls="pane-data">Данные</button>
-    <button type="button" class="tab hidden" role="tab" data-pane="beta" data-admin="1"
-            aria-selected="false" id="tab-beta" aria-controls="pane-beta">Бета</button>
     <button type="button" class="tab" role="tab" data-pane="skin" aria-selected="true"
             id="tab-skin" aria-controls="pane-skin"><span class="t-long">Оформление</span><span
             class="t-short">Тема</span></button>
+    <button type="button" class="tab" role="tab" data-pane="beta"
+            aria-selected="false" id="tab-beta" aria-controls="pane-beta">Бета</button>
   </div>
 
   <div class="pane hidden" id="pane-fin" role="tabpanel" aria-labelledby="tab-fin">
@@ -636,7 +636,10 @@
       </div>
     </div>
 
-    <div class="card">
+    <!-- hidden в разметке обязателен: applyAdmin при старте ничего не
+         переключает (значение не изменилось), и без него карточка была бы
+         видна финансисту до первого ответа о правах. -->
+    <div class="card hidden" data-admin="1">
       <div class="card-title">💾 Бэкап данных <button type="button" class="help-q" data-help-title="Бэкап" data-help="Ежедневный архив всех данных (реестр, файлы счетов, журнал безопасности, настройки) в указанное время — приходит админам в Telegram. «Сейчас» — собрать немедленно. Настройки применяются без рестарта.">?</button></div>
       <div class="seg" id="backup-seg">
         <button type="button" data-value="on" class="active">Включён</button>
@@ -660,6 +663,18 @@
 
   <div class="pane hidden" id="pane-beta" role="tabpanel" aria-labelledby="tab-beta">
     <div class="card">
+      <div class="card-title">🧪 Чтение счёта — у меня <button type="button" class="help-q" data-help-title="Чтение счёта у меня" data-help="Это ВАША настройка, она ни на кого больше не влияет. Выключите, если распознавание мешает: форма вернётся к обычному ручному вводу. Если функцию выключил администратор для всех, ваш выбор ничего не изменит.">?</button></div>
+      <div class="seg" id="my-autofill-seg">
+        <button type="button" data-value="on" class="active">Включено</button>
+        <button type="button" data-value="off">Выключено</button>
+      </div>
+      <div class="counter" style="text-align:left; margin-top:6px" id="my-autofill-note">
+        По приложенному файлу бот распознаёт сумму, контрагента и реквизиты
+        и ПРЕДЛАГАЕТ ими заполнить пустые поля. Решение всегда за вами.
+      </div>
+    </div>
+
+    <div class="card" data-admin="1">
       <div class="card-title">🧪 Бета: чтение счёта <button type="button" class="help-q" data-help-title="Чтение счёта" data-help="По приложенному файлу бот распознаёт сумму, контрагента, ИНН и банковские реквизиты и ПРЕДЛАГАЕТ заполнить ими форму. Сам ничего не подставляет — решение за сотрудником, и заполняются только пустые поля. Выключите, если распознавание мешает: форма вернётся к обычному ручному вводу.">?</button></div>
       <div class="seg" id="autofill-seg">
         <button type="button" data-value="on" class="active">Включено</button>

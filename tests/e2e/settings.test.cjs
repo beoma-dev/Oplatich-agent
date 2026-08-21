@@ -278,7 +278,16 @@ test("финансист настраивает напоминания себе,
   const tabs = await page.evaluate(() =>
     [...document.querySelectorAll("#admin-tabs .tab")]
       .filter((t) => !t.classList.contains("hidden")).map((t) => t.dataset.pane));
-  assert.deepEqual(tabs, ["fin", "skin"], "финансисту видны только его вкладки");
+  // Финансисту, помимо своего: «Данные» — реестр и папка счетов, он открывает
+  // их каждый день. Полной админ-панели («Доступ») у него по-прежнему нет.
+  assert.deepEqual(tabs, ["fin", "data", "skin", "beta"],
+    "финансисту видны только его вкладки");
+  const backupVisible = await page.evaluate(() => {
+    const card = [...document.querySelectorAll("#pane-data .card")]
+      .find((c) => /Бэкап/.test(c.textContent));
+    return card && !card.classList.contains("hidden");
+  });
+  assert.equal(backupVisible, false, "бэкап — админский, финансисту его не показываем");
 
   await page.click("#tab-fin");
   await page.waitForTimeout(250);

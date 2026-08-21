@@ -56,3 +56,28 @@ test("nextBusinessISO: пятница и выходные переносятся
 test("fmtRu", () => {
   assert.equal(lib.fmtRu("2026-08-04"), "04.08.2026");
 });
+
+test("brokenReason: отказ только там, где ошибиться нельзя", () => {
+  const { brokenReason } = lib;
+  assert.equal(brokenReason("ООО «Ромашка»"), null);
+  assert.equal(brokenReason(""), null, "пустое — это «не заполнено», не брак");
+  assert.match(brokenReason("н".repeat(22)), /повторяется/);
+  assert.match(brokenReason("12321432132"), /нет ни одной буквы/);
+  assert.equal(brokenReason("."), "слишком короткое значение");
+  // Кириллица — буквы: в JS класс \W работает по ASCII и когда-то их не считал.
+  assert.equal(brokenReason("Аренда"), null);
+  // Срок работ законно пишут датой.
+  assert.match(brokenReason("15.12.2026"), /нет ни одной буквы/);
+  assert.equal(brokenReason("15.12.2026", false), null);
+});
+
+test("plural: склонение после числа", () => {
+  const { plural } = lib;
+  const f = (n) => plural(n, "поле", "поля", "полей");
+  assert.equal(f(1), "поле");
+  assert.equal(f(2), "поля");
+  assert.equal(f(5), "полей");
+  assert.equal(f(11), "полей");
+  assert.equal(f(21), "поле");
+  assert.equal(f(22), "поля");
+});

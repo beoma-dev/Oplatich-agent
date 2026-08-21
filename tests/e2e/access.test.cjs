@@ -225,12 +225,15 @@ test("права админа появляются и уходят без пер
   const tabs = () => page.evaluate(() =>
     [...document.querySelectorAll("#admin-tabs .tab")]
       .filter((t) => !t.classList.contains("hidden")).map((t) => t.dataset.pane));
-  assert.deepEqual(await tabs(), ["skin"], "у не-админа админских вкладок быть не должно");
+  // Обычному пользователю — «Бета» (личный выключатель чтения счёта) и
+  // «Оформление». Ни «Доступа», ни «Данных»: это чужая зона ответственности.
+  assert.deepEqual(await tabs(), ["skin", "beta"],
+    "у не-админа админских вкладок быть не должно");
 
   await page.evaluate(() => { window.__admin = true; });
   await page.waitForTimeout(7500);
   // Админ — тоже получатель напоминаний, поэтому вкладка «fin» тоже его.
-  assert.deepEqual(await tabs(), ["fin", "access", "data", "beta", "skin"],
+  assert.deepEqual(await tabs(), ["fin", "access", "data", "skin", "beta"],
     "назначили админом — вкладки не появились");
 
   // И обратно: права сняли, открытая админская вкладка не должна остаться.
@@ -238,7 +241,7 @@ test("права админа появляются и уходят без пер
   await page.waitForTimeout(200);
   await page.evaluate(() => { window.__admin = false; });
   await page.waitForTimeout(7500);
-  assert.deepEqual(await tabs(), ["skin"], "права сняли — вкладки остались");
+  assert.deepEqual(await tabs(), ["skin", "beta"], "права сняли — вкладки остались");
   assert.deepEqual(await page.evaluate(() =>
     [...document.querySelectorAll("#admin-view .pane")]
       .filter((p) => !p.classList.contains("hidden")).map((p) => p.id)),
