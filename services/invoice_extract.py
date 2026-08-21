@@ -44,11 +44,11 @@ def _digits(value: str) -> str:
 
 
 # ── Сумма ──────────────────────────────────────────────────────────────────
-# «Итого к оплате: 174 387,21» / «Всего к оплате 174387.21».
-_TOTAL_RE = re.compile(
-    r"(?:итого|всего)\s*(?:к\s*оплате)?\s*[:\-]?\s*([\d][\d\s.,]{2,20})",
-    re.I,
-)
+# Строка, в которой вообще может стоять итог. Корень «итог» намеренно без
+# окончания: в счетах встречается и «Итого», и «Итог к оплате».
+_TOTAL_LINE_RE = re.compile(r"итог|всего|к\s*оплате", re.I)
+# Денежное число: «174 387,21», «14 612,00», «9 800,00», «1200-00».
+_MONEY_RE = re.compile(r"\d[\d \u00a0\u202f]*(?:[.,]\d{2})?")
 
 
 def _parse_money(raw: str) -> Decimal | None:
@@ -73,12 +73,26 @@ def _parse_money(raw: str) -> Decimal | None:
 
 
 def find_amount(text: str) -> Decimal | None:
-    """Сумма к оплате: берём НАИБОЛЬШЕЕ из «итого», это и есть итог."""
-    candidates = []
-    for raw in _TOTAL_RE.findall(text):
-        value = _parse_money(raw)
-        if value is not None:
-            candidates.append(value)
+    """Сумма к оплате: наибольшее число в строках про итог.
+
+    Разбираем ПО СТРОКАМ, а не одним выражением от метки к числу. В счетах
+    между ними встаёт что угодно — «Итого с НДС 7%: 8 759,00», — а PDF-слой
+    вдобавок переносит число на следующую строку («Всего к оплате:» / «14
+    612,00»). Берём все денежные числа такой строки, а если их нет — со
+    следующей, и выбираем наибольшее: итог не может быть меньше своих частей.
+    """
+    lines = text.splitlines()
+    candidates: list[Decimal] = []
+    for i, line in enumerate(lines):
+        if not _TOTAL_LINE_RE.search(line):
+            continue
+        found = _MONEY_RE.findall(line)
+        if not found and i + 1 < len(lines):
+            found = _MONEY_RE.findall(lines[i + 1])
+        for raw in found:
+            value = _parse_money(raw)
+            if value is not None:
+                candidates.append(value)
     return max(candidates) if candidates else None
 
 
@@ -94,8 +108,15 @@ _BIK_RE = re.compile(r"БИК\D{0,6}(\d{9})", re.I)
 # строкой и получалось «число» длиннее двадцати цифр.
 # Допуск с запасом на пробелы между группами цифр — точную длину
 # всё равно проверяет _first по числу цифр (ровно 20).
-_ACCOUNT_RE = re.compile(r"\b((?:40[178]|30[12])[\d\t ]{16,26})")
+# Только расчётные счёта (40…): 40702 у юрлиц, 40802 у ИП, 40817 у физлиц.
+# Корреспондентские (301…) отсюда УБРАНЫ намеренно — с ними в поле «Р/с»
+# уезжал к/с банка, потому что в тексте он часто стоит выше расчётного.
+_ACCOUNT_RE = re.compile(r"\b(40[\d][\d\t ]{16,26})")
 _CORR_RE = re.compile(r"\b(301\d{2}[\d\t ]{13,24})")
+
+
+# В платёжном поручении PDF-слой ставит номер ПЕРЕД меткой и склеивает их.
+_INN_REVERSED_RE = re.compile(r"(\d{12}|\d{10})ИНН", re.I)
 
 
 def find_inn(text: str) -> str | None:
@@ -108,6 +129,35 @@ def find_inn(text: str) -> str | None:
     for candidate in _INN_RE.findall(text):
         if _inn_valid(candidate):
             return candidate
+    for candidate in _INN_REVERSED_RE.findall(text):
+        if _inn_valid(candidate):
+            return candidate
+    return None
+
+
+# БИК всегда начинается с 04. Запасной путь: метка «БИК» в PDF-слое нередко
+# отрывается от числа и уезжает на другую строку, зато само число стоит
+# рядом с названием банка («ПАО Сбербанк 044525225»).
+_BIK_NEAR_BANK_RE = re.compile(r"\b(04\d{7})\b")
+
+
+def find_bik(text: str) -> str | None:
+    """БИК: сначала по метке, затем — по строке с названием банка."""
+    direct = _first(_BIK_RE, text, 9)
+    if direct:
+        return direct
+    # Окно ±2 строки: PDF-слой раскидывает название банка, метку и число по
+    # разным строкам («044525974» / к/с / «АО «ТБанк» БИК»), и порядок у них
+    # произвольный. Формат 04XXXXXXX опознаётся сам, а \b не даёт поймать
+    # эти цифры внутри двадцатизначного счёта.
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        if not _BANK_LINE_RE.search(line):
+            continue
+        for j in range(max(0, i - 2), min(len(lines), i + 3)):
+            m = _BIK_NEAR_BANK_RE.search(lines[j])
+            if m:
+                return m.group(1)
     return None
 
 
@@ -397,9 +447,12 @@ def extract_fields(text: str) -> dict:
         if counterparty:
             fields["counterparty"] = counterparty
 
+        bik = find_bik(text)
+        if bik:
+            fields["bik"] = bik
+
         for key, pattern, length in (
             ("kpp", _KPP_RE, 9),
-            ("bik", _BIK_RE, 9),
             ("account", _ACCOUNT_RE, 20),
             ("corr_account", _CORR_RE, 20),
         ):

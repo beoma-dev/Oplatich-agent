@@ -98,6 +98,61 @@ class TestRequisites:
         assert fields["corr_account"] == "30101810400000000225"
 
 
+class TestAmountOnRealLayouts:
+    """Итог в живых счетах: метка и число редко стоят рядом."""
+
+    def test_number_on_the_next_line(self):
+        """«Всего к оплате:» и число PDF-слой разносит по строкам."""
+        assert ex.find_amount("Всего к оплате:\n14 612,00\n") == ex.Decimal("14612.00")
+
+    def test_junk_between_label_and_number(self):
+        """«Итого с НДС 7%: 8 759,00» — между меткой и итогом ещё цифры."""
+        assert ex.find_amount("Итого с НДС 7%: 8 759,00") == ex.Decimal("8759.00")
+
+    def test_stem_without_ending(self):
+        """В счетах встречается «Итог к оплате», а не только «Итого»."""
+        assert ex.find_amount("Итог к оплате: 105 000,00 ₽") == ex.Decimal("105000.00")
+
+    def test_total_wins_over_its_parts(self):
+        text = "Итого: 683 453,00\nВ том числе НДС 5%: 32 545,38\nВсего к оплате: 683 453,00"
+        assert ex.find_amount(text) == ex.Decimal("683453.00")
+
+    def test_account_number_is_not_an_amount(self):
+        """Рядом с «Сумма» может лежать номер счёта — он отсекается по величине."""
+        assert ex.find_amount("Сумма\n40802810703500018523") is None
+
+
+class TestSettlementAccount:
+    def test_correspondent_account_is_not_the_settlement_one(self):
+        """Р/с и к/с путать нельзя: в тексте к/с часто стоит выше.
+
+        Пока «301…» входил в шаблон расчётного счёта, в поле «Р/с» уезжал
+        корреспондентский счёт банка — платёж по таким реквизитам не уйдёт.
+        """
+        text = (
+            "Банк получателя ООО «Банк Точка»\n"
+            "Кор. Счёт 30101810745374525104\n"
+            "ИНН 3808195187 КПП 772001001 Счёт 40702810720000175971\n"
+        )
+        fields = ex.extract_fields(text)
+        assert fields["account"] == "40702810720000175971"
+        assert fields["corr_account"] == "30101810745374525104"
+
+
+class TestBikAndInnOnBrokenLayouts:
+    def test_bik_offset_from_its_label(self):
+        """Число, к/с и метка «БИК» оказались на трёх разных строках."""
+        text = "Банк получателя\n044525974\n30101810145250000974\nАО «ТБанк» БИК\n"
+        assert ex.find_bik(text) == "044525974"
+
+    def test_bik_by_label_still_wins(self):
+        assert ex.find_bik("БИК 044525225\nАО «ТБанк» 044525974") == "044525225"
+
+    def test_inn_glued_before_its_label(self):
+        """В платёжном поручении номер стоит ПЕРЕД меткой и склеен с ней."""
+        assert ex.find_inn("7810945525ИНН") == "7810945525"
+
+
 class TestCounterparty:
     def test_supplier_not_buyer(self):
         """Платим поставщику: покупателя подставлять нельзя."""
