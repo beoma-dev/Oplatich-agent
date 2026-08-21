@@ -76,6 +76,44 @@ def _form(**overrides) -> dict:
     return data
 
 
+class TestWorkDeadline:
+    """Срок исполнения работ: свободный текст, поле необязательное."""
+
+    async def test_free_text_is_stored(self, api, monkeypatch):
+        client, _ = api
+        _allow(monkeypatch)
+        resp = await client.post(
+            "/api/invoice",
+            data=_form(work_deadline="поставка в декабре"),
+            headers=_auth(),
+        )
+        assert resp.status_code == 200, resp.text
+        from openpyxl import load_workbook
+
+        from bot.models import SHEET_HEADERS
+
+        ws = load_workbook(settings.registry_path).active
+        assert ws.cell(2, len(SHEET_HEADERS)).value == "поставка в декабре"
+
+    async def test_absent_field_is_accepted(self, api, monkeypatch):
+        """Старая версия Mini App из кеша поля не пришлёт — это не должно быть 422."""
+        client, _ = api
+        _allow(monkeypatch)
+        data = _form()
+        data.pop("work_deadline", None)
+        resp = await client.post("/api/invoice", data=data, headers=_auth())
+        assert resp.status_code == 200, resp.text
+
+    async def test_too_long_is_rejected(self, api, monkeypatch):
+        client, _ = api
+        _allow(monkeypatch)
+        resp = await client.post(
+            "/api/invoice", data=_form(work_deadline="я" * 201), headers=_auth()
+        )
+        # 422 — принятая в этом эндпоинте форма отказа по валидации.
+        assert resp.status_code == 422
+
+
 class TestHealth:
     async def test_health_ok_after_recent_pulse(self, api):
         from services import health as pulse

@@ -28,6 +28,22 @@ def test_append_numbering_and_headers(tmp_paths):
     assert ws.max_row == 4  # шапка + три заявки
 
 
+def test_work_deadline_is_the_last_column(tmp_paths):
+    """Колонка приписана в конец: вставка в середину сдвинула бы старые строки."""
+    assert SHEET_HEADERS[-1] == "Срок исполнения работ по договору"
+    assert append_sync(make_request(work_deadline="услуга на 6 месяцев"), _reg()) == 1
+    ws = load_workbook(settings.registry_path).active
+    assert ws.cell(1, len(SHEET_HEADERS)).value == "Срок исполнения работ по договору"
+    assert ws.cell(2, len(SHEET_HEADERS)).value == "услуга на 6 месяцев"
+
+
+def test_work_deadline_may_be_empty(tmp_paths):
+    """У хостинга и подписок срока работ нет — поле необязательное."""
+    append_sync(make_request(), _reg())
+    ws = load_workbook(settings.registry_path).active
+    assert (ws.cell(2, len(SHEET_HEADERS)).value or "") == ""
+
+
 def test_tz_columns_come_first(tmp_paths):
     """Первые девять колонок — ровно по ТЗ (сверено с шаблоном Реестр.xlsx)."""
     assert SHEET_HEADERS[:9] == [

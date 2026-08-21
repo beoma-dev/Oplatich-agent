@@ -86,7 +86,12 @@ TELEGRAM_BOT_TOKEN=dummy:token python -c "import main, api.server, bot.handlers,
   не дёргать. Первые девять колонок `SHEET_HEADERS` — ровно по ТЗ, порядок
   не менять. CSV упразднён.
 - Порядок колонок реестра: `SHEET_HEADERS` ↔ `InvoiceRequest.as_sheet_row()`
-  (bot/models.py) — единый источник, менять парой.
+  (bot/models.py) — единый источник, менять парой. Новые колонки только
+  ДОПИСЫВАТЬ в конец: вставка в середину сдвигает уже заполненные реестры
+  (Sheets, xlsx, SQLite) — старые строки уезжают на колонку влево. Новое поле
+  в SQLite-реестре требует ещё и записи в `_FIELDS` (services/registry_sqlite.py):
+  колонку в уже существующей таблице досоздаёт `_add_missing_columns`,
+  потому что `CREATE TABLE IF NOT EXISTS` готовую таблицу не трогает.
 - `POST /api/invoice` защищён подписью Telegram initData (`api/auth.py`).
   Новые маршруты, принимающие данные пользователя, обязаны проверять подпись
   так же. Маршруты «своих» данных (`/api/my-requests`, `/api/my/withdraw`)

@@ -79,6 +79,8 @@ def _format_list(rows: list[dict[str, str]], reasons: dict[str, str]) -> str:
             f"🏢 {e(row.get('Контрагент', '—'))}\n"
             f"💰 {e(format_amount(row.get('Сумма', '')))} {e(row.get('Валюта', ''))}\n"
             f"📅 Оплатить до: {e(row.get('Плановая дата оплаты', '—') or '—')}\n"
+            f"📄 Срок работ: "
+            f"{e(row.get('Срок исполнения работ по договору', '—') or '—')}\n"
             f"<code>{e(request_id)}</code>"
         )
         reason = reasons.get(request_id)

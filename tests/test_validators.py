@@ -13,6 +13,7 @@ from bot.validators import (
     parse_planned_date,
     parse_registry_filter_date,
     validate_file,
+    validate_optional_text_field,
     validate_text_field,
 )
 
@@ -124,3 +125,27 @@ class TestRegistryFilterDate:
     def test_garbage_rejected(self):
         with pytest.raises(ValidationError):
             parse_registry_filter_date("позавчера")
+
+
+class TestOptionalTextField:
+    """Срок исполнения работ: свободный текст, пустое значение допустимо."""
+
+    def test_free_text_passes(self):
+        for value in ("текущий месяц", "поставка в декабре", "услуга на 6 месяцев",
+                      "15.12.2026"):
+            assert validate_optional_text_field(value, field_name="Срок") == value
+
+    def test_empty_is_allowed(self):
+        assert validate_optional_text_field("", field_name="Срок") == ""
+        assert validate_optional_text_field("   ", field_name="Срок") == ""
+        assert validate_optional_text_field(None, field_name="Срок") == ""
+
+    def test_newlines_collapse(self):
+        """Поле однострочное: в карточке и PDF многострочный ввод разъезжается."""
+        assert validate_optional_text_field(
+            " поставка\n  в декабре ", field_name="Срок"
+        ) == "поставка в декабре"
+
+    def test_too_long_is_rejected(self):
+        with pytest.raises(ValidationError):
+            validate_optional_text_field("я" * 201, field_name="Срок", max_len=200)

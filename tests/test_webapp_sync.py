@@ -67,12 +67,14 @@ def test_file_size_limit_mirror():
 
 
 def test_field_limits_mirror():
-    # Длины полей: counterparty 200, comment 500, requisites 1500, article 100.
+    # Длины полей: counterparty 200, comment 500, requisites 1500,
+    # article 100, срок исполнения работ 200.
     for field_id, limit in [
         ("counterparty", 200),
         ("comment", 500),
         ("requisites", 1500),
         ("article-custom", 100),
+        ("work-deadline", 200),
     ]:
         m = re.search(rf'id="{field_id}" maxlength="(\d+)"', HTML)
         assert m, f"maxlength для #{field_id} не найден"

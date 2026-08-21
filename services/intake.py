@@ -196,6 +196,7 @@ async def _post_group_summary(bot: Bot, request: InvoiceRequest, chat_id: int) -
         f"Сумма: <b>{e(f'{request.amount:,.2f}')} {e(request.currency)}</b>\n"
         f"Контрагент: {e(request.counterparty)}\n"
         f"📂 Статья: {e(request.article or '—')}\n"
+        f"📄 Срок работ: {e(request.work_deadline or '—')}\n"
         f"📅 Срок исполнения: <b>{e(planned)}</b>\n"
         f"{urgency_mark} · {source}"
     )

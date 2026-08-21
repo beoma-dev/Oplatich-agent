@@ -81,6 +81,7 @@ def _format_card(request: InvoiceRequest, row_number: int) -> str:
         f"💰 Сумма: <b>{e(f'{request.amount:,.2f}')} {e(request.currency)}</b>\n"
         f"🏢 Контрагент: {e(_clip(request.counterparty, 120))}\n"
         f"📂 Статья: {e(_clip(request.article or '—', 80))}\n"
+        f"📄 Срок работ: {e(_clip(request.work_deadline or '—', 80))}\n"
         f"📅 Оплатить до: <b>{e(planned)}</b>\n"
         f"👤 Отправитель: {e(request.sender_username)} ({e(request.sender_name)})\n"
         f"📝 Комментарий: {e(_clip(request.comment, 250) or '—')}\n"

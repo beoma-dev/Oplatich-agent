@@ -370,6 +370,15 @@
   </div>
 
   <div class="card">
+    <div class="card-title">📄 Срок исполнения работ по договору <span class="optional-mark">необязательно</span></div>
+    <input type="text" id="work-deadline" maxlength="200" placeholder="Например: текущий месяц" autocomplete="off">
+    <div class="help-text" style="margin-top:6px; font-size:12.5px; color:var(--hint)">
+      Можно датой, можно словами — как записано в договоре: «15.12.2026»,
+      «текущий месяц», «поставка в декабре», «услуга на 6 месяцев».
+    </div>
+  </div>
+
+  <div class="card">
     <div class="card-title">💬 Комментарий <span class="optional-mark">необязательно</span></div>
     <textarea id="comment" maxlength="500" placeholder="Например: аренда офиса за июль, договор №А-42"></textarea>
     <div class="counter"><span id="comment-count">0</span>/500</div>
@@ -417,6 +426,8 @@
       <b>Срочность и дата оплаты</b>: 🔴 Срочно — оплата сегодня,
       🟢 Обычная — следующий рабочий день, 🗓 Настраиваемая — своя дата
       в календаре.<br>
+      <b>Срок исполнения работ по договору</b> — датой или словами
+      («текущий месяц», «поставка в декабре»), по желанию.<br>
       <b>Комментарий</b> — по желанию.
     </div>
   </div>

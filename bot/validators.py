@@ -143,6 +143,18 @@ def validate_text_field(raw: str, *, field_name: str, max_len: int = 500) -> str
     return value
 
 
+def validate_optional_text_field(raw: str, *, field_name: str, max_len: int = 500) -> str:
+    """То же, что validate_text_field, но пустое значение допустимо.
+
+    Переводы строк сворачиваем в пробел: поле однострочное, а в карточку и
+    в PDF оно попадает в одну строку — многострочный ввод там разъезжается.
+    """
+    value = re.sub(r"\s+", " ", (raw or "").strip())
+    if not value:
+        return ""
+    return validate_text_field(value, field_name=field_name, max_len=max_len)
+
+
 def validate_file(mime_type: str | None, file_size: int | None) -> None:
     """Проверяет тип и размер прикреплённого файла счёта."""
     if mime_type not in ALLOWED_MIME_TYPES:
