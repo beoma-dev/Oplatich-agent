@@ -6,7 +6,8 @@
   },
   "scripts": {
     "test": "node --test tests/js/",
-    "test:e2e": "node --test tests/e2e/"
+    "test:e2e": "node --test tests/e2e/",
+    "brand": "node scripts/render_brand.mjs"
   },
   "devDependencies": {
     "playwright": "^1.62.1"

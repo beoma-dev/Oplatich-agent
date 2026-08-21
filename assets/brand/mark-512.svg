@@ -1,4 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="64 44 384 434" width="384" height="434" role="img" aria-label="Оплатыч">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Оплатыч">
+<!-- СГЕНЕРИРОВАНО scripts/render_brand.mjs — руками не править.
+     Источник геометрии: webapp/logo.svg. Знак на прозрачном фоне: кладётся на любую подложку. Безопасное поле то же, что у аватарки, — годится и под круглую обрезку. -->
+  <g transform="translate(256,256) scale(0.922) translate(-256,-261)">
   <defs>
     <radialGradient id="fur" cx="40%" cy="30%" r="76%">
       <stop offset="0%" stop-color="#F8DEA9"/>
@@ -105,4 +108,5 @@
   </g>
   <ellipse cx="336" cy="424" rx="40" ry="29" fill="url(#fur)" stroke="#8A5F27" stroke-width="7"
            transform="rotate(-14 336 424)"/>
+</g>
 </svg>

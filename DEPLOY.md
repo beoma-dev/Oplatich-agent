@@ -159,8 +159,9 @@ PROXY_URL=socks5://warp:1080,socks5://172.17.0.1:1080
 запрещены Telegram). Чтобы форма открывалась **сразу поверх чата**:
 
 1. В [@BotFather](https://t.me/BotFather): `/newapp` → выберите бота → задайте
-   название, описание, картинку 640×360 → **Web App URL** = ваш `WEBAPP_URL` →
-   короткое имя (например, `invoice`).
+   название, описание, картинку 640×360 (готовая —
+   `assets/brand/cover-640x360.png`; размер BotFather проверяет строго) →
+   **Web App URL** = ваш `WEBAPP_URL` → короткое имя (например, `invoice`).
 2. В `.env`: `MINIAPP_SHORT_NAME=invoice` и перезапустите
    (`docker compose up -d`).
 3. Переопубликуйте кнопку: пост `/menu` в канале/группе.
