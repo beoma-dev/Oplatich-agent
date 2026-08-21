@@ -157,6 +157,7 @@ def validate_text_field(raw: str, *, field_name: str, max_len: int = 500) -> str
 _VOWELS = set("аеёиоуыэюяaeiouy")
 _LETTERS_RE = re.compile(r"[^\W\d_]", re.UNICODE)
 _REPEAT_RE = re.compile(r"(.)\1{5,}", re.UNICODE)
+_WORD_SPLIT_RE = re.compile(r"[^\w]+", re.UNICODE)
 
 
 def looks_broken(value: str, *, require_letter: bool = True) -> str | None:
@@ -175,20 +176,40 @@ def looks_broken(value: str, *, require_letter: bool = True) -> str | None:
     return None
 
 
-def looks_like_gibberish(value: str) -> bool:
-    """Похоже на случайный набор символов. Это ПОВОД СПРОСИТЬ, а не отказать."""
-    text = (value or "").strip().lower()
-    letters = _LETTERS_RE.findall(text)
-    if len(letters) < 6:
-        return False  # короткие сокращения («ТД», «АО») судить не по чему
+# Минимум букв в слове, чтобы о нём вообще судить. Короткие сокращения
+# («ТД», «АО», «МГУ», «Член») под подозрение не попадают.
+_JUDGE_FROM = 8
+
+
+def _word_looks_random(word: str) -> bool:
+    """Похоже ли ОДНО слово на набор с клавиатуры."""
+    letters = _LETTERS_RE.findall(word)
+    if len(letters) < _JUDGE_FROM:
+        return False
     vowels = sum(1 for ch in letters if ch in _VOWELS)
     # В живом русском и английском гласных примерно треть. Ниже 15% — это
     # набор с клавиатуры: «лрнпдлдбншопнл» — одна гласная на четырнадцать.
     if vowels / len(letters) < 0.15:
         return True
-    digits = sum(1 for ch in text if ch.isdigit())
-    # Текстовое поле, где цифр больше, чем букв, и их много — тоже мусор.
-    return digits >= 10 and digits > len(letters)
+    # Бедный алфавит. «выавываыавыавы» — 64% гласных, по прошлому правилу
+    # не ловилось, но собрано ВСЕГО ИЗ ТРЁХ букв, которые ходят по кругу.
+    # Порог абсолютный, а не долей: у длинного настоящего названия букв
+    # всегда больше, а доля с ростом длины падает и у осмысленного текста.
+    return len(set(letters)) <= 4
+
+
+def looks_like_gibberish(value: str) -> bool:
+    """Похоже на случайный набор символов. Это ПОВОД СПРОСИТЬ, а не отказать.
+
+    Судим ПО СЛОВАМ: «Член выавываыавыавы» целиком даёт семь различных букв
+    и выглядит прилично, хотя второе слово — набор из трёх букв по кругу.
+    """
+    text = (value or "").strip().lower()
+    # Правила по ДОЛЕ цифр здесь нет намеренно. «Счёт №101 от 21.08.2026» —
+    # одиннадцать цифр против шести букв, и это совершенно нормальный
+    # комментарий; так же выглядят номера договоров и даты. А значение из
+    # ОДНИХ цифр в названии и без того отвергает жёсткий слой: букв нет.
+    return any(_word_looks_random(word) for word in _WORD_SPLIT_RE.split(text) if word)
 
 
 # ── Мат ────────────────────────────────────────────────────────────────────
@@ -221,7 +242,6 @@ _PROFANITY_ROOTS = (
 # товар. Мягкие формы ловятся целыми словами ниже.
 # Слова целиком, которые корнем не поймать.
 _PROFANITY_WORDS = {"бля", "нахуй", "нахер", "похер"}
-_WORD_SPLIT_RE = re.compile(r"[^\w]+", re.UNICODE)
 
 
 def has_profanity(value: str) -> bool:
