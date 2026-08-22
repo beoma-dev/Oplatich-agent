@@ -1185,6 +1185,13 @@
 
   input[type=text], input[type=date], input[type=time], textarea {
     width: 100%;
+    /* На iPhone поле времени вылезало за карточку ровно на свои горизонтальные
+       поля: WKWebView меряет нативный контрол по содержимому и добавляет
+       padding снаружи. Ни Chromium, ни WebKit под Linux этого не повторяют,
+       поэтому предел жёсткий — что бы движок ни думал о width. */
+    box-sizing: border-box;
+    max-width: 100%;
+    min-width: 0;
     border: 1.5px solid transparent;
     background: var(--bg2);
     color: var(--text);
@@ -1198,6 +1205,12 @@
   input[type=text]:focus, input[type=date]:focus, input[type=time]:focus, textarea:focus {
     border-color: var(--accent);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  /* Нативный вид date/time на iOS не слушается box-sizing; appearance: none
+     возвращает обычную блочную модель, пикер по тапу остаётся. */
+  input[type=date], input[type=time] {
+    -webkit-appearance: none;
+    appearance: none;
   }
   textarea { resize: vertical; min-height: 74px; }
 

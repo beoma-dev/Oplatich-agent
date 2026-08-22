@@ -125,6 +125,28 @@ def test_icon_buttons_have_tooltips():
         )
 
 
+def test_inputs_cannot_outgrow_their_card():
+    """Поле ввода не должно вылезать за карточку ни на одном движке.
+
+    На iPhone поле времени выходило за край карточки: WKWebView меряет
+    нативный контрол date/time по содержимому и прибавляет padding снаружи.
+    Ни Chromium, ни WebKit под Linux этого не повторяют — браузерные тесты
+    такую поломку не увидят, поэтому страхуемся в исходнике: жёсткий предел
+    ширины и обычная блочная модель вместо нативной.
+    """
+    rule = re.search(
+        r"input\[type=text\], input\[type=date\], input\[type=time\], textarea \{([^}]*)\}",
+        CSS,
+    )
+    assert rule, "правило для полей ввода потерялось"
+    body = rule.group(1)
+    for prop in ("box-sizing: border-box", "max-width: 100%", "min-width: 0"):
+        assert prop in body, f"{prop} — без него поле снова уедет за карточку на iOS"
+    native = re.search(r"input\[type=date\], input\[type=time\] \{([^}]*)\}", CSS)
+    assert native and "appearance: none" in native.group(1)
+    assert "-webkit-appearance: none" in native.group(1), "Safari смотрит на префикс"
+
+
 def test_hover_states_exist():
     """Наведение должно быть видно — и только на устройствах с курсором."""
     assert "@media (hover: hover)" in HTML
