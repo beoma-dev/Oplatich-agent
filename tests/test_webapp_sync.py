@@ -495,7 +495,7 @@ def test_admin_settings_are_split_into_tabs():
     # «Бета» стоит ПОСЛЕ «Оформления» намеренно: обычный пользователь видит
     # обе, и открываться настройки должны на оформлении, а не на нишевом
     # выключателе распознавания.
-    assert panes == ["fin", "access", "data", "skin", "beta"], panes
+    assert panes == ["fin", "access", "data", "health", "skin", "beta"], panes
     for name in panes:
         assert f'id="pane-{name}"' in HTML, f"нет панели для вкладки {name}"
         assert f'id="tab-{name}"' in HTML
@@ -513,6 +513,12 @@ def test_admin_settings_are_split_into_tabs():
     # Состав финансистов — вопрос прав, поэтому он во вкладке доступа.
     access_pane = HTML[HTML.index('id="pane-access"'):HTML.index('id="pane-data"')]
     assert "💼 Финансисты" in access_pane
+    # Здоровье бота — своя вкладка: это не данные и не доступ, а эксплуатация,
+    # и смотрят её в другой момент — когда что-то сломалось.
+    health_pane = HTML[HTML.index('id="pane-health"'):HTML.index('id="pane-beta"')]
+    assert "🛟 Здоровье бота" in health_pane
+    assert len(re.findall(r'<div class="card[ "]', health_pane)) == 1, "лишние карточки"
+    assert "💾 Бэкап" not in health_pane
 
 
 def test_tabs_fit_one_row():
@@ -524,7 +530,7 @@ def test_tabs_fit_one_row():
     # Кнопки не сжимаются — сжатая молча режет подпись.
     tab = re.search(r"\n  \.tab \{([^}]*)\}", HTML)
     assert tab and "flex: 0 0 auto" in tab.group(1)
-    # На узких экранах ужимаем кегль и поля, иначе пять вкладок не влезут.
+    # На узких экранах ужимаем кегль и поля, иначе шесть вкладок не влезут.
     for width in (460, 400, 340):
         assert any(".tab {" in block for block in _media_blocks(f"max-width: {width}px")), width
     # Самая длинная подпись разворачивается только там, где есть место.
@@ -539,7 +545,7 @@ def test_settings_are_open_to_everyone_but_admin_tabs_are_not():
     assert m and "hidden" not in re.search(r'class="([^"]*)"', m.group(0)).group(1)
     # Права раздаются по трём уровням, и уровень виден прямо в разметке.
     admin_tabs = re.findall(r'data-pane="(\w+)" data-admin="1"', HTML)
-    assert admin_tabs == ["access"], admin_tabs
+    assert admin_tabs == ["access", "health"], admin_tabs
     # Получателю — финансисту или админу: свои напоминания и реестр, который
     # он открывает каждый день. Полная админ-панель ему при этом не положена.
     recipient_tabs = re.findall(r'data-pane="(\w+)" data-recipient="1"', HTML)

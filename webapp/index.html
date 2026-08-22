@@ -510,6 +510,9 @@
             aria-selected="false" id="tab-access" aria-controls="pane-access">Доступ</button>
     <button type="button" class="tab hidden" role="tab" data-pane="data" data-recipient="1"
             aria-selected="false" id="tab-data" aria-controls="pane-data">Данные</button>
+    <button type="button" class="tab hidden" role="tab" data-pane="health" data-admin="1"
+            aria-selected="false" id="tab-health" aria-controls="pane-health"><span
+            class="t-long">Здоровье</span><span class="t-short">Сбои</span></button>
     <button type="button" class="tab" role="tab" data-pane="skin" aria-selected="true"
             id="tab-skin" aria-controls="pane-skin"><span class="t-long">Оформление</span><span
             class="t-short">Тема</span></button>
@@ -659,7 +662,9 @@
         Архив со всеми данными приходит админам в Telegram; настройки применяются без рестарта.
       </div>
     </div>
+  </div>
 
+  <div class="pane hidden" id="pane-health" role="tabpanel" aria-labelledby="tab-health">
     <!-- Здоровье бота. Карточка админская: она про эксплуатацию, а не про
          заявки. Список категорий рисуется по ответу сервера — источник один,
          и он на сервере: разъехавшийся список тут врал бы о том, что придёт. -->

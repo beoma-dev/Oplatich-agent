@@ -717,7 +717,7 @@
   /* ---------- Вкладки настроек ---------- */
   /* Ровно одна строка: все разделы должны быть видны сразу, без переноса и
      без прокрутки. Поэтому подписи без эмодзи, а на узких экранах кегль и
-     поля ужимаются — пять вкладок влезают и в 360 px. */
+     поля ужимаются — шесть вкладок влезают и в 320 px. */
   .tabs {
     display: flex;
     flex-wrap: nowrap;
@@ -725,12 +725,14 @@
     margin: 0 0 14px;
   }
   .tab {
-    /* Не сжимаются: сжатая кнопка молча режет подпись вместо переполнения. */
+    /* Не сжимаются: сжатая кнопка молча режет подпись вместо переполнения.
+       Поля подобраны под ШЕСТЬ вкладок (столько видит админ) с запасом на
+       чужой шрифт: измеряется в tests/e2e/settings.test.cjs. */
     flex: 0 0 auto;
     white-space: nowrap;
     border: 1px solid color-mix(in srgb, var(--hint) 35%, transparent);
     border-radius: 999px;
-    padding: 8px 12px;
+    padding: 8px 10px;
     background: var(--bg);
     color: var(--hint);
     font-size: 13.5px;
@@ -746,14 +748,17 @@
     .t-short { display: none; }
   }
   @media (max-width: 460px) {
-    .tab { padding: 8px 7px; font-size: 12.5px; }
+    .tab { padding: 8px 5px; font-size: 12.5px; }
   }
+  /* Шесть вкладок (у админа) на 360 px не помещались ровно на 2 px: поля
+     ужимаем, кегль не трогаем — читаемость дороже симметрии. */
   @media (max-width: 400px) {
     .tabs { gap: 4px; }
-    .tab { padding: 7px 6px; font-size: 10.5px; }
+    .tab { padding: 7px 4px; font-size: 10.5px; }
   }
   @media (max-width: 340px) {
-    .tab { padding: 6px 4px; font-size: 9.5px; }
+    .tabs { gap: 3px; }
+    .tab { padding: 6px 3px; font-size: 9.5px; }
   }
   .tab[aria-selected="true"] {
     background: var(--accent);

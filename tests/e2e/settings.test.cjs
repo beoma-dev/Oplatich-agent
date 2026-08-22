@@ -56,7 +56,9 @@ async function openSettings(width) {
 }
 
 test("вкладки настроек помещаются в одну строку на любой ширине", async () => {
-  for (const width of [320, 360, 390, 430, 520, 720]) {
+  // Ширины взяты по краям медиазапросов: там запас минимален, и именно там
+  // шестая вкладка (у админа) однажды не поместилась на два пикселя.
+  for (const width of [320, 340, 360, 390, 400, 430, 460, 520, 560, 600, 720]) {
     const page = await openSettings(width);
     const info = await page.evaluate(() => {
       const strip = document.getElementById("admin-tabs");
@@ -71,10 +73,12 @@ test("вкладки настроек помещаются в одну стро�
         clipped: tabs.filter((t) => t.scrollWidth > t.clientWidth + 1).length,
       };
     });
-    assert.equal(info.count, 5, `${width}px: видно не все вкладки`);
+    assert.equal(info.count, 6, `${width}px: видно не все вкладки`);
     assert.equal(info.rows, 1, `${width}px: вкладки перенеслись на вторую строку`);
-    assert.ok(info.need <= info.have + 1,
-      `${width}px: вкладки не помещаются (${info.need} из ${info.have})`);
+    // Не «впритык, но влезло»: чужой шрифт шире нашего, и мерить надо с
+    // запасом, иначе поломка приедет уже к пользователю.
+    assert.ok(info.have - info.need >= 8,
+      `${width}px: вкладки без запаса (нужно ${info.need} из ${info.have})`);
     assert.equal(info.clipped, 0, `${width}px: подпись вкладки обрезана`);
     await page.close();
   }
@@ -82,7 +86,7 @@ test("вкладки настроек помещаются в одну стро�
 
 test("каждая вкладка открывает свою панель, и только её", async () => {
   const page = await openSettings(430);
-  for (const name of ["fin", "access", "data", "beta", "skin"]) {
+  for (const name of ["fin", "access", "data", "health", "beta", "skin"]) {
     await page.click(`#tab-${name}`);
     await page.waitForTimeout(150);
     const state = await page.evaluate(() => ({
@@ -346,7 +350,7 @@ test("на узких экранах ничего не вылезает из к�
     const page = await openApp(browser, { skin: "tg", width, height: 800, routes: ADMIN });
     await page.evaluate(() => document.getElementById("admin-btn").click());
     await page.waitForTimeout(350);
-    for (const pane of ["fin", "data", "skin", "beta"]) {
+    for (const pane of ["fin", "data", "health", "skin", "beta"]) {
       await page.evaluate((p) => {
         document.querySelectorAll("#admin-view [data-admin], #admin-view [data-recipient]")
           .forEach((el) => el.classList.remove("hidden"));
@@ -416,7 +420,7 @@ test("равные доли не применяются там, где надп�
 
 test("здоровье бота: категории, критичное без выключателя и сохранение", async () => {
   const page = await openSettings(390);
-  await page.click("#tab-data");
+  await page.click("#tab-health");
   await page.waitForTimeout(250);
   const shown = await page.evaluate(() => {
     const rows = [...document.querySelectorAll("#alerts-kinds .row-item")];
@@ -466,7 +470,7 @@ test("пропавшая связь видна на экране, даже ко�
   const page = await openApp(browser, { skin: "neon", width: 390, routes });
   await page.click("#admin-btn");
   await page.waitForTimeout(300);
-  await page.click("#tab-data");
+  await page.click("#tab-health");
   await page.waitForTimeout(250);
   const state = await page.evaluate(() => {
     const line = document.getElementById("alerts-state");
@@ -493,12 +497,12 @@ test("финансисту здоровье бота не показывают",
   } });
   await page.click("#admin-btn");
   await page.waitForTimeout(350);
-  await page.click("#tab-data");
-  await page.waitForTimeout(250);
   const visible = await page.evaluate(() => {
+    const tab = document.getElementById("tab-health");
     const card = document.getElementById("alerts-card");
-    return card.offsetParent !== null;
+    return { tab: !tab.classList.contains("hidden"), card: card.offsetParent !== null };
   });
-  assert.equal(visible, false, "карточка эксплуатации досталась не админу");
+  assert.deepEqual(visible, { tab: false, card: false },
+    "вкладка эксплуатации досталась не админу");
   await page.close();
 });

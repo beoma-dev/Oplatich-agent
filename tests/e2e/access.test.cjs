@@ -233,11 +233,12 @@ test("права админа появляются и уходят без пер
   await page.evaluate(() => { window.__admin = true; });
   await page.waitForTimeout(7500);
   // Админ — тоже получатель напоминаний, поэтому вкладка «fin» тоже его.
-  assert.deepEqual(await tabs(), ["fin", "access", "data", "skin", "beta"],
+  assert.deepEqual(await tabs(), ["fin", "access", "data", "health", "skin", "beta"],
     "назначили админом — вкладки не появились");
 
   // И обратно: права сняли, открытая админская вкладка не должна остаться.
-  await page.click("#tab-data");
+  // Уходим именно на «Здоровье»: она чисто админская, её обязано снести.
+  await page.click("#tab-health");
   await page.waitForTimeout(200);
   await page.evaluate(() => { window.__admin = false; });
   await page.waitForTimeout(7500);
