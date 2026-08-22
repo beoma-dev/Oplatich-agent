@@ -47,6 +47,11 @@ _DEFAULTS: dict = {
     # остаётся значением по умолчанию — бета есть бета, и человек, которому
     # распознавание мешает, не должен идти за этим к админу.
     "autofill_by_user": {},
+    # Уведомления о сбоях: главный режим, категории, порог по связи.
+    "alerts": {},
+    # Журнал инцидентов: что ломалось, когда и сколько раз. Ведётся всегда,
+    # даже по выключенным категориям, — выключен звонок, а не датчик.
+    "incidents": [],
 }
 
 
@@ -79,6 +84,9 @@ def _load_locked() -> dict:
                         for k, v in raw.get("reminders_by_user", {}).items()
                     },
                     "autofill": dict(raw.get("autofill", {})),
+                    "autofill_by_user": dict(raw.get("autofill_by_user", {})),
+                    "alerts": dict(raw.get("alerts", {})),
+                    "incidents": [dict(x) for x in raw.get("incidents", [])],
                 }
             except (ValueError, OSError):
                 log.exception("Не удалось прочитать настройки %s — начинаю с пустых", path)
@@ -94,6 +102,8 @@ def _load_locked() -> dict:
     _cache.setdefault("reminders_by_user", {})
     _cache.setdefault("autofill", {})
     _cache.setdefault("autofill_by_user", {})
+    _cache.setdefault("alerts", {})
+    _cache.setdefault("incidents", [])
     return _cache
 
 
@@ -101,9 +111,12 @@ def _save_locked() -> None:
     path = settings.runtime_settings_path
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps(_cache, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        # Через временный файл: журнал инцидентов сделал записи частыми, а
+        # обрыв посреди write_text оставил бы обрезанный JSON — здесь состав
+        # финансистов, whitelist и админы, терять их нельзя.
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(json.dumps(_cache, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(path)
     except OSError:
         log.exception("Не удалось сохранить настройки %s", path)
 
@@ -581,3 +594,136 @@ def set_autofill(enabled: bool) -> bool:
         _save_locked()
     log.info("Настройки: автозаполнение из счёта — %s", "включено" if enabled else "выключено")
     return autofill_enabled()
+
+
+# ---------------------------------------------------------------------------
+# Уведомления о сбоях
+# ---------------------------------------------------------------------------
+# Категории: (ключ, подпись для панели, включена по умолчанию, критичная).
+# Критичную выключить нельзя — это молчание там, где потеряны данные, и
+# именно такое молчание однажды съело заявку. Порядок = порядок в панели.
+ALERT_KINDS: tuple[tuple[str, str, bool, bool], ...] = (
+    ("storage", "Заявка не сохранилась в реестр", True, True),
+    ("delivery", "Карточка не дошла финансисту", True, False),
+    ("telegram", "Пропадала связь с Telegram", True, False),
+    ("backup", "Сбой бэкапа", True, False),
+    ("error", "Внутренние ошибки бота", True, False),
+    ("moderation", "Мат в заявке", True, False),
+)
+ALERT_KEYS = tuple(k for k, _t, _d, _c in ALERT_KINDS)
+CRITICAL_ALERT_KEYS = frozenset(k for k, _t, _d, crit in ALERT_KINDS if crit)
+# Границы порога «связь пропала»: минута — нижняя граница пульса, час — выше
+# уже не уведомление, а сводка.
+LINK_GRACE_MIN, LINK_GRACE_MAX = 1, 60
+LINK_GRACE_DEFAULT = 5
+# Сколько инцидентов держим в журнале и в каком окне считаем повторы одним.
+INCIDENT_LIMIT = 60
+INCIDENT_MERGE_WINDOW = 1800.0
+
+
+def alerts_config() -> dict:
+    """Эффективные настройки уведомлений о сбоях.
+
+    enabled=False — режим «только критичные»: полной тишины здесь нет и быть
+    не может. Категории при этом сохраняются как были: вернул режим — вернул
+    свои галочки, а не дефолт.
+    """
+    with _lock:
+        override = dict(_load_locked().get("alerts", {}))
+    raw_kinds = override.get("kinds") or {}
+    kinds = {}
+    for key, _title, default_on, critical in ALERT_KINDS:
+        kinds[key] = True if critical else bool(raw_kinds.get(key, default_on))
+    try:
+        grace = int(override.get("link_grace_min", LINK_GRACE_DEFAULT))
+    except (TypeError, ValueError):
+        grace = LINK_GRACE_DEFAULT
+    return {
+        "enabled": bool(override.get("enabled", True)),
+        "kinds": kinds,
+        "link_grace_min": max(LINK_GRACE_MIN, min(grace, LINK_GRACE_MAX)),
+    }
+
+
+def set_alerts_config(
+    *,
+    enabled: bool | None = None,
+    kinds: dict | None = None,
+    link_grace_min: int | None = None,
+) -> dict:
+    """Сохраняет настройки уведомлений. Возвращает эффективные."""
+    with _lock:
+        data = _load_locked()
+        override = data.setdefault("alerts", {})
+        if enabled is not None:
+            override["enabled"] = bool(enabled)
+        if kinds is not None:
+            stored = override.setdefault("kinds", {})
+            for key, value in kinds.items():
+                if key in ALERT_KEYS and key not in CRITICAL_ALERT_KEYS:
+                    stored[key] = bool(value)
+        if link_grace_min is not None:
+            override["link_grace_min"] = int(link_grace_min)
+        _save_locked()
+    log.info("Настройки уведомлений о сбоях обновлены: %s", alerts_config())
+    return alerts_config()
+
+
+def alert_kind_enabled(kind: str | None) -> bool:
+    """Уведомлять ли о сбое этой категории.
+
+    Неизвестная категория (в том числе None — старый вызов без kind) считается
+    обычной и подчиняется главному режиму: молча потерять новый вид алерта
+    хуже, чем показать лишний.
+    """
+    if kind in CRITICAL_ALERT_KEYS:
+        return True
+    cfg = alerts_config()
+    if not cfg["enabled"]:
+        return False
+    return bool(cfg["kinds"].get(kind, True)) if kind in ALERT_KEYS else True
+
+
+def record_incident(kind: str | None, title: str, *, sent: bool, when: float) -> None:
+    """Пишет сбой в журнал. Повтор того же в окне склейки — счётчиком.
+
+    Журнал ведётся независимо от настроек: админ, выключивший категорию,
+    должен видеть в панели, что она всё-таки срабатывала.
+    """
+    with _lock:
+        data = _load_locked()
+        journal = data.setdefault("incidents", [])
+        for item in journal:
+            same = item.get("kind") == kind and item.get("title") == title
+            if same and when - float(item.get("ts", 0.0)) < INCIDENT_MERGE_WINDOW:
+                item["ts"] = when
+                item["count"] = int(item.get("count", 1)) + 1
+                item["sent"] = bool(item.get("sent")) or sent
+                _save_locked()
+                return
+        journal.insert(0, {
+            "kind": kind or "other",
+            "title": title,
+            "ts": when,
+            "count": 1,
+            "sent": sent,
+        })
+        del journal[INCIDENT_LIMIT:]
+        _save_locked()
+
+
+def recent_incidents(limit: int = 8) -> list[dict]:
+    """Последние инциденты, свежие первыми."""
+    with _lock:
+        journal = [dict(x) for x in _load_locked().get("incidents", [])]
+    journal.sort(key=lambda x: float(x.get("ts", 0.0)), reverse=True)
+    return journal[: max(0, limit)]
+
+
+def incidents_since(since: float) -> int:
+    """Сколько сбоев (с учётом повторов) случилось после указанного времени."""
+    with _lock:
+        journal = [dict(x) for x in _load_locked().get("incidents", [])]
+    return sum(
+        int(x.get("count", 1)) for x in journal if float(x.get("ts", 0.0)) >= since
+    )

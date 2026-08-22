@@ -35,6 +35,7 @@ REGISTRY_EXPORTED = "REGISTRY_EXPORTED"      # админ выгрузил xlsx-
 BACKUP_SETTINGS = "BACKUP_SETTINGS"          # админ изменил настройки бэкапа
 REMINDER_SETTINGS = "REMINDER_SETTINGS"      # админ изменил напоминания
 BETA_SETTINGS = "BETA_SETTINGS"              # админ включил/выключил бету
+ALERT_SETTINGS = "ALERT_SETTINGS"            # админ изменил уведомления о сбоях
 ADMIN_ROLE = "ADMIN_ROLE"                    # админ назначен или разжалован
 ACCESS_REQUESTED = "ACCESS_REQUESTED"        # сотрудник попросил доступ
 ACCESS_RESOLVED = "ACCESS_RESOLVED"          # админ решил по заявке на доступ

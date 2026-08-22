@@ -16,7 +16,26 @@ const ADMIN = {
     reminders: { enabled: true, time: "09:30", days_before: 1, overdue: true, target: "admins" },
     registry_url: "https://docs.google.com/spreadsheets/d/SHEET",
     drive_url: "https://drive.google.com/drive/folders/FOLDER",
+    alerts: { enabled: true, link_grace_min: 5, kinds: {
+      storage: true, delivery: true, telegram: false, backup: true,
+      error: true, moderation: true } },
+    alert_kinds: [
+      { key: "storage", title: "Заявка не сохранилась в реестр", critical: true },
+      { key: "delivery", title: "Карточка не дошла финансисту", critical: false },
+      { key: "telegram", title: "Пропадала связь с Telegram", critical: false },
+      { key: "backup", title: "Сбой бэкапа", critical: false },
+      { key: "error", title: "Внутренние ошибки бота", critical: false },
+      { key: "moderation", title: "Мат в заявке", critical: false },
+    ],
+    health: { alive: true, last_ok_age: 12, down_for: null, grace_min: 5 },
+    incidents: [{ kind: "telegram", title: "Связь с Telegram восстановлена",
+                  ts: Math.floor(Date.now() / 1000) - 600, count: 2, sent: true }],
+    incidents_day: 2,
   },
+  "/api/admin/alerts": { ok: true, message: "Сохранено.", alerts: {
+    enabled: true, link_grace_min: 7, kinds: {
+      storage: true, delivery: false, telegram: false, backup: true,
+      error: true, moderation: true } } },
   "/api/admin/users": { whitelist_empty: false, users: [
     { id: 42, username: "@boss", admin: true, admin_source: "env", financier: false, access: null },
     { id: 7, username: "@fin", admin: false, financier: true, access: "env" },
@@ -392,5 +411,94 @@ test("равные доли не применяются там, где надп�
       .filter((b) => b.scrollWidth > b.clientWidth + 1)
       .map((b) => b.textContent.trim()));
   assert.deepEqual(bad, [], "надписи в форме обрезаны");
+  await page.close();
+});
+
+test("здоровье бота: категории, критичное без выключателя и сохранение", async () => {
+  const page = await openSettings(390);
+  await page.click("#tab-data");
+  await page.waitForTimeout(250);
+  const shown = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll("#alerts-kinds .row-item")];
+    return {
+      titles: rows.map((r) => r.querySelector(".who").textContent),
+      // У критичного — плашка «всегда» и НИ ОДНОЙ кнопки: выключить нельзя.
+      criticalTag: rows[0].querySelector(".tag").textContent,
+      criticalToggle: !!rows[0].querySelector(".kind-toggle"),
+      offByServer: rows.filter((r) => {
+        const t = r.querySelector(".kind-toggle");
+        return t && !t.classList.contains("on");
+      }).map((r) => r.querySelector(".who").textContent),
+      state: document.getElementById("alerts-state-text").textContent,
+      bad: document.getElementById("alerts-state").classList.contains("bad"),
+      journal: document.querySelector("#alerts-log .row-item .who").innerText,
+    };
+  });
+  assert.equal(shown.titles.length, 6);
+  assert.equal(shown.criticalTag, "всегда");
+  assert.equal(shown.criticalToggle, false, "критичное уведомление дали выключить");
+  assert.deepEqual(shown.offByServer, ["Пропадала связь с Telegram"]);
+  assert.match(shown.state, /в норме/);
+  assert.equal(shown.bad, false);
+  assert.match(shown.journal, /Связь с Telegram восстановлена ×2/);
+
+  // Переключаем категорию и сохраняем — на сервер уходит именно она.
+  await page.click('#alerts-kinds .kind-toggle[data-kind="delivery"]');
+  await page.fill("#alerts-grace", "7");
+  await page.click("#alerts-save");
+  await page.waitForTimeout(250);
+  const sent = await page.evaluate(() => {
+    const post = window.__posts.filter((p) => p[0].indexOf("/api/admin/alerts") !== -1).pop();
+    return { body: JSON.parse(post[1]), msg: document.getElementById("admin-msg").textContent };
+  });
+  assert.equal(sent.body.action, "save");
+  assert.equal(sent.body.kinds.delivery, false);
+  assert.equal(sent.body.link_grace_min, "7");
+  assert.match(sent.msg, /Сохранено/);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test("пропавшая связь видна на экране, даже когда сообщение прийти не может", async () => {
+  const routes = JSON.parse(JSON.stringify(ADMIN));
+  routes["/api/admin/settings"].health = {
+    alive: false, last_ok_age: 900, down_for: 900, grace_min: 5 };
+  const page = await openApp(browser, { skin: "neon", width: 390, routes });
+  await page.click("#admin-btn");
+  await page.waitForTimeout(300);
+  await page.click("#tab-data");
+  await page.waitForTimeout(250);
+  const state = await page.evaluate(() => {
+    const line = document.getElementById("alerts-state");
+    const card = document.getElementById("alerts-card");
+    return {
+      text: document.getElementById("alerts-state-text").textContent,
+      bad: line.classList.contains("bad"),
+      // Карточка обязана помещаться по ширине: ей жить на телефоне.
+      overflow: card.scrollWidth - card.clientWidth,
+    };
+  });
+  assert.match(state.text, /Связи с Telegram нет 15 мин/);
+  assert.ok(state.bad, "провал связи должен быть заметен, а не просто написан");
+  assert.ok(state.overflow <= 1, `карточка вылезает на ${state.overflow}px`);
+  await page.close();
+});
+
+test("финансисту здоровье бота не показывают", async () => {
+  const page = await openApp(browser, { skin: "neon", width: 390, routes: {
+    "/api/access": { allowed: true, financier: true, admin: false,
+                     pending: false, has_admins: true },
+    "/api/admin/settings": { __status: 403 },
+    "/api/registry/links": { registry_url: null, drive_url: null },
+  } });
+  await page.click("#admin-btn");
+  await page.waitForTimeout(350);
+  await page.click("#tab-data");
+  await page.waitForTimeout(250);
+  const visible = await page.evaluate(() => {
+    const card = document.getElementById("alerts-card");
+    return card.offsetParent !== null;
+  });
+  assert.equal(visible, false, "карточка эксплуатации досталась не админу");
   await page.close();
 });

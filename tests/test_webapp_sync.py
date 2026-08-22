@@ -770,6 +770,7 @@ def test_mini_app_is_split_into_files():
     assert '<link rel="stylesheet" href="app.css">' in MARKUP
     assert '<script src="form-lib.js"></script>' in MARKUP
     assert '<script src="skin-field.js"></script>' in MARKUP
+    assert '<script src="alerts-panel.js"></script>' in MARKUP
     assert '<script src="app.js"></script>' in MARKUP
     # В разметке не должно остаться ни стилей, ни логики.
     assert "<style>" not in MARKUP
@@ -777,8 +778,11 @@ def test_mini_app_is_split_into_files():
     assert "data-skin" in MARKUP, "ранний скрипт темы обязан остаться инлайном"
     # Порядок подключения значим: app.js зовёт buildSkinField и функции формы.
     assert MARKUP.index("skin-field.js") < MARKUP.index('src="app.js"')
+    assert MARKUP.index("alerts-panel.js") < MARKUP.index('src="app.js"')
     assert "buildSkinField(" in FIELD
     assert 'buildSkinField($("skin-field"))' in JS
+    assert "buildAlertsPanel(" in _read("alerts-panel.js")
+    assert "buildAlertsPanel({" in JS
 
 
 def test_split_files_stay_reasonably_small():
@@ -791,7 +795,8 @@ def test_split_files_stay_reasonably_small():
     «Мои заявки») в свой файл; это отдельная задача, а не правка порога.
     """
     for name, limit in (("index.html", 900), ("app.css", 1600), ("app.js", 2900),
-                        ("skin-field.js", 400), ("form-lib.js", 300)):
+                        ("skin-field.js", 400), ("form-lib.js", 300),
+                        ("alerts-panel.js", 300)):
         length = len(_read(name).split("\n"))
         assert length <= limit, f"{name}: {length} строк — пора делить дальше"
 

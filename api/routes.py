@@ -41,6 +41,7 @@ from bot.validators import (
 )
 from config import settings
 from services import (
+    alerts,
     audit,
     backup,
     dedup,
@@ -525,6 +526,17 @@ async def admin_settings(request: Request) -> dict:
         "registry_url": registry_url,
         "drive_url": drive_url,
         "admins": admins,
+        # Здоровье бота: настройки уведомлений, живое состояние связи и
+        # журнал последних сбоев — панель открывается и тогда, когда
+        # Telegram недоступен, так что это единственный надёжный экран.
+        "alerts": rs.alerts_config(),
+        "alert_kinds": [
+            {"key": key, "title": title, "critical": critical}
+            for key, title, _default, critical in rs.ALERT_KINDS
+        ],
+        "health": health_pulse.link_state(),
+        "incidents": rs.recent_incidents(6),
+        "incidents_day": rs.incidents_since(time.time() - 86400),
     }
 
 
@@ -628,6 +640,78 @@ async def admin_backup(request: Request) -> dict:
             "message": f"Бэкап {state}: ежедневно в {cfg['time']}, хранить {cfg['keep']}.",
             "backup": cfg,
         }
+
+    raise HTTPException(status_code=422, detail="Некорректный запрос.")
+
+
+@router.post("/admin/alerts")
+async def admin_alerts(request: Request) -> dict:
+    """Уведомления о сбоях: {"action": "save"|"test"|"status", ...}.
+
+    save   — режим, категории и порог по связи;
+    test   — проверочное сообщение ТОЛЬКО нажавшему: канал «бот → админ»
+             живёт отдельно от всего остального и проверяется отдельно;
+    status — свежее состояние связи и журнал без перезагрузки всей панели.
+    """
+    user = await _require_admin(request)
+    body = await request.json()
+    action = body.get("action")
+
+    if action == "status":
+        return {
+            "ok": True,
+            "health": health_pulse.link_state(),
+            "incidents": rs.recent_incidents(6),
+            "incidents_day": rs.incidents_since(time.time() - 86400),
+        }
+
+    if action == "test":
+        sent = await alerts.send_test_alert(request.app.state.bot, user["id"])
+        if not sent:
+            # Обычно это значит, что человек не открывал чат с ботом.
+            raise HTTPException(
+                status_code=502,
+                detail="Не удалось доставить: напишите боту в личку /start и повторите.",
+            )
+        return {"ok": True, "message": "Проверочное уведомление отправлено вам в чат."}
+
+    if action == "save":
+        grace_raw = str(body.get("link_grace_min", "")).strip()
+        grace: int | None = None
+        if grace_raw:
+            if not grace_raw.isdigit() or not (
+                rs.LINK_GRACE_MIN <= int(grace_raw) <= rs.LINK_GRACE_MAX
+            ):
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Порог по связи — целое от {rs.LINK_GRACE_MIN} "
+                           f"до {rs.LINK_GRACE_MAX} минут.",
+                )
+            grace = int(grace_raw)
+        raw_kinds = body.get("kinds")
+        kinds = (
+            {k: bool(v) for k, v in raw_kinds.items() if k in rs.ALERT_KEYS}
+            if isinstance(raw_kinds, dict)
+            else None
+        )
+        cfg = await asyncio.to_thread(
+            rs.set_alerts_config,
+            enabled=bool(body.get("enabled")),
+            kinds=kinds,
+            link_grace_min=grace,
+        )
+        off = [k for k, v in cfg["kinds"].items() if not v]
+        await audit.log_event(
+            audit.ALERT_SETTINGS,
+            user["id"],
+            user.get("username"),
+            f"enabled={cfg['enabled']} grace={cfg['link_grace_min']} off={','.join(off) or '-'}",
+        )
+        message = (
+            f"Уведомления о сбоях: {'все включённые категории' if cfg['enabled'] else 'только критичные'}"
+            f", порог по связи {cfg['link_grace_min']} мин."
+        )
+        return {"ok": True, "message": message, "alerts": cfg}
 
     raise HTTPException(status_code=422, detail="Некорректный запрос.")
 

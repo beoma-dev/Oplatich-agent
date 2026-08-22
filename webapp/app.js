@@ -2473,6 +2473,18 @@
   }
   $("users-reload").addEventListener("click", loadUsers);
 
+  // Здоровье бота: состояние связи, уведомления о сбоях и журнал. Живёт в
+  // своём файле — панель самодостаточна, а app.js и без неё на пределе.
+  var alertsPanel = typeof buildAlertsPanel === "function" ? buildAlertsPanel({
+    $: $,
+    setSeg: setSeg,
+    showMsg: showAdminMsg,
+    initData: function () { return tg ? tg.initData : ""; },
+    haptic: function () {
+      if (tg && tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
+    }
+  }) : null;
+
   function loadAdminSettings() {
     fetch("/api/admin/settings", { headers: { "X-Telegram-Init-Data": tg.initData } })
       .then(function (r) { return r.json(); })
@@ -2481,6 +2493,7 @@
         renderList("adm-list", d.admins || [], "adm");
         renderList("wl-list", d.allowed || [], "wl");
         if (d.backup) fillBackup(d.backup);
+        if (alertsPanel) alertsPanel.fill(d);
         setSeg("autofill-seg", d.autofill === false ? "off" : "on");
         // Google-режим: прямые ссылки на живую таблицу и на папку Диска с
         // файлами счетов; локальный режим — обе кнопки прячем, остаётся /export.

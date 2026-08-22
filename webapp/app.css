@@ -846,6 +846,54 @@
     border-radius: 6px;
     padding: 2px 7px;
   }
+  /* Строка живого состояния связи. Точка — цветом, текст — словами: цвет
+     один не читается ни дальтоником, ни в ярком солнце. */
+  .state-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 2px 0 4px;
+    padding: 9px 11px;
+    border-radius: 11px;
+    background: var(--bg2);
+    color: var(--hint);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .state-line .dot {
+    flex: 0 0 auto;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .state-line.bad {
+    background: color-mix(in srgb, var(--danger) 12%, var(--bg));
+    color: var(--danger);
+    font-weight: 600;
+  }
+  .state-line.bad .dot { background: var(--danger); animation: pulse-dot 1.6s ease-in-out infinite; }
+  @keyframes pulse-dot { 50% { opacity: .25; } }
+  /* Переключатель категории: узкий, чтобы длинная подпись сбоя не переносилась. */
+  .kind-toggle {
+    flex: 0 0 auto;
+    min-width: 58px;
+    border: 1.5px solid var(--bg2);
+    border-radius: 9px;
+    padding: 6px 10px;
+    background: var(--bg2);
+    color: var(--hint);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background .18s ease, color .18s ease, border-color .18s ease,
+                transform .12s ease;
+  }
+  .kind-toggle:active { transform: scale(.94); }
+  .kind-toggle.on {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-text);
+    font-weight: 600;
+  }
   .row-del {
     flex: 0 0 auto;
     width: 28px; height: 28px;

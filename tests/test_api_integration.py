@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import time
 from datetime import date, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
@@ -13,6 +14,7 @@ import pytest
 
 import api.routes as routes_mod
 import bot.access as access
+import services.runtime_settings as rs
 from api.server import build_api
 from config import settings
 from tests.test_auth import _signed_init_data
@@ -358,6 +360,75 @@ class TestAdminEndpoints:
         )
         assert ok.status_code == 200
         assert ok.json()["backup"] == {"enabled": False, "time": "04:15", "keep": 3}
+
+    async def test_alerts_save_validation_and_roundtrip(self, api, monkeypatch):
+        client, _ = api
+        _admins(monkeypatch, "42")
+        bad = await client.post(
+            "/api/admin/alerts",
+            json={"action": "save", "enabled": True, "link_grace_min": "999"},
+            headers=_auth(),
+        )
+        assert bad.status_code == 422
+        ok = await client.post(
+            "/api/admin/alerts",
+            json={
+                "action": "save",
+                "enabled": True,
+                "kinds": {"backup": False, "storage": False, "выдумка": True},
+                "link_grace_min": "12",
+            },
+            headers=_auth(),
+        )
+        assert ok.status_code == 200
+        cfg = ok.json()["alerts"]
+        assert cfg["link_grace_min"] == 12
+        assert cfg["kinds"]["backup"] is False
+        # Критичное не выключается даже прямым запросом мимо интерфейса.
+        assert cfg["kinds"]["storage"] is True
+        assert "выдумка" not in cfg["kinds"]
+        # Настройки видно там же, где их правят.
+        settings_body = (await client.get("/api/admin/settings", headers=_auth())).json()
+        assert settings_body["alerts"]["link_grace_min"] == 12
+        assert {k["key"] for k in settings_body["alert_kinds"]} == set(rs.ALERT_KEYS)
+        assert settings_body["health"]["alive"] in (True, False)
+
+    async def test_alerts_test_message_goes_to_the_asking_admin(self, api, monkeypatch):
+        client, bot = api
+        _admins(monkeypatch, "42")
+        resp = await client.post(
+            "/api/admin/alerts", json={"action": "test"}, headers=_auth()
+        )
+        assert resp.status_code == 200
+        assert bot.send_message.call_args.kwargs["chat_id"] == 42
+
+    async def test_alerts_test_reports_closed_chat(self, api, monkeypatch):
+        """Бот не может писать первым: честно говорим, что делать."""
+        client, bot = api
+        _admins(monkeypatch, "42")
+        bot.send_message = AsyncMock(side_effect=RuntimeError("bot can't initiate"))
+        resp = await client.post(
+            "/api/admin/alerts", json={"action": "test"}, headers=_auth()
+        )
+        assert resp.status_code == 502 and "/start" in resp.json()["detail"]
+
+    async def test_alerts_status_returns_journal(self, api, monkeypatch):
+        client, _ = api
+        _admins(monkeypatch, "42")
+        rs.record_incident("backup", "Сбой бэкапа", sent=True, when=time.time())
+        body = (await client.post(
+            "/api/admin/alerts", json={"action": "status"}, headers=_auth()
+        )).json()
+        assert body["incidents"][0]["title"] == "Сбой бэкапа"
+        assert body["incidents_day"] == 1
+
+    async def test_alerts_are_admin_only(self, api, monkeypatch):
+        """Финансисту здоровье бота не показываем: это не его пульт."""
+        client, _ = api
+        _admins(monkeypatch, "1")
+        for body in ({"action": "status"}, {"action": "test"}, {"action": "save"}):
+            resp = await client.post("/api/admin/alerts", json=body, headers=_auth(42))
+            assert resp.status_code == 403, body
 
     async def test_counterparties_after_submit(self, api, monkeypatch):
         client, _ = api

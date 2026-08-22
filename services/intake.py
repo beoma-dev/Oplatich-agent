@@ -55,6 +55,7 @@ async def finalize_submission(
             "Заявка НЕ сохранилась в реестр",
             f"{request.request_id} от {request.sender_username} — детали в логах",
             signature="request-failed",
+            kind="storage",
         )
         raise
 
@@ -117,6 +118,7 @@ async def finalize_submission(
                 f"{request.request_id} от {request.sender_username} "
                 f"({request.sender_name}): {', '.join(profane)}.",
                 signature=f"profanity-{request.telegram_id}",
+                kind="moderation",
             )
         except Exception:  # noqa: BLE001 — алерт не должен ломать подачу
             log.exception("Сбой алерта о мате в заявке %s", request.request_id)
@@ -140,7 +142,9 @@ async def finalize_submission(
                 "нет. Добавьте финансиста в админ-панели ⚙️."
             )
         try:
-            await alerts.alert_admins(bot, title, details, signature="finance-undelivered")
+            await alerts.alert_admins(
+                bot, title, details, signature="finance-undelivered", kind="delivery"
+            )
         except Exception:  # noqa: BLE001 — алерт не должен ломать подачу
             log.exception("Сбой алерта о недоставленной карточке")
 

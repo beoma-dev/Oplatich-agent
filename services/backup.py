@@ -89,6 +89,7 @@ async def run_backup(bot: Bot) -> tuple[Path, int]:
             "Бэкап собран, но слишком велик для Telegram",
             f"{path} · {size // (1024 * 1024)} МБ — заберите с сервера",
             signature="backup-too-big",
+            kind="backup",
         )
         return path, 0
 
@@ -151,6 +152,10 @@ async def backup_loop(bot: Bot) -> None:
         except Exception:  # noqa: BLE001 — цикл должен пережить любой сбой
             log.exception("Сбой планового бэкапа")
             await alerts.alert_admins(
-                bot, "Сбой планового бэкапа", "детали в логах", signature="backup-failed"
+                bot,
+                "Сбой планового бэкапа",
+                "детали в логах",
+                signature="backup-failed",
+                kind="backup",
             )
         await asyncio.sleep(61)  # не сработать дважды в ту же минуту

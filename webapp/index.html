@@ -659,6 +659,38 @@
         Архив со всеми данными приходит админам в Telegram; настройки применяются без рестарта.
       </div>
     </div>
+
+    <!-- Здоровье бота. Карточка админская: она про эксплуатацию, а не про
+         заявки. Список категорий рисуется по ответу сервера — источник один,
+         и он на сервере: разъехавшийся список тут врал бы о том, что придёт. -->
+    <div class="card hidden" data-admin="1" id="alerts-card">
+      <div class="card-title">🛟 Здоровье бота <button type="button" class="help-q" data-help-title="Здоровье бота" data-help="Сообщения о поломках приходят админам в личку. Критичное — «заявка не сохранилась» — не выключается: это единственный сбой, при котором данные теряются. Одинаковые сообщения не повторяются чаще раза в 30 минут, всего не больше 10 в час. Журнал ведётся по ВСЕМ сбоям, даже по выключенным категориям: выключен звонок, а не датчик.">?</button></div>
+      <div class="state-line" id="alerts-state" title="Нажмите, чтобы обновить"><span class="dot"></span><span id="alerts-state-text">Проверяю связь…</span></div>
+
+      <label class="field-label">Режим</label>
+      <div class="seg seg-even" id="alerts-mode">
+        <button type="button" data-value="on" class="active">Все сбои</button>
+        <button type="button" data-value="off">Только критичные</button>
+      </div>
+
+      <label class="field-label">Что присылать</label>
+      <div id="alerts-kinds"></div>
+
+      <label class="field-label" for="alerts-grace">Молчать о пропаже связи первые (мин)</label>
+      <input type="text" id="alerts-grace" inputmode="numeric" maxlength="2" value="5">
+      <div class="counter" style="text-align:left; margin-top:6px">
+        Прокси иногда моргает на секунды — о таком будить незачем. Дольше порога
+        — придёт сообщение, чаще всего уже вдогонку, вместе с длительностью.
+      </div>
+
+      <div class="add-row">
+        <button type="button" class="add-btn" id="alerts-save" style="flex:1">Сохранить</button>
+        <button type="button" class="add-btn" id="alerts-test">🔔 Проверить</button>
+      </div>
+
+      <label class="field-label">Последние сбои</label>
+      <div id="alerts-log"></div>
+    </div>
   </div>
 
   <div class="pane hidden" id="pane-beta" role="tabpanel" aria-labelledby="tab-beta">
@@ -833,6 +865,7 @@
 </div>
 
 <script src="skin-field.js"></script>
+<script src="alerts-panel.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

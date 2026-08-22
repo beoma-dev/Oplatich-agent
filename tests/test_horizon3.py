@@ -302,8 +302,8 @@ class TestNotifications:
         monkeypatch.setattr(intake, "effective_finance_recipients", lambda: ["7"])
         seen = {}
 
-        async def fake_alert(bot, title, details="", *, signature=None):
-            seen["title"], seen["details"] = title, details
+        async def fake_alert(bot, title, details="", *, signature=None, kind=None):
+            seen["title"], seen["details"], seen["kind"] = title, details, kind
             return 1
 
         monkeypatch.setattr(alerts, "alert_admins", fake_alert)
@@ -311,6 +311,7 @@ class TestNotifications:
         monkeypatch.setattr(intake, "notify_finance", AsyncMock(return_value=0))
         await intake.finalize_submission(bot, make_request(), invoice_file=None)
         assert "не дошла" in seen["title"]
+        assert seen["kind"] == "delivery", "категория нужна: без неё алерт не выключить"
 
     async def test_admin_is_alerted_when_no_financiers_configured(self, tmp_paths, monkeypatch):
         from services import alerts
@@ -318,14 +319,14 @@ class TestNotifications:
         monkeypatch.setattr(intake, "effective_finance_recipients", lambda: [])
         seen = {}
 
-        async def fake_alert(bot, title, details="", *, signature=None):
-            seen["title"] = title
+        async def fake_alert(bot, title, details="", *, signature=None, kind=None):
+            seen["title"], seen["kind"] = title, kind
             return 1
 
         monkeypatch.setattr(alerts, "alert_admins", fake_alert)
         monkeypatch.setattr(intake, "notify_finance", AsyncMock(return_value=0))
         await intake.finalize_submission(self._bot(), make_request(), invoice_file=None)
-        assert "не настроены" in seen["title"]
+        assert "не настроены" in seen["title"] and seen["kind"] == "delivery"
 
     async def test_author_is_not_told_about_the_financier_failure(self):
         """Осечку чинит админ — сотруднику про неё не пишем."""
