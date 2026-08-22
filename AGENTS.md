@@ -38,7 +38,9 @@ Telegram-бот подачи заявок на оплату счетов. Два
 светлой темой до отрисовки). Краткое описание
 архитектуры по пунктам ТЗ и стоимость реализации — в
 [ARCHITECTURE.md](ARCHITECTURE.md), полное описание решений и их причин — в
-[CONTEXT.md](CONTEXT.md), деплой — в [DEPLOY.md](DEPLOY.md).
+[CONTEXT.md](CONTEXT.md), деплой — в [DEPLOY.md](DEPLOY.md). Срезы состояния
+проекта (качество, безопасность, эксплуатация) и их незакрытые риски — в
+[reports/](reports/); правила ведения — в [reports/README.md](reports/README.md).
 
 ## Команды
 
