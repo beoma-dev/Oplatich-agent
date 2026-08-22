@@ -1,15 +1,19 @@
+# Обновлено по результатам pip-audit: pypdf и Pillow разбирают ЗАГРУЖЕННЫЕ
+# пользователем файлы, starlette (через fastapi) и python-multipart — входящий
+# HTTP и разбор загрузки. На прежних версиях аудит давал 77 записей, на этих —
+# ни одной. Проверять снова: python -m pip_audit -r requirements.txt
 # Telegram Bot (async)
 python-telegram-bot==21.9
 
 # Конфигурация и валидация
 pydantic==2.9.2
 pydantic-settings==2.6.1
-python-dotenv==1.0.1
+python-dotenv==1.2.2
 
 # HTTP API для Mini App (форма заявки в Telegram)
-fastapi==0.115.6
+fastapi==0.141.1
 uvicorn[standard]==0.34.0
-python-multipart==0.0.20
+python-multipart==0.0.32
 
 # Базы часовых поясов для zoneinfo (нужно в slim-контейнерах)
 tzdata==2024.2
@@ -22,10 +26,10 @@ reportlab==4.2.5
 num2words==0.5.13
 
 # Автопроверка «похож ли файл на счёт»: текст PDF + OCR (tesseract в Docker)
-pypdf==5.1.0
+pypdf==6.16.1
 pytesseract==0.3.13
 pdf2image==1.17.0
-Pillow==11.0.0
+Pillow==12.3.0
 
 # Google Sheets + Google Drive (STORAGE_BACKEND=google)
 google-api-python-client==2.154.0

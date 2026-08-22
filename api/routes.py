@@ -891,6 +891,27 @@ async def admin_admins(request: Request) -> dict:
     return {"ok": changed, "message": message}
 
 
+async def _read_limited(file: UploadFile, limit: int) -> bytes:
+    """Читает вложение, но не больше limit+1 байта.
+
+    Раньше файл читался целиком и ТОЛЬКО потом сверялся с лимитом: защита
+    стояла после того, как данные уже в памяти. Практический потолок задавал
+    Caddy (max_size 25MB), но полагаться на обратный прокси в вопросе
+    собственной памяти неправильно. Читаем кусками и обрываемся на первом
+    превышении — вернувшийся объём на единицу больше лимита и есть признак
+    «слишком большой».
+    """
+    chunks: list[bytes] = []
+    read = 0
+    while read <= limit:
+        chunk = await file.read(64 * 1024)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        read += len(chunk)
+    return b"".join(chunks)[: limit + 1]
+
+
 @router.post("/check-file")
 async def check_file(
     request: Request,
@@ -910,7 +931,7 @@ async def check_file(
     if _check_rate_limited(user["id"]):
         raise HTTPException(status_code=429, detail="Слишком часто — подождите минуту.")
 
-    content = await file.read()
+    content = await _read_limited(file, MAX_FILE_SIZE_BYTES)
     if len(content) > MAX_FILE_SIZE_BYTES:
         raise HTTPException(status_code=422, detail="Файл больше 20 МБ.")
 
@@ -1100,7 +1121,7 @@ async def submit_invoice(
     if with_invoice:
         if file is None or not file.filename:
             raise HTTPException(status_code=422, detail="Прикрепите файл счёта.")
-        content = await file.read()
+        content = await _read_limited(file, MAX_FILE_SIZE_BYTES)
         if len(content) > MAX_FILE_SIZE_BYTES:
             raise HTTPException(status_code=422, detail="Файл больше 20 МБ.")
         try:

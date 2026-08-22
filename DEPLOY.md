@@ -26,6 +26,8 @@ cd invoice-bot
 
 ```bash
 cp .env.example .env
+chmod 600 .env          # в нём токен бота: по умолчанию файл читаем всем
+mkdir -p secrets && chmod 700 secrets   # сюда ляжет ключ service account
 nano .env
 ```
 
