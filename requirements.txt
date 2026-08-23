@@ -22,7 +22,7 @@ tzdata==2024.2
 socksio==1.0.0
 
 # PDF-документ заявки (шрифты DejaVu вендорены в assets/fonts)
-reportlab==4.2.5
+reportlab==5.0.1
 num2words==0.5.13
 
 # Автопроверка «похож ли файл на счёт»: текст PDF + OCR (tesseract в Docker)
