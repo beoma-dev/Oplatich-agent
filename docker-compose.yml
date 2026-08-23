@@ -32,6 +32,14 @@ services:
       - ./secrets:/app/secrets:ro
     expose:
       - "8080"
+    # Потолок логов. Без него json-файл контейнера растёт бесконечно: у warp
+    # он дошёл до 103 МБ на уровне DEBUG (44 МБ в сутки), а лог бота выглядел
+    # маленьким только потому, что деплой пересоздаёт контейнер и обнуляет его.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: ["CMD", "python", "scripts/healthcheck.py"]
       interval: 30s
@@ -53,6 +61,18 @@ services:
     sysctls:
       net.ipv6.conf.all.disable_ipv6: 0
       net.ipv4.conf.all.src_valid_mark: 1
+    # Уровень логов у этого образа не настраивается: warp-svc запускается
+    # без соответствующего ключа, а в warp-cli такой команды нет. Он пишет
+    # DEBUG-статистику туннеля каждые несколько секунд (~44 МБ в сутки),
+    # поэтому объём ограничивается только ротацией ниже.
+    # Потолок логов. Без него json-файл контейнера растёт бесконечно: у warp
+    # он дошёл до 103 МБ на уровне DEBUG (44 МБ в сутки), а лог бота выглядел
+    # маленьким только потому, что деплой пересоздаёт контейнер и обнуляет его.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     volumes:
       - warp_data:/var/lib/cloudflare-warp
 
@@ -64,6 +84,14 @@ services:
       - "443:443"
     environment:
       DOMAIN: ${DOMAIN}
+    # Потолок логов. Без него json-файл контейнера растёт бесконечно: у warp
+    # он дошёл до 103 МБ на уровне DEBUG (44 МБ в сутки), а лог бота выглядел
+    # маленьким только потому, что деплой пересоздаёт контейнер и обнуляет его.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

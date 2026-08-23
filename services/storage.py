@@ -93,6 +93,13 @@ async def append_invoice(request: InvoiceRequest) -> int:
     return row
 
 
+async def all_request_ids() -> list[str]:
+    """ID всех заявок из ПЕРВИЧНОГО хранилища (не из зеркала)."""
+    if settings.storage_is_google:
+        return await asyncio.to_thread(google_backend.all_request_ids_sync)
+    return await asyncio.to_thread(registry_sqlite.all_request_ids_sync)
+
+
 async def set_request_status(request_id: str, status_text: str) -> dict[str, str] | None:
     """Меняет статус заявки в первичном хранилище + xlsx-зеркале."""
     if settings.storage_is_google:

@@ -223,3 +223,13 @@ def has_request_sync(request_id: str) -> bool:
             "SELECT 1 FROM requests WHERE request_id = ?", (request_id,)
         ).fetchone()
     return row is not None
+
+
+def all_request_ids_sync() -> list[str]:
+    """Все ID заявок в реестре — для сверки с xlsx-зеркалом."""
+    with _connect() as conn:
+        return [
+            str(row[0])
+            for row in conn.execute("SELECT request_id FROM requests ORDER BY id")
+            if row[0]
+        ]

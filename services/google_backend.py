@@ -490,3 +490,9 @@ def upload_invoice_file_sync(content: bytes, filename: str) -> str:
     link = created.get("webViewLink", "")
     log.info("Файл счёта %s загружен в Drive (%s)", filename, created.get("id"))
     return link
+
+
+def all_request_ids_sync() -> list[str]:
+    """Все ID заявок из таблицы — для сверки с xlsx-зеркалом."""
+    col = SHEET_HEADERS.index("ID заявки")
+    return [row[col].strip() for row in _all_rows_sync() if row[col].strip()]

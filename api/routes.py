@@ -47,6 +47,7 @@ from services import (
     dedup,
     invoice_check,
     invoice_extract,
+    registry_check,
     request_meta,
     storage,
 )
@@ -537,6 +538,9 @@ async def admin_settings(request: Request) -> dict:
         "health": health_pulse.link_state(),
         "incidents": rs.recent_incidents(6),
         "incidents_day": rs.incidents_since(time.time() - 86400),
+        # Расхождение реестра и зеркала иначе не видно ниоткуда: сбой записи
+        # в зеркало намеренно не отменяет заявку и живёт только в логах.
+        "registry": await _registry_state(),
     }
 
 
@@ -644,6 +648,12 @@ async def admin_backup(request: Request) -> dict:
     raise HTTPException(status_code=422, detail="Некорректный запрос.")
 
 
+async def _registry_state() -> dict:
+    """Сверка реестра с зеркалом для панели: результат плюс готовая строка."""
+    result = await registry_check.check()
+    return {**result, "text": registry_check.describe(result)}
+
+
 @router.post("/admin/alerts")
 async def admin_alerts(request: Request) -> dict:
     """Уведомления о сбоях: {"action": "save"|"test"|"status", ...}.
@@ -663,6 +673,7 @@ async def admin_alerts(request: Request) -> dict:
             "health": health_pulse.link_state(),
             "incidents": rs.recent_incidents(6),
             "incidents_day": rs.incidents_since(time.time() - 86400),
+            "registry": await _registry_state(),
         }
 
     if action == "test":

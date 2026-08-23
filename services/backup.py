@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 from telegram import Bot
 
 from config import settings
-from services import alerts
+from services import alerts, registry_check
 from services import runtime_settings as rs
 from services.runtime_settings import effective_admin_ids
 
@@ -149,6 +149,10 @@ async def backup_loop(bot: Bot) -> None:
             continue
         try:
             await run_backup(bot)
+            # Раз в сутки заодно сверяем реестр с зеркалом: обе задачи про
+            # целостность данных, и второго планировщика ради этого заводить
+            # незачем. Выключен бэкап — сверка остаётся в админ-панели.
+            await registry_check.alert_if_diverged(bot)
         except Exception:  # noqa: BLE001 — цикл должен пережить любой сбой
             log.exception("Сбой планового бэкапа")
             await alerts.alert_admins(

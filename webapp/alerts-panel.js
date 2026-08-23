@@ -38,6 +38,16 @@ function buildAlertsPanel(ctx) {
     }
   }
 
+  /** Сверка реестра с xlsx-зеркалом. Текст готовит сервер: правило, что
+   *  считать расхождением, должно быть одно и там же, где сама сверка. */
+  function renderRegistry(reg) {
+    var box = $("registry-state");
+    var text = $("registry-state-text");
+    if (!reg) { text.textContent = "Сверка реестра недоступна."; return; }
+    box.classList.toggle("bad", !!reg.checked && !reg.ok);
+    text.textContent = reg.text || "Сверка реестра недоступна.";
+  }
+
   function minutes(sec) {
     var m = Math.max(1, Math.round(sec / 60));
     return m + " мин";
@@ -174,6 +184,7 @@ function buildAlertsPanel(ctx) {
     post({ action: "status" }).then(function (res) {
       if (!res.ok) return;
       renderState(res.data.health);
+      renderRegistry(res.data.registry);
       renderLog(res.data.incidents, res.data.incidents_day);
     });
   }
@@ -189,6 +200,7 @@ function buildAlertsPanel(ctx) {
     $("alerts-grace").value = state.grace;
     renderKinds();
     renderState(d.health);
+    renderRegistry(d.registry);
     renderLog(d.incidents, d.incidents_day);
   }
 
@@ -229,6 +241,7 @@ function buildAlertsPanel(ctx) {
   });
 
   $("alerts-state").addEventListener("click", refresh);
+  $("registry-state").addEventListener("click", refresh);
   setInterval(refresh, REFRESH_MS);
 
   return { fill: fill, refresh: refresh };

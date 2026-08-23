@@ -5,5 +5,9 @@
 	request_body {
 		max_size 25MB
 	}
+	# Сжатие статики. Без него Mini App тянул 276 КБ на каждое открытие:
+	# app.js и app.css отдаются без изменений, а сжимаются вчетверо.
+	encode zstd gzip
+
 	reverse_proxy app:8080
 }

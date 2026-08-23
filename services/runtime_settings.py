@@ -607,6 +607,7 @@ ALERT_KINDS: tuple[tuple[str, str, bool, bool], ...] = (
     ("delivery", "Карточка не дошла финансисту", True, False),
     ("telegram", "Пропадала связь с Telegram", True, False),
     ("backup", "Сбой бэкапа", True, False),
+    ("mirror", "Реестр и зеркало разошлись", True, False),
     ("error", "Внутренние ошибки бота", True, False),
     ("moderation", "Мат в заявке", True, False),
 )
@@ -727,3 +728,20 @@ def incidents_since(since: float) -> int:
     return sum(
         int(x.get("count", 1)) for x in journal if float(x.get("ts", 0.0)) >= since
     )
+
+
+def clear_incidents() -> int:
+    """Очищает журнал инцидентов. Возвращает, сколько записей удалено.
+
+    Нужен подготовке к прод-запуску (scripts/purge_data.py): тестовые сбои
+    не должны висеть в карточке «Здоровье» рядом с боевыми. Остальные
+    настройки — состав финансистов, whitelist, админы, напоминания — не
+    затрагиваются: чистится только история.
+    """
+    with _lock:
+        data = _load_locked()
+        removed = len(data.get("incidents", []))
+        if removed:
+            data["incidents"] = []
+            _save_locked()
+    return removed
