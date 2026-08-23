@@ -16,7 +16,7 @@ uvicorn[standard]==0.34.0
 python-multipart==0.0.32
 
 # Базы часовых поясов для zoneinfo (нужно в slim-контейнерах)
-tzdata==2024.2
+tzdata==2026.3
 
 # SOCKS-поддержка для httpx (PROXY_URL=socks5://...)
 socksio==1.0.0
