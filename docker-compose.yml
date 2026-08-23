@@ -103,6 +103,8 @@ services:
         max-file: "3"
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Сайты стенда подкладываются сюда файлом; пустой каталог безвреден.
+      - ./deploy/conf.d:/etc/caddy/conf.d:ro
       - caddy_data:/data
       - caddy_config:/config
 

@@ -1,0 +1,14 @@
+# Сайт стенда. Скопируйте в deploy/conf.d/stage.caddy — боевой Caddyfile
+# подхватывает всё из этого каталога по маске. Пока файла нет, стенда для
+# Caddy не существует (маска без совпадений — не ошибка, проверено
+# `caddy validate`).
+#
+# STAGE_DOMAIN приходит из .env рядом с DOMAIN: например
+# STAGE_DOMAIN=stage.invoice.example.com
+{$STAGE_DOMAIN} {
+	request_body {
+		max_size 25MB
+	}
+	encode zstd gzip
+	reverse_proxy stage:8080
+}

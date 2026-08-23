@@ -119,6 +119,75 @@ sudo chown -R 1000:1000 data
 docker compose up -d --build
 ```
 
+## Стенд (второй бот на этой же машине)
+
+Нужен ровно для того, чего не умеет CI: проверить сторону Telegram (BotFather,
+Mini App в живом клиенте, кнопки карточек) и отрепетировать выкатку до того,
+как её увидит боевой контур.
+
+Устроен так, что боевые команды о нём не знают: стенд описан в отдельном
+`docker-compose.stage.yml`, а `docker compose up -d --build` его не читает.
+Caddy подключает сайты стенда по маске `deploy/conf.d/*.caddy` — пока файла
+нет, стенда для него не существует (маска без совпадений валидна, проверено
+`caddy validate`).
+
+### Что понадобится
+
+1. **Отдельный бот** в [@BotFather](https://t.me/BotFather): `/newbot`. Тот же
+   токен, что у боевого, не подойдёт — два опроса одного бота конфликтуют.
+2. **A-запись** поддомена (например `stage.invoice.example.com`) на этот же
+   сервер. Сертификат Caddy выпустит сам.
+3. **Тестовый чат** для карточек финансиста — чтобы проверочные заявки не
+   попадали настоящим финансистам.
+
+### Настройка
+
+```bash
+cp .env.stage.example .env.stage && chmod 600 .env.stage
+# заполнить TELEGRAM_BOT_TOKEN, WEBAPP_URL, FINANCE_CHAT_IDS, ADMIN_IDS
+
+cp deploy/stage.caddy.example deploy/conf.d/stage.caddy
+echo 'STAGE_DOMAIN=stage.invoice.example.com' >> .env   # рядом с DOMAIN
+
+mkdir -p data-stage && sudo chown -R 1000:1000 data-stage
+```
+
+### Запуск и проверка
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.stage.yml up -d stage
+docker compose up -d caddy          # подхватить сайт стенда
+
+# смоук: подать заявку и убедиться, что она прошла весь путь
+docker compose -f docker-compose.yml -f docker-compose.stage.yml \
+  exec stage python scripts/smoke_stage.py
+
+docker compose -f docker-compose.yml -f docker-compose.stage.yml logs -f stage
+docker compose -f docker-compose.yml -f docker-compose.stage.yml stop stage
+```
+
+`ENV_LABEL=СТЕНД` в `.env.stage` рисует над формой красную плашку: два бота
+выглядят одинаково, и спутать их — значит подать настоящую заявку в пустоту
+или наоборот. Смоук-скрипт отказывается работать при пустом `ENV_LABEL` —
+это его защита от запуска на боевом.
+
+### Ресурсы
+
+Замеры на этой машине: экземпляр бота — 73 МБ при старте, 93 МБ на разборе
+текстового счёта, **162 МБ на пике распознавания скана A4 300 dpi**. Поэтому
+стенду поставлены `mem_limit: 512m` и `cpus: "1.0"`: ядер на машине два, и
+одно всегда остаётся боевому контуру, чем бы стенд ни занимался. Образ общий
+— отдельного места на диске он не занимает, только свой каталог `data-stage/`.
+
+### Порядок работы
+
+```
+правка → CI (тесты) → стенд (живой Telegram + смоук) → бой
+```
+
+Боевые данные на стенд не переносим: это финансовые документы и персональные
+данные сотрудников. Нужен объём для проверок роста — генерируйте синтетику.
+
 ## Очистка тестовых данных перед прод-запуском
 
 После тестового периода в системе остаются документы, которых в проде быть

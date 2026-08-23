@@ -430,6 +430,21 @@ class TestAdminEndpoints:
             resp = await client.post("/api/admin/alerts", json=body, headers=_auth(42))
             assert resp.status_code == 403, body
 
+    async def test_env_label_is_empty_on_production(self, api, monkeypatch):
+        """Плашка контура — только там, где её задали."""
+        client, _ = api
+        assert (await client.get("/api/access", headers=_auth(42))).json()["env_label"] == ""
+        monkeypatch.setattr(settings, "env_label", "СТЕНД")
+        body = (await client.get("/api/access", headers=_auth(42))).json()
+        assert body["env_label"] == "СТЕНД"
+
+    async def test_env_label_is_trimmed(self, api, monkeypatch):
+        """Метка идёт прямо в разметку — длину ограничиваем на сервере."""
+        client, _ = api
+        monkeypatch.setattr(settings, "env_label", "  " + "О" * 60 + "  ")
+        label = (await client.get("/api/access", headers=_auth(42))).json()["env_label"]
+        assert len(label) == 24
+
     async def test_client_error_reaches_admins(self, api, monkeypatch):
         """Падение формы в браузере больше не остаётся между человеком и им самим."""
         client, bot = api
@@ -1131,7 +1146,7 @@ class TestAccessRequests:
         _admins(monkeypatch, "1")
         first = (await client.get("/api/access", headers=_auth())).json()
         assert first == {"allowed": False, "financier": False, "admin": False,
-                         "pending": False, "has_admins": True}
+                         "pending": False, "has_admins": True, "env_label": ""}
         await client.post("/api/access/request", headers=_auth())
         assert (await client.get("/api/access", headers=_auth())).json()["pending"] is True
 

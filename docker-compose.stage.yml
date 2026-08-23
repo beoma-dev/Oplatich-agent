@@ -1,0 +1,62 @@
+# Стенд: второй бот на этой же машине. Нужен ровно для того, чего не умеет CI —
+# проверить сторону Telegram (BotFather, Mini App в живом клиенте, кнопки
+# карточек) и отрепетировать выкатку до того, как её увидит боевой контур.
+#
+# Файл ОТДЕЛЬНЫЙ намеренно: боевые команды (`docker compose up -d --build`)
+# его не читают и о стенде не знают. Стенд поднимается только явно:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.stage.yml up -d stage
+#   docker compose -f docker-compose.yml -f docker-compose.stage.yml logs -f stage
+#   docker compose -f docker-compose.yml -f docker-compose.stage.yml stop stage
+#
+# Перед первым запуском: .env.stage (см. .env.stage.example),
+# deploy/conf.d/stage.caddy (см. deploy/stage.caddy.example), A-запись
+# поддомена и отдельный бот в BotFather.
+services:
+  stage:
+    build: .
+    # Не unless-stopped: неверный токен не должен превращаться в вечный цикл
+    # перезапусков рядом с боевым ботом. Но и «упал — лежи» плохо: первый же
+    # запуск поймал моргание WARP на старте и остался лежать. Пять попыток —
+    # переживает флап прокси, но сдаётся на настоящей ошибке.
+    restart: on-failure:5
+    # Ждём здоровья прокси. Боевому такое НЕ ставим намеренно: там форма
+    # должна подниматься даже при мёртвом прокси (заявка сохранится, карточка
+    # догонит), а стенд никого не обслуживает и может подождать.
+    depends_on:
+      warp:
+        condition: service_healthy
+    env_file: .env.stage
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # Пик одного экземпляра под OCR скана — 162 МБ (замер), тут троекратный
+    # запас. Ядер на машине два: одно отдаём стенду, второе всегда остаётся
+    # боевому контуру, чем бы стенд ни занимался.
+    mem_limit: 512m
+    cpus: "1.0"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      API_HOST: 0.0.0.0
+      API_PORT: "8080"
+      # Пути внутри контейнера те же, что у боевого, — разный каталог на хосте.
+      STORAGE_DIR: /data/storage
+      USER_DIRECTORY_FILE: /data/known_users.json
+      RUNTIME_SETTINGS_FILE: /data/bot_settings.json
+      SECURITY_DB_FILE: /data/security.db
+    volumes:
+      - ./data-stage:/data
+      - ./secrets:/app/secrets:ro
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "python", "scripts/healthcheck.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

@@ -831,6 +831,15 @@
     color: var(--hint);
   }
 
+  /* Плашка контура (стенд): висит постоянно, поэтому заметная, но не крикливая. */
+  .env-banner {
+    margin: 0 2px 10px; padding: 7px 12px; border-radius: 10px;
+    background: color-mix(in srgb, var(--danger) 16%, var(--bg));
+    border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+    color: var(--danger); font-size: 13px; font-weight: 700;
+    letter-spacing: .04em; text-align: center; text-transform: uppercase;
+  }
+
   /* ---------- Админ-панель ---------- */
   .row-item {
     display: flex;
@@ -911,10 +920,6 @@
     transition: transform .12s ease;
   }
   .row-del:active { transform: scale(.86); }
-  /* Ряд кнопок и полей. wrap и min-width: 0 обязательны: без них длинная
-     надпись («⏰ Проверить на себе») не даёт кнопке сжаться, и ряд вылезает
-     за карточку на любом экране уже 393 px — а это все iPhone с включённым
-     увеличением дисплея. Лучше перенести на вторую строку, чем срезать. */
   /* Ряд кнопок и полей. flex-wrap обязателен: без него длинная надпись
      («⏰ Проверить на себе») не даёт кнопке сжаться, и ряд вылезает за
      карточку на любом экране уже 393 px — а это все iPhone с включённым

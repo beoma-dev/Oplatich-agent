@@ -136,6 +136,8 @@ async def access_state(request: Request) -> dict:
         "admin": await is_bot_admin(request.app.state.bot, user["id"]),
         "pending": rs.access_request_pending(user["id"]),
         "has_admins": bool(rs.effective_admin_ids()),
+        # Пустая строка на боевом — плашки нет; на стенде «СТЕНД».
+        "env_label": settings.env_label.strip()[:24],
     }
 
 

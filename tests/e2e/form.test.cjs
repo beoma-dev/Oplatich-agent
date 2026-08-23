@@ -526,3 +526,38 @@ test("падение скрипта видно человеку и уходит 
   assert.equal(count, 1, "одного сообщения о падении достаточно");
   await page.close();
 });
+
+test("плашка контура появляется только на стенде", async () => {
+  // Два бота выглядят одинаково: спутать их — значит подать настоящую заявку
+  // в пустоту или наоборот.
+  const boevoy = await openApp(browser, { skin: "tg", routes: {
+    "/api/access": { allowed: true, financier: false, admin: false,
+                     pending: false, has_admins: true, env_label: "" },
+  } });
+  assert.ok(await boevoy.evaluate(() =>
+    document.getElementById("env-banner").classList.contains("hidden")),
+    "на боевом плашки быть не должно");
+  await boevoy.close();
+
+  const stend = await openApp(browser, { skin: "tg", routes: {
+    "/api/access": { allowed: true, financier: false, admin: false,
+                     pending: false, has_admins: true, env_label: "СТЕНД" },
+  } });
+  const shown = await stend.evaluate(() => {
+    const b = document.getElementById("env-banner");
+    const form = document.querySelector("#form-view header");
+    return {
+      hidden: b.classList.contains("hidden"),
+      text: b.textContent,
+      // Плашка обязана быть НАД формой, иначе её не заметят.
+      aboveHeader: b.getBoundingClientRect().top < form.getBoundingClientRect().top,
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    };
+  });
+  assert.equal(shown.hidden, false, "на стенде плашки нет");
+  assert.match(shown.text, /СТЕНД/);
+  assert.match(shown.text, /никому не уходят/);
+  assert.ok(shown.aboveHeader, "плашка ниже шапки — её не увидят");
+  assert.equal(shown.overflow, 0, "плашка вызвала горизонтальную прокрутку");
+  await stend.close();
+});

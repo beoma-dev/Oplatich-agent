@@ -2075,12 +2075,22 @@
    *  убрал финансиста) — иначе кнопка оставалась висеть до перезагрузки. */
   /** Whitelist работает fail-closed, и новый человек упирался в молчаливый
    *  отказ при отправке. Показываем это сразу и даём попросить доступ. */
+  /** Плашка контура. Пусто — боевой, и плашки нет вовсе. */
+  function showEnvLabel(label) {
+    var box = $("env-banner");
+    if (!box) return;
+    var text = String(label || "").trim();
+    box.textContent = text ? "⚠️ " + text + " · заявки отсюда никому не уходят" : "";
+    box.classList.toggle("hidden", !text);
+  }
+
   function checkAccess() {
     if (!insideTelegram) return;
     fetch("/api/access", { headers: { "X-Telegram-Init-Data": tg.initData } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (!d) return;
+        showEnvLabel(d.env_label);
         applyAccess(d.allowed, false);
         // Сразу, а не на первом тике опроса: иначе вкладка напоминаний
         // появлялась у финансиста через несколько секунд после открытия.
