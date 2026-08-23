@@ -51,7 +51,9 @@ services:
       SECURITY_DB_FILE: /data/security.db
     volumes:
       - ./data-stage:/data
-      - ./secrets:/app/secrets:ro
+      # Боевой ./secrets стенду НЕ отдаём. Сейчас каталог пуст, но там лежит
+      # ключ сервис-аккаунта Google, когда включён этот бэкенд, — а стенд по
+      # замыслу local-only. Незачем давать доступ, который не нужен.
     expose:
       - "8080"
     healthcheck:
