@@ -24,7 +24,14 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt ruff pytest pytest-asyncio
+        run: pip install -r requirements.txt ruff pytest pytest-asyncio pip-audit
+
+      # Уязвимости в зависимостях. Раньше проверялось руками и, значит,
+      # когда вспомнишь: pypdf и Pillow разбирают ЗАГРУЖЕННЫЕ пользователем
+      # файлы, и новая CVE там — это чужой файл в нашем процессе. Падение
+      # сборки на этом шаге и есть смысл: увидеть в день публикации.
+      - name: Audit dependencies (pip-audit)
+        run: pip-audit -r requirements.txt
 
       - name: Lint (ruff)
         run: ruff check .

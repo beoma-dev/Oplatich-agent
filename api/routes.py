@@ -654,6 +654,56 @@ async def _registry_state() -> dict:
     return {**result, "text": registry_check.describe(result)}
 
 
+# Клиентские ошибки: одна и та же ошибка от одного человека — не чаще раза
+# в это окно. Ключ включает текст, а не только id: сломанная страница сыплет
+# одним исключением на каждое нажатие, но две РАЗНЫЕ поломки у одного
+# человека — это две новости, и вторую терять нельзя. От спама одинаковой
+# ошибкой сразу у многих защищает уже троттлинг по сигнатуре в alerts.
+_CLIENT_ERROR_WINDOW = 300.0
+_CLIENT_ERROR_MAX_KEYS = 500
+_client_error_seen: dict[tuple[int, str], float] = {}
+
+
+@router.post("/client-error")
+async def client_error(request: Request) -> dict:
+    """Сообщение фронтенда о своём падении: {"message": ..., "where": ...}.
+
+    Серверная часть теперь докладывает админам обо всём, а исключение в
+    браузере оставляло человека перед застывшей формой молча. Доступно
+    любому с подписью Telegram: ошибка интересна именно у того, кто не
+    смог подать заявку.
+    """
+    user = validate_init_data(
+        request.headers.get("X-Telegram-Init-Data", ""), settings.telegram_bot_token
+    )
+    body = await request.json()
+    message = str(body.get("message", ""))[:200].strip()
+    where = str(body.get("where", ""))[:120].strip()
+    if not message:
+        raise HTTPException(status_code=422, detail="Пустое сообщение об ошибке.")
+
+    now = time.monotonic()
+    key = (user["id"], message[:60])
+    last = _client_error_seen.get(key)
+    if last is not None and now - last < _CLIENT_ERROR_WINDOW:
+        return {"ok": True, "throttled": True}
+    if len(_client_error_seen) > _CLIENT_ERROR_MAX_KEYS:
+        stale = [k for k, t in _client_error_seen.items() if now - t > _CLIENT_ERROR_WINDOW]
+        for k in stale:
+            del _client_error_seen[k]
+    _client_error_seen[key] = now
+
+    who = user.get("username") or user.get("first_name") or user["id"]
+    await alerts.alert_admins(
+        request.app.state.bot,
+        "Ошибка в форме у пользователя",
+        f"@{who} (id {user['id']}): {message}" + (f" — {where}" if where else ""),
+        signature=f"client-error-{message[:60]}",
+        kind="error",
+    )
+    return {"ok": True}
+
+
 @router.post("/admin/alerts")
 async def admin_alerts(request: Request) -> dict:
     """Уведомления о сбоях: {"action": "save"|"test"|"status", ...}.

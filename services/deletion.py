@@ -58,6 +58,9 @@ async def delete_request(
         f"{html.escape(actor_name)} · {now_s}"
     )
     await cards.update_all(bot, request_id, status_line, keyboard=None)
+    # Сообщения переписаны на «удалена», обновлять больше нечего — адреса
+    # карточек можно забыть, иначе они копятся навсегда.
+    await cards.delete_for_request(request_id)
 
     await audit.log_event(
         audit.REQUEST_DELETED, actor_id, actor_name, f"{request_id} · был статус «{status}»"

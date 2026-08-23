@@ -76,6 +76,24 @@ def for_request_sync(request_id: str) -> list[dict]:
     ]
 
 
+def delete_for_request_sync(request_id: str) -> int:
+    """Забывает карточки удалённой заявки. Возвращает число удалённых строк.
+
+    Сообщения в чатах остаются (их уже переписали на «удалена»), а вот
+    хранить их адреса больше незачем: обновлять нечего. Без этой уборки
+    строки копились навсегда и попадали в каждый бэкап.
+    """
+    with _connect() as conn:
+        cur = conn.execute(
+            "DELETE FROM finance_cards WHERE request_id = ?", (request_id,)
+        )
+        return cur.rowcount
+
+
+async def delete_for_request(request_id: str) -> int:
+    return await asyncio.to_thread(delete_for_request_sync, request_id)
+
+
 async def save(
     request_id: str, chat_id: int, message_id: int, is_caption: bool, base_html: str
 ) -> None:

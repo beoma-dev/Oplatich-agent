@@ -126,3 +126,44 @@ class TestSingleFinanceMessage:
         assert delivered == 1
         bot.send_document.assert_not_called()
         assert bot.send_message.call_args.kwargs["reply_markup"] is not None
+
+
+class TestCardCleanup:
+    """Карточки удалённой заявки не должны копиться вечно."""
+
+    async def test_cards_are_forgotten_with_the_request(self, tmp_paths):
+        from services import cards
+
+        await cards.save("INV-0001", chat_id=7, message_id=1, is_caption=False,
+                         base_html="<b>карточка</b>")
+        await cards.save("INV-0001", chat_id=8, message_id=2, is_caption=False,
+                         base_html="<b>карточка</b>")
+        await cards.save("INV-0002", chat_id=7, message_id=3, is_caption=False,
+                         base_html="<b>чужая</b>")
+        assert len(await cards.for_request("INV-0001")) == 2
+
+        assert await cards.delete_for_request("INV-0001") == 2
+        assert await cards.for_request("INV-0001") == []
+        # Соседняя заявка не пострадала.
+        assert len(await cards.for_request("INV-0002")) == 1
+
+    async def test_deleting_a_request_clears_its_cards(self, tmp_paths, monkeypatch):
+        """Полный путь: заявку удалили — адреса карточек забыли."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        from services import cards, deletion, storage
+        from tests.conftest import make_request
+
+        request = make_request()
+        await storage.append_invoice(request)
+        await cards.save(request.request_id, chat_id=7, message_id=1,
+                         is_caption=False, base_html="<b>к</b>")
+        bot = MagicMock()
+        bot.edit_message_text = AsyncMock()
+        bot.edit_message_caption = AsyncMock()
+
+        done, _msg = await deletion.delete_request(
+            bot, request.request_id, actor_id=1, actor_name="админ", is_admin=True
+        )
+        assert done is True
+        assert await cards.for_request(request.request_id) == []

@@ -488,3 +488,41 @@ test("панель кнопок не налезает на строку с ге�
   assert.equal(ok, true, "герой налез на панель кнопок");
   await page.close();
 });
+
+test("падение скрипта видно человеку и уходит админам", async () => {
+  // Раньше исключение мимо catch оставляло застывшую форму и полную тишину.
+  const page = await openApp(browser, { skin: "tg", routes: {
+    "/api/access": { allowed: true, financier: false, admin: false,
+                     pending: false, has_admins: true },
+    "/api/client-error": { ok: true },
+  } });
+  await page.evaluate(() => {
+    window.dispatchEvent(new ErrorEvent("error", {
+      message: "TypeError: сломалось", filename: "app.js", lineno: 42 }));
+  });
+  await page.waitForTimeout(200);
+  const seen = await page.evaluate(() => {
+    const post = window.__posts.find((p) => p[0].indexOf("/api/client-error") !== -1);
+    const banner = document.getElementById("error-banner");
+    return {
+      sent: post ? JSON.parse(post[1]) : null,
+      shown: banner.style.display === "block",
+      text: banner.textContent,
+    };
+  });
+  assert.ok(seen.sent, "админам не сообщили");
+  assert.match(seen.sent.message, /сломалось/);
+  assert.match(seen.sent.where, /app\.js:42/);
+  assert.ok(seen.shown, "человеку ничего не показали");
+  assert.match(seen.text, /Закройте и откройте её заново/);
+
+  // Повтор той же ошибки не должен слать второе сообщение с той же страницы.
+  await page.evaluate(() => {
+    window.dispatchEvent(new ErrorEvent("error", { message: "TypeError: сломалось" }));
+  });
+  await page.waitForTimeout(150);
+  const count = await page.evaluate(() =>
+    window.__posts.filter((p) => p[0].indexOf("/api/client-error") !== -1).length);
+  assert.equal(count, 1, "одного сообщения о падении достаточно");
+  await page.close();
+});

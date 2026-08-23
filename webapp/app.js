@@ -11,6 +11,39 @@
   var tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
   var insideTelegram = !!(tg && tg.initData);
 
+  // Последнее слепое пятно: исключение, вылетевшее мимо всех catch, раньше
+  // оставляло человека перед застывшей формой молча, и админ об этом не
+  // узнавал. Сообщаем обоим — человеку словами, админу алертом.
+  var errorReported = false;
+  function reportClientError(message, where) {
+    if (errorReported || !insideTelegram) return;   // одного раза достаточно
+    errorReported = true;
+    try {
+      fetch("/api/client-error", {
+        method: "POST",
+        headers: {
+          "X-Telegram-Init-Data": tg.initData,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ message: String(message).slice(0, 200), where: where || "" })
+      }).catch(function () { /* сеть могла и умереть — не наша забота здесь */ });
+    } catch (e) { /* даже это не должно падать */ }
+    // Баннер формы: он же показывает ошибки проверки, человек его знает.
+    try {
+      showError("Что-то сломалось в форме. Закройте и откройте её заново — "
+        + "черновик сохранён, админам уже сообщили.");
+    } catch (e) { /* если сломана и разметка — молча */ }
+  }
+  window.addEventListener("error", function (ev) {
+    reportClientError(ev.message || "неизвестная ошибка",
+      (ev.filename || "") + ":" + (ev.lineno || 0));
+  });
+  window.addEventListener("unhandledrejection", function (ev) {
+    var r = ev.reason;
+    reportClientError((r && (r.message || r)) || "отклонённое обещание", "promise");
+  });
+
+
   // Держать в синхроне с bot/models.py (CURRENCIES, ARTICLES) и bot/validators.py.
   var CURRENCIES = ["RUB", "USD", "EUR", "KZT", "CNY"];
   var ARTICLES = [

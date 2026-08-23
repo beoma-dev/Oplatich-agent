@@ -430,6 +430,51 @@ class TestAdminEndpoints:
             resp = await client.post("/api/admin/alerts", json=body, headers=_auth(42))
             assert resp.status_code == 403, body
 
+    async def test_client_error_reaches_admins(self, api, monkeypatch):
+        """Падение формы в браузере больше не остаётся между человеком и им самим."""
+        client, bot = api
+        _admins(monkeypatch, "1")
+        resp = await client.post(
+            "/api/client-error",
+            json={"message": "TypeError: x is not a function", "where": "app.js:120"},
+            headers=_auth(42),
+        )
+        assert resp.status_code == 200
+        text = bot.send_message.call_args.kwargs["text"]
+        assert "Ошибка в форме" in text and "app.js:120" in text
+
+    async def test_client_error_is_throttled_per_user(self, api, monkeypatch):
+        """Сломанная страница сыплет одним исключением на каждое нажатие."""
+        client, bot = api
+        _admins(monkeypatch, "1")
+        monkeypatch.setattr(routes_mod, "_client_error_seen", {})
+        for _ in range(3):
+            await client.post(
+                "/api/client-error", json={"message": "бум"}, headers=_auth(42)
+            )
+        assert bot.send_message.call_count == 1
+        # ТА ЖЕ ошибка у другого человека — по-прежнему один алерт: одна
+        # поломка, а не двадцать. Повторы считает журнал инцидентов.
+        await client.post(
+            "/api/client-error", json={"message": "бум"}, headers=_auth(43)
+        )
+        assert bot.send_message.call_count == 1
+        # А вот ДРУГАЯ ошибка теряться не должна.
+        await client.post(
+            "/api/client-error", json={"message": "совсем другое"}, headers=_auth(43)
+        )
+        assert bot.send_message.call_count == 2
+
+    async def test_client_error_needs_a_message_and_a_signature(self, api, monkeypatch):
+        client, _ = api
+        _admins(monkeypatch, "1")
+        empty = await client.post(
+            "/api/client-error", json={"message": "  "}, headers=_auth(42)
+        )
+        assert empty.status_code == 422
+        unsigned = await client.post("/api/client-error", json={"message": "бум"})
+        assert unsigned.status_code == 401
+
     async def test_counterparties_after_submit(self, api, monkeypatch):
         client, _ = api
         _allow(monkeypatch)

@@ -11,6 +11,10 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    # Потолок памяти. Идёт бот на 70 МБ, но распознавание счёта поднимает
+    # tesseract и Pillow — без лимита один большой PDF может увести в своп
+    # весь хост, где живут ещё прокси и Caddy.
+    mem_limit: 1g
     # Hardening: без эскалации привилегий и без capabilities — боту они не нужны.
     security_opt:
       - no-new-privileges:true
@@ -52,6 +56,10 @@ services:
   warp:
     image: caomingjun/warp
     restart: unless-stopped
+    # Ест ~210 МБ; запас втрое. Прокси — единственный выход к Telegram
+    # (второго нет по решению от 23.08.2026), поэтому лимит щедрый:
+    # убить его нехваткой памяти хуже, чем дать лишнего.
+    mem_limit: 768m
     device_cgroup_rules:
       - "c 10:200 rwm"
     cap_add:
@@ -79,6 +87,7 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    mem_limit: 256m
     ports:
       - "80:80"
       - "443:443"

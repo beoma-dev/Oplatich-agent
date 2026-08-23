@@ -1,0 +1,32 @@
+# Обновления зависимостей приходят пул-реквестами, и по каждому гоняется
+# весь набор проверок из ci.yml — то есть предложение сразу видно рабочим
+# или нет. Раньше отставание копилось молча: python-telegram-bot 21.9 при
+# вышедшей 22.8, reportlab 4.2 при 5.0.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # Мелкие обновления — одним PR, иначе почта превращается в шум.
+      patch-and-minor:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: monthly
