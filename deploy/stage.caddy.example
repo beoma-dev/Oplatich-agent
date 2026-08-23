@@ -5,7 +5,11 @@
 #
 # STAGE_DOMAIN приходит из .env рядом с DOMAIN: например
 # STAGE_DOMAIN=stage.invoice.example.com
-{$STAGE_DOMAIN} {
+#
+# Значение по умолчанию (stage.localhost) стоит НЕ для красоты: пустая
+# переменная дала бы пустой адрес сайта, а от него Caddy падает целиком —
+# вместе с боевым сайтом. Забыли переменную — стенд просто не открывается.
+{$STAGE_DOMAIN:stage.localhost} {
 	request_body {
 		max_size 25MB
 	}
