@@ -125,7 +125,7 @@ class Settings(BaseSettings):
 
     # ---- Прочее ----
     # Название организации — печатается в шапке PDF-документа заявки.
-    org_name: str = Field("DEVMOPS", alias="ORG_NAME")
+    org_name: str = Field("Beoma", alias="ORG_NAME")
     # Реквизиты организации строкой — вторая строка шапки PDF. Пусто —
     # печатается нейтральная подпись «Финансовый документ».
     org_details: str = Field("", alias="ORG_DETAILS")
