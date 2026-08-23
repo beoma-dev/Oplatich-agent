@@ -242,9 +242,9 @@ PROXY_URL=socks5://warp:1080,socks5://172.17.0.1:1080
 
 ### Вариант A — бесплатно, без второго сервера: Cloudflare WARP
 
-1. Раскомментируйте сервис `warp` и volume `warp_data` в `docker-compose.yml`
-   (если у вас свой compose/сеть — добавьте контейнер `caomingjun/warp` в ту же
-   сеть, что и бот).
+1. Сервис `warp` и volume `warp_data` уже описаны в `docker-compose.yml` и
+   включены (если у вас свой compose/сеть — добавьте контейнер
+   `caomingjun/warp` в ту же сеть, что и бот).
 2. В `.env`: `PROXY_URL=socks5://warp:1080`
 3. `docker compose up -d` и проверка:
    ```bash

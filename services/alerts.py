@@ -37,13 +37,20 @@ _last_by_signature: dict[str, float] = {}
 _sent_times: list[float] = []
 
 
-def _allowed(signature: str, now: float | None = None) -> bool:
-    """Пропускает алерт через троттлинг (и учитывает его)."""
+def _allowed(signature: str, now: float | None = None, *, critical: bool = False) -> bool:
+    """Пропускает алерт через троттлинг (и учитывает его).
+
+    critical=True обходит ОБЩИЙ потолок, но не окно по сигнатуре. Иначе
+    потолок можно было выесть чем угодно — например, десятком разных ошибок
+    из браузера, ручка для которых открыта любому с подписью Telegram, — и
+    следующее «заявка НЕ сохранилась» не ушло бы никому целый час. Защита от
+    шторма не должна становиться способом заглушить главное.
+    """
     global _sent_times
     now = time.monotonic() if now is None else now
 
     _sent_times = [t for t in _sent_times if now - t < GLOBAL_WINDOW]
-    if len(_sent_times) >= GLOBAL_MAX:
+    if not critical and len(_sent_times) >= GLOBAL_MAX:
         return False
 
     last = _last_by_signature.get(signature)
@@ -107,7 +114,7 @@ async def alert_admins(
         return 0
 
     sig = signature or hashlib.sha256(f"{title}|{details[:100]}".encode()).hexdigest()[:16]
-    if not _allowed(sig):
+    if not _allowed(sig, critical=kind in rs.CRITICAL_ALERT_KEYS):
         _journal(kind, title, sent=False)
         return 0
 

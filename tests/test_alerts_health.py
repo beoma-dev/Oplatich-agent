@@ -119,6 +119,33 @@ class TestAlertGating:
         rs.record_incident("error", "Позавчерашний", sent=True, when=now - 200_000)
         assert rs.incidents_since(now - 86400) == 1
 
+    async def test_global_cap_cannot_silence_a_lost_request(self):
+        """Потолок в 10 алертов за час не должен глушить потерю заявки.
+
+        Ручка /api/client-error открыта любому с подписью Telegram, и десяток
+        разных ошибок из браузера выел бы весь потолок — а следующая «заявка
+        НЕ сохранилась» не ушла бы никому. Критичное идёт вне очереди.
+        """
+        bot = _bot()
+        for i in range(alerts.GLOBAL_MAX + 3):
+            await alerts.alert_admins(bot, f"Ошибка в форме {i}", kind="error")
+        sent_before = bot.send_message.call_count
+        assert sent_before == alerts.GLOBAL_MAX, "потолок не сработал"
+
+        assert await alerts.alert_admins(
+            bot, "Заявка НЕ сохранилась в реестр", kind="storage"
+        ) == 1
+        assert bot.send_message.call_count == sent_before + 1
+
+    async def test_critical_still_respects_its_own_signature_window(self):
+        """Но шторм одинакового критичного всё равно склеивается."""
+        bot = _bot()
+        for _ in range(4):
+            await alerts.alert_admins(
+                bot, "Заявка НЕ сохранилась", signature="req-fail", kind="storage"
+            )
+        assert bot.send_message.call_count == 1
+
     async def test_test_alert_ignores_settings_and_throttle(self):
         rs.set_alerts_config(enabled=False, kinds={"telegram": False})
         bot = _bot()
