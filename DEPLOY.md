@@ -119,6 +119,106 @@ sudo chown -R 1000:1000 data
 docker compose up -d --build
 ```
 
+## Подключение Google (таблица + папка со счетами)
+
+При `STORAGE_BACKEND=google` реестр живёт в Google-таблице, а файлы счетов —
+в папке Диска. Нужны **ключи доступа**, и их количество зависит от того, где
+лежит папка.
+
+### Почему может понадобиться два ключа, а не один
+
+У service account с 2025 года **нет собственной квоты хранилища**. Файл,
+который он загружает в папку личного Google-аккаунта, принадлежал бы ему
+самому — и Google отказывает: «Service Accounts do not have storage quota».
+
+Отсюда две схемы, и код поддерживает обе (`services/google_backend.py`,
+`_drive_credentials`): если в `secrets/` лежит OAuth-токен человека, Drive
+работает от его имени; если нет — от service account.
+
+### Путь А — общий диск (Google Workspace). Один ключ
+
+Самый простой и без истекающих токенов. Годится, если у вас корпоративный
+Google (домен вида `@вашафирма.ru`).
+
+1. Google Drive → **Общие диски** → создать диск, например «Оплатыч».
+   Перенести туда папку со счетами. Файлы общего диска не расходуют квоту
+   service account — проблема исчезает.
+2. Google Cloud Console → проект (новый или существующий) →
+   **APIs & Services → Library**: включить **Google Sheets API** и
+   **Google Drive API**.
+3. **IAM & Admin → Service Accounts → Create**: имя любое, роли не нужны.
+4. Открыть созданный аккаунт → **Keys → Add key → Create new key → JSON**.
+   Скачанный файл положить на сервер как `secrets/service_account.json`.
+5. Скопировать email аккаунта (вида `…@….iam.gserviceaccount.com`) и выдать
+   ему **Редактор**: на общий диск (или папку) и на таблицу реестра.
+
+### Путь Б — папка в «Моём диске» (личный аккаунт). Два файла
+
+Шаги 2–5 из пути А выполняются так же — service account нужен для таблицы.
+Дополнительно готовим OAuth-токен человека для загрузки файлов:
+
+6. Cloud Console → **APIs & Services → OAuth consent screen**. Если аккаунт
+   корпоративный — тип **Internal** (тогда токен не истекает). Если личный —
+   **External** и свой email в **Test users**; учтите ловушку ниже.
+7. **Credentials → Create credentials → OAuth client ID → Desktop app** →
+   скачать JSON → сохранить как `secrets/google_oauth_client.json`.
+8. **На своём компьютере** (нужен браузер), в копии проекта:
+   ```bash
+   python scripts/google_oauth_setup.py
+   ```
+   Открыть напечатанную ссылку, разрешить доступ. Появится
+   `secrets/google_oauth_token.json` — скопировать его на сервер в `secrets/`.
+
+**Ловушка режима Testing:** у External-приложения в статусе «Testing»
+refresh-токен живёт **7 дней**, после чего загрузка файлов перестаёт
+работать. Лечение: либо тип Internal (нужен Workspace), либо опубликовать
+приложение, либо раз в неделю повторять шаг 8 — последнее плохо и годится
+только на время проверки.
+
+### Прописать в .env
+
+```bash
+STORAGE_BACKEND=google
+GOOGLE_CREDENTIALS_FILE=secrets/service_account.json
+GOOGLE_SHEET_ID=<id из URL таблицы>
+GOOGLE_DRIVE_FOLDER_ID=<id из URL папки>
+# только для пути Б; по умолчанию этот путь и так подставляется
+GOOGLE_OAUTH_TOKEN_FILE=secrets/google_oauth_token.json
+```
+
+ID берутся прямо из адресной строки:
+`docs.google.com/spreadsheets/d/`**`ЭТО_ID`**`/edit`,
+`drive.google.com/drive/folders/`**`ЭТО_ID`**.
+
+Права на файлы ключей:
+
+```bash
+chmod 700 secrets && chmod 600 secrets/*.json
+```
+
+### Проверить ДО переключения
+
+```bash
+docker compose run --rm app python scripts/preflight.py
+```
+
+Проверка только читает: получает название таблицы и имя папки. Если доступа
+нет — скажет об этом, ничего не сломав. Гонять её можно и на боевом,
+оставаясь на `STORAGE_BACKEND=local`, — она проверяет доступ, а не пишет.
+
+### Порядок переключения
+
+1. `preflight` зелёный.
+2. Меняем `STORAGE_BACKEND=google`, `docker compose up -d`.
+3. Подаём одну заявку и глазами проверяем: строка в таблице, файл в папке,
+   ссылка в карточке открывается.
+4. Старые локальные данные никуда не исчезают — `data/` остаётся на месте,
+   и вернуться на `local` можно тем же переключателем.
+
+Шапку существующей таблицы бот **не переписывает**: заголовки он добавляет
+только в пустой лист (`_ensure_header_sync`). Свои служебные колонки он
+пишет правее девяти колонок из ТЗ.
+
 ## Стенд (второй бот на этой же машине)
 
 Нужен ровно для того, чего не умеет CI: проверить сторону Telegram (BotFather,
