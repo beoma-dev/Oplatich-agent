@@ -313,8 +313,29 @@ class TestAdminEndpoints:
         resp = await client.get("/api/admin/settings", headers=_auth())
         assert resp.status_code == 200
         body = resp.json()
-        assert set(body["backup"]) == {"enabled", "time", "keep"}
+        assert set(body["backup"]) == {"enabled", "time", "keep", "archive"}
         assert body["registry_url"] is None  # локальный режим — без ссылки
+
+    async def test_archive_contents_are_honest_about_the_backend(self, api, monkeypatch):
+        """Панель обязана говорить, чего в архиве НЕТ.
+
+        На google-бэкенде заявки живут в таблице, а счета — в папке Диска,
+        и в tar.gz не попадают. Обещание «архив всех данных» человек
+        проверил бы в тот единственный день, когда восстанавливается.
+        """
+        client, _ = api
+        _admins(monkeypatch, "42")
+
+        local = (await client.get("/api/admin/settings", headers=_auth())).json()
+        assert local["backup"]["archive"]["outside"] == []
+        assert any("реестр" in x for x in local["backup"]["archive"]["inside"])
+
+        monkeypatch.setattr(settings, "storage_backend", "google")
+        google = (await client.get("/api/admin/settings", headers=_auth())).json()
+        outside = google["backup"]["archive"]["outside"]
+        assert any("таблиц" in x for x in outside), "не сказано про заявки"
+        assert any("Диск" in x for x in outside), "не сказано про счета"
+        assert not any("реестр" in x for x in google["backup"]["archive"]["inside"])
 
     async def test_settings_registry_url_in_google_mode(self, api, monkeypatch):
         client, _ = api

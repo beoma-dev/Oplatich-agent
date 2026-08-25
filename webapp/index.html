@@ -647,7 +647,7 @@
          переключает (значение не изменилось), и без него карточка была бы
          видна финансисту до первого ответа о правах. -->
     <div class="card hidden" data-admin="1">
-      <div class="card-title">💾 Бэкап данных <button type="button" class="help-q" data-help-title="Бэкап" data-help="Ежедневный архив всех данных (реестр, файлы счетов, журнал безопасности, настройки) в указанное время — приходит админам в Telegram. «Сейчас» — собрать немедленно. Настройки применяются без рестарта.">?</button></div>
+      <div class="card-title">💾 Бэкап данных <button type="button" class="help-q" data-help-title="Бэкап" data-help="Архив приходит вам в личку и лежит на сервере в data/backups/ — копий хранится столько, сколько указано ниже. Копия в личке нужна для случая, когда сервера больше нет: пока он жив, восстанавливаться проще с него.&#10;&#10;КАК ВОССТАНОВИТЬ. Сервер жив — распакуйте нужный архив поверх данных: docker compose stop app, затем tar -xzf data/backups/ИМЯ.tar.gz -C data, затем chown -R 1000:1000 data и docker compose start app. Сервера нет — поднимите проект заново (git clone, заполнить .env, положить ключи в secrets/), распакуйте туда архив из личку тем же tar, и docker compose up -d --build. Подробно — в DEPLOY.md, раздел «Бэкапы и восстановление».&#10;&#10;ПЕРЕД ТЕМ КАК ПОЛАГАТЬСЯ: docker compose run --rm app python scripts/verify_backup.py разворачивает архив во временный каталог и проверяет, что он целый. Бэкап, который ни разу не разворачивали, — это гипотеза, а не бэкап.&#10;&#10;Загрузить архив боту в чат и восстановиться «одной кнопкой» нельзя намеренно: это запись поверх живых данных, и половинчатый результат хуже исходной беды.">?</button></div>
       <div class="seg seg-even" id="backup-seg">
         <button type="button" data-value="on" class="active">Включён</button>
         <button type="button" data-value="off">Выключен</button>
@@ -662,8 +662,8 @@
         <button type="button" class="add-btn" id="backup-save" style="flex:1">Сохранить</button>
         <button type="button" class="add-btn" id="backup-run">💾 Сейчас</button>
       </div>
-      <div class="counter" style="text-align:left; margin-top:6px">
-        Архив со всеми данными приходит админам в Telegram; настройки применяются без рестарта.
+      <div class="counter" style="text-align:left; margin-top:6px" id="backup-what">
+        Архив приходит админам в Telegram; настройки применяются без рестарта.
       </div>
     </div>
   </div>

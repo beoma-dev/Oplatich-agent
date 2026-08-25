@@ -46,6 +46,39 @@ def _rotate_sync(keep: int) -> None:
             log.warning("Не удалось удалить старый бэкап %s", old.name)
 
 
+def describe() -> dict:
+    """Что на самом деле лежит в архиве — и чего в нём нет.
+
+    До переезда на Google архив был «всеми данными», и панель так и писала.
+    С google-бэкендом это неправда: заявки живут в таблице, файлы счетов —
+    в папке Диска, и в tar.gz не попадает ни то, ни другое. Человек, у
+    которого архив пришёл в личку, должен видеть состав честно — иначе он
+    узнает о разнице в тот единственный день, когда будет восстанавливать.
+    """
+    inside = ["журнал безопасности и аудит", "настройки бота", "справочник пользователей"]
+    outside: list[str] = []
+    if settings.storage_is_google:
+        outside = [
+            "заявки — они в Google-таблице (у неё своя история версий)",
+            "файлы счетов — они в папке Диска (там своя корзина)",
+        ]
+    else:
+        inside.insert(0, "реестр заявок")
+        inside.insert(1, "файлы счетов")
+
+    target_dir = backup_dir()
+    archives = sorted(target_dir.glob(f"{_PREFIX}*.tar.gz")) if target_dir.exists() else []
+    latest = archives[-1] if archives else None
+    return {
+        "inside": inside,
+        "outside": outside,
+        "dir": str(target_dir),
+        "count": len(archives),
+        "latest": latest.name if latest else "",
+        "latest_kb": latest.stat().st_size // 1024 if latest else 0,
+    }
+
+
 def create_backup_sync() -> Path:
     """Собирает tar.gz со всеми данными. Возвращает путь к архиву."""
     target_dir = backup_dir()

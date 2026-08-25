@@ -524,7 +524,7 @@ async def admin_settings(request: Request) -> dict:
         "financiers": financiers,
         "allowed": allowed,
         "org_name": settings.org_name,
-        "backup": rs.backup_config(),
+        "backup": {**rs.backup_config(), "archive": backup.describe()},
         "reminders": rs.reminders_config(),
         "registry_url": registry_url,
         "drive_url": drive_url,

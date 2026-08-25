@@ -2555,6 +2555,18 @@
     $("backup-time").value = cfg.time || "03:30";
     $("backup-keep").value = cfg.keep || 7;
     $("backup-opts").style.opacity = backupEnabled ? "" : ".45";
+    // Состав архива берём с сервера: он зависит от бэкенда, и обещать
+    // «все данные» на google-бэкенде было бы враньём — заявки и счета
+    // туда не попадают. Человек должен видеть это до того, как полезет
+    // восстанавливаться, а не в тот самый день.
+    var a = cfg.archive, note = $("backup-what");
+    if (a && note) {
+      note.textContent = "В архиве: " + a.inside.join(", ") + "."
+        + (a.outside.length ? " НЕ в архиве: " + a.outside.join("; ") + "." : "")
+        + " На сервере: " + a.count + " шт. в " + a.dir
+        + (a.latest ? ", последний " + a.latest + " (" + a.latest_kb + " КБ)" : "")
+        + ". Как восстановить — в «?» наверху карточки.";
+    }
   }
   $("backup-seg").addEventListener("click", function (ev) {
     var btn = ev.target.closest("button");
