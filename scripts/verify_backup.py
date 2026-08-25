@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import openpyxl  # noqa: E402
 
 from bot.models import SHEET_HEADERS  # noqa: E402
+from config import settings  # noqa: E402
 from services.backup import backup_dir  # noqa: E402
 
 _ID_COL = SHEET_HEADERS.index("ID заявки")
@@ -50,6 +51,12 @@ def _check_registry(root: Path) -> list[str]:
     """ID заявок из реестра. Пустой список — либо пусто, либо не прочиталось."""
     path = root / "storage" / "registry.xlsx"
     if not path.exists():
+        # На google-бэкенде реестр живёт в таблице, а xlsx-зеркало включается
+        # отдельно (REGISTRY_XLSX_FILE). Его отсутствие — норма, а не провал:
+        # проверка, которая кричит на исправном архиве, перестаёт читаться.
+        if settings.storage_is_google or not settings.registry_xlsx_file:
+            print("  · xlsx-реестра в архиве нет — так и задумано на этом бэкенде")
+            return []
         _say(False, "реестра в архиве нет")
         return []
     try:
@@ -116,8 +123,13 @@ def _check_files(root: Path, registry_ids: list[str]) -> None:
         f"PDF заявок: {len(pdfs)} файлов"
         + (f"; НЕТ для {', '.join(missing[:3])}" if missing else ""),
     )
-    others = [p for p in storage.iterdir() if p.is_file() and not p.name.startswith("INV-")]
-    _say(True, f"файлов счетов от пользователей: {len(others) - 1}")  # минус сам реестр
+    # Сам xlsx-реестр лежит в том же каталоге и файлом счёта не является.
+    # Раньше он вычитался всегда, и без него счётчик уходил в минус.
+    others = [
+        p for p in storage.iterdir()
+        if p.is_file() and not p.name.startswith("INV-") and p.name != "registry.xlsx"
+    ]
+    _say(True, f"файлов счетов от пользователей: {len(others)}")
 
 
 def main() -> int:
@@ -132,7 +144,11 @@ def main() -> int:
     try:
         try:
             with tarfile.open(archive) as tar:
-                tar.extractall(tmp)
+                # filter="data" отбивает абсолютные пути, «..», симлинки и
+                # спецфайлы. Архив свой, но проверяют им и тот, что принесли
+                # со стороны, — а распаковка без фильтра как раз и есть та
+                # дыра, от которой закрыт services/restore.
+                tar.extractall(tmp, filter="data")
         except Exception as exc:  # noqa: BLE001
             print(f"  ✗ архив не распаковался: {exc}")
             return 1
