@@ -13,6 +13,41 @@
 # deploy/conf.d/stage.caddy (см. deploy/stage.caddy.example), A-запись
 # поддомена и отдельный бот в BotFather.
 services:
+  # Свой прокси стенду. Раньше он делил warp с боевым — и это отбирало
+  # у стенда его единственный смысл в самом опасном месте: правку прокси
+  # отрепетировать было НЕЛЬЗЯ, пересоздание общего контейнера роняло оба
+  # контура разом. 25.08.2026 это стоило двух боевых простоев подряд.
+  # Регистрация своя, том свой, боевого warp не касается вовсе.
+  warp-stage:
+    image: caomingjun/warp
+    restart: on-failure:5
+    # Вдвое меньше боевого: стенд никого не обслуживает, а память на машине
+    # общая. Ядро одно из двух — задавить боевой контур он не должен.
+    mem_limit: 384m
+    cpus: "0.5"
+    device_cgroup_rules:
+      - "c 10:200 rwm"
+    cap_add:
+      - MKNOD
+      - AUDIT_WRITE
+      - NET_ADMIN
+    # Тот же пин, что и в бою: gost берёт у резолвера ровно один адрес,
+    # DNS отдаёт AAAA первой, а путь до IPv6 Telegram через WARP не работает.
+    # Подробности и способ подобрать адрес — в docker-compose.yml.
+    extra_hosts:
+      - "api.telegram.org:149.154.167.220"
+    sysctls:
+      # НЕ ставить 1: выключение IPv6 в netns роняет сам туннель, проверено.
+      net.ipv6.conf.all.disable_ipv6: 0
+      net.ipv4.conf.all.src_valid_mark: 1
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - warp_stage_data:/var/lib/cloudflare-warp
+
   stage:
     build: .
     # Не unless-stopped: неверный токен не должен превращаться в вечный цикл
@@ -24,7 +59,7 @@ services:
     # должна подниматься даже при мёртвом прокси (заявка сохранится, карточка
     # догонит), а стенд никого не обслуживает и может подождать.
     depends_on:
-      warp:
+      warp-stage:
         condition: service_healthy
     env_file: .env.stage
     security_opt:
@@ -63,3 +98,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+volumes:
+  warp_stage_data:

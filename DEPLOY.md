@@ -275,8 +275,12 @@ mkdir -p data-stage && sudo chown -R 1000:1000 data-stage
 
 ### Запуск и проверка
 
+У стенда СВОЙ прокси (`warp-stage`) — поднимается вместе с ним. Общий
+с боевым отбирал у стенда смысл в самом опасном месте: пересоздание одного
+контейнера роняло оба контура, и правку прокси отрепетировать было нельзя.
+
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.stage.yml up -d stage
+docker compose -f docker-compose.yml -f docker-compose.stage.yml up -d warp-stage stage
 docker compose up -d caddy          # подхватить сайт стенда
 
 # смоук: подать заявку и убедиться, что она прошла весь путь
@@ -285,6 +289,17 @@ docker compose -f docker-compose.yml -f docker-compose.stage.yml \
 
 docker compose -f docker-compose.yml -f docker-compose.stage.yml logs -f stage
 docker compose -f docker-compose.yml -f docker-compose.stage.yml stop stage
+```
+
+**Стенд надо пересобирать отдельно.** Боевой `docker compose up -d --build`
+его не читает и образ стенда не трогает — стенд тихо отстаёт от боя, а
+проверка на устаревшем коде хуже, чем её отсутствие: она успокаивает. 
+25.08.2026 образ стенда оказался на двое суток старше боевого. Выкатывая
+что-то в бой, тем же заходом делайте:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.stage.yml \
+  up -d --build warp-stage stage
 ```
 
 `ENV_LABEL=СТЕНД` в `.env.stage` рисует над формой красную плашку: два бота
