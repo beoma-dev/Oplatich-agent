@@ -2518,6 +2518,16 @@
 
   // Здоровье бота: состояние связи, уведомления о сбоях и журнал. Живёт в
   // своём файле — панель самодостаточна, а app.js и без неё на пределе.
+  if (typeof buildRestorePanel === "function") {
+    buildRestorePanel({
+      $: $,
+      showMsg: showAdminMsg,
+      initData: function () { return tg ? tg.initData : ""; },
+      haptic: function () {
+        if (tg && tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
+      }
+    });
+  }
   var alertsPanel = typeof buildAlertsPanel === "function" ? buildAlertsPanel({
     $: $,
     setSeg: setSeg,

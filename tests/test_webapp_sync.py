@@ -807,6 +807,9 @@ def test_mini_app_is_split_into_files():
     # Порядок подключения значим: app.js зовёт buildSkinField и функции формы.
     assert MARKUP.index("skin-field.js") < MARKUP.index('src="app.js"')
     assert MARKUP.index("alerts-panel.js") < MARKUP.index('src="app.js"')
+    assert MARKUP.index("restore-panel.js") < MARKUP.index('src="app.js"')
+    assert "buildRestorePanel(" in _read("restore-panel.js")
+    assert "buildRestorePanel({" in JS
     assert "buildSkinField(" in FIELD
     assert 'buildSkinField($("skin-field"))' in JS
     assert "buildAlertsPanel(" in _read("alerts-panel.js")
@@ -830,7 +833,7 @@ def test_split_files_stay_reasonably_small():
     """
     for name, limit in (("index.html", 900), ("app.css", 1600), ("app.js", 2900),
                         ("skin-field.js", 400), ("form-lib.js", 300),
-                        ("alerts-panel.js", 330)):
+                        ("alerts-panel.js", 330), ("restore-panel.js", 200)):
         length = len(_read(name).split("\n"))
         assert length <= limit, f"{name}: {length} строк — пора делить дальше"
 

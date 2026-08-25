@@ -49,6 +49,7 @@ from services import (
     invoice_extract,
     registry_check,
     request_meta,
+    restore,
     storage,
 )
 from services import health as health_pulse
@@ -592,6 +593,61 @@ def _finance_ids() -> set[int]:
     from services.notifier import resolved_finance_ids
 
     return set(resolved_finance_ids())
+
+
+@router.post("/admin/restore")
+async def admin_restore(
+    request: Request,
+    file: UploadFile = File(...),
+    action: str = Form("inspect"),
+) -> dict:
+    """Восстановление из загруженного архива: сначала «покажи», потом «ставь».
+
+    Операция пишет поверх живых данных, поэтому она admin-only, двухшаговая
+    и обязательно оставляет за собой страховочную копию. Разбор архива —
+    в services/restore, здесь только права, размер и аудит.
+    """
+    user = await _require_admin(request)
+    blob = await _read_limited(file, restore.MAX_ARCHIVE_BYTES)
+    if len(blob) > restore.MAX_ARCHIVE_BYTES:
+        raise HTTPException(status_code=413, detail="Архив слишком большой.")
+
+    try:
+        if action == "inspect":
+            summary = await asyncio.to_thread(restore.inspect_sync, blob)
+            return {"ok": True, "summary": summary}
+        if action == "apply":
+            summary = await asyncio.to_thread(restore.apply_sync, blob)
+            await asyncio.to_thread(restore.reload_caches)
+            await audit.log_event(
+                audit.RESTORE_APPLIED,
+                user["id"],
+                user.get("username"),
+                f"архив от {summary['made_at']}: заявок {summary['requests']}, "
+                f"файлов {summary['files']}; копия до — {summary['safety_backup']}",
+            )
+            await alerts.alert_admins(
+                request.app.state.bot,
+                "Данные восстановлены из архива",
+                f"@{user.get('username') or user['id']} поставил архив от "
+                f"{summary['made_at']}. Копия прежнего состояния: "
+                f"{summary['safety_backup']}.",
+                signature="restore-applied",
+                kind="storage",
+                hint="Если это не вы — состояние до восстановления лежит в data/backups/.",
+            )
+            return {
+                "ok": True,
+                "summary": summary,
+                "message": (
+                    f"Восстановлено из архива от {summary['made_at']}. "
+                    f"Копия прежнего состояния: {summary['safety_backup']}."
+                ),
+            }
+    except restore.RestoreError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    raise HTTPException(status_code=422, detail="Некорректный запрос.")
 
 
 @router.post("/admin/backup")

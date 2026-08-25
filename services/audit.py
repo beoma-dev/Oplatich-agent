@@ -44,6 +44,7 @@ REQUEST_WITHDRAWN = "REQUEST_WITHDRAWN"      # автор отозвал сво�
 WITHDRAW_DENIED = "WITHDRAW_DENIED"          # попытка отозвать чужую/непустую заявку
 FINANCE_DENIED = "FINANCE_DENIED"            # панель финансиста без прав
 REQUEST_DELETED = "REQUEST_DELETED"          # заявка удалена из реестра
+RESTORE_APPLIED = "RESTORE_APPLIED"          # данные восстановлены из архива
 DELETE_DENIED = "DELETE_DENIED"              # попытка удалить без прав
 
 

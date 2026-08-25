@@ -662,6 +662,13 @@
         <button type="button" class="add-btn" id="backup-save" style="flex:1">Сохранить</button>
         <button type="button" class="add-btn" id="backup-run">💾 Сейчас</button>
       </div>
+      <label class="field-label">Восстановление из архива</label>
+      <input type="file" id="restore-file" accept=".gz,.tgz,application/gzip" style="width:100%">
+      <div class="counter hidden" id="restore-what" style="text-align:left; margin-top:6px"></div>
+      <div class="add-row">
+        <button type="button" class="add-btn" id="restore-check" style="flex:1">🔍 Посмотреть архив</button>
+        <button type="button" class="add-btn hidden" id="restore-apply">♻️ Восстановить</button>
+      </div>
       <div class="counter" style="text-align:left; margin-top:6px" id="backup-what">
         Архив приходит админам в Telegram; настройки применяются без рестарта.
       </div>
@@ -880,6 +887,7 @@
 
 <script src="skin-field.js"></script>
 <script src="alerts-panel.js"></script>
+<script src="restore-panel.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
