@@ -11,6 +11,12 @@ STALE_AFTER. Внешний мониторинг (UptimeRobot и т.п.) по к
 в панели), а о заметном провале приходит сообщение — и почти всегда уже после
 восстановления, вместе с длительностью. Пока связи нет, Telegram не доставит
 ничего: сообщение о сбое ушло бы тем же мёртвым каналом.
+
+Порог глушит ЗВОНОК, но не датчик: в журнал инцидентов обрыв попадает с
+первой же неудачной пробы, независимо от порога и настроек категорий. Иначе
+частые короткие обрывы не оставляют следа, и карточка «Здоровье бота»
+уверяет, что всё было хорошо, — так и случилось 23–25.08.2026, когда 231
+обрыв подряд оказался короче порога и не попал в панель ни одной строкой.
 """
 from __future__ import annotations
 
@@ -35,6 +41,35 @@ _last_ok: float | None = None
 # Начало текущего провала (monotonic) и признак «о нём уже пробовали сказать».
 _down_since: float | None = None
 _down_reported = False
+# Заголовок обрыва один на датчик и на звонок: журнал склеивает записи по
+# паре «категория + заголовок», и разойдись они — один провал попал бы
+# в панель двумя разными строками.
+LINK_DOWN_TITLE = "Связь с Telegram пропала"
+
+
+def _record_link_down(*, sent: bool, bump: bool, details: str = "") -> None:
+    """Показание датчика в журнал инцидентов.
+
+    Пишется с ПЕРВОЙ неудачной пробы, не дожидаясь порога грации: приглушить
+    можно звонок, но не датчик. Раньше запись шла только вместе с алертом, то
+    есть после порога, — и частые короткие обрывы (231 за трое суток, все
+    короче порога) не оставляли в панели ни следа: она уверяла, что сбоев
+    не было. Сбой самой записи пульс не роняет.
+    """
+    try:
+        rs.record_incident(
+            "telegram",
+            LINK_DOWN_TITLE,
+            sent=sent,
+            when=time.time(),
+            bump=bump,
+            details=details,
+            # Пока провал короче порога, звонка не будет — и панель должна
+            # говорить это прямо, а не «уведомление не отправлялось».
+            reason="below-grace" if not sent else "",
+        )
+    except Exception:  # noqa: BLE001 — журнал вторичен по отношению к пульсу
+        log.exception("Не удалось записать обрыв связи в журнал инцидентов")
 
 
 def record_ok() -> None:
@@ -109,18 +144,28 @@ async def probe_once(bot: Bot, healthy: bool) -> bool:
             log.warning("Telegram API недоступен: %s", exc)
             _down_since = time.monotonic()
             _down_reported = False
+            # Текст исключения — та самая строка, по которой видно, что
+            # виноват прокси, а не Telegram: «ProxyError: Host unreachable».
+            _record_link_down(
+                sent=False, bump=True, details=f"{type(exc).__name__}: {exc}"
+            )
         down = down_for() or 0.0
         if not _down_reported and down >= _grace_seconds():
-            # Единственная попытка на провал: повторять бессмысленно (канал
-            # тот же самый), а журнал инцидентов забился бы счётчиком.
+            # Единственная попытка на провал: повторять бессмысленно — канал
+            # тот же самый.
             _down_reported = True
-            await _safe_alert(
+            delivered = await _safe_alert(
                 bot,
-                "Связь с Telegram пропала",
+                LINK_DOWN_TITLE,
                 f"Нет ответа от api.telegram.org {_minutes(down)} мин. "
                 "Обычно это прокси: проверьте контейнер warp.",
                 "tg-link-down",
+                journal=False,
             )
+            if delivered:
+                # Тот же самый обрыв, уже записанный датчиком: отмечаем, что
+                # о нём удалось сообщить, и НЕ трогаем счётчик.
+                _record_link_down(sent=True, bump=False)
         return False
 
     record_ok()
@@ -140,14 +185,21 @@ async def probe_once(bot: Bot, healthy: bool) -> bool:
     return True
 
 
-async def _safe_alert(bot: Bot, title: str, details: str, signature: str) -> None:
-    """Уведомление о связи. Сбой отправки — норма: связи-то и нет."""
+async def _safe_alert(
+    bot: Bot, title: str, details: str, signature: str, *, journal: bool = True
+) -> int:
+    """Уведомление о связи. Сбой отправки — норма: связи-то и нет.
+
+    Возвращает число доставленных сообщений: по нему видно, дозвонились ли,
+    и нужно ли отметить это в уже записанном инциденте.
+    """
     try:
-        await alerts.alert_admins(
-            bot, title, details, signature=signature, kind="telegram"
+        return await alerts.alert_admins(
+            bot, title, details, signature=signature, kind="telegram", journal=journal
         )
     except Exception:  # noqa: BLE001 — пульс важнее уведомления о пульсе
         log.warning("Не удалось отправить уведомление о состоянии связи")
+        return 0
 
 
 async def probe_loop(bot: Bot) -> None:

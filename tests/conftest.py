@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 
 # Принудительно, не setdefault: подпись initData в интеграционных тестах
 # считается от этого токена, внешний TELEGRAM_BOT_TOKEN сломал бы проверку.
@@ -15,6 +16,19 @@ os.environ["STORAGE_BACKEND"] = "local"
 os.environ["REGISTRY_XLSX_FILE"] = ""
 os.environ["GOOGLE_SHEET_ID"] = ""
 os.environ["GOOGLE_DRIVE_FOLDER_ID"] = ""
+
+# И рабочие ФАЙЛЫ тоже мимо боевых. Фикстура tmp_paths подменяет их только
+# тем тестам, которые её просят, а тест без неё пишет в каталог проекта —
+# то есть, на сервере, в настоящие data/. Так уже случилось 25.08.2026:
+# tests/test_proxy_and_health.py крутит пульс без изоляции, датчик связи
+# записал «ошибку» в боевой журнал инцидентов, а файл, переписанный из
+# контейнера от root, стал боту недоступен на запись. Каталог общий на
+# прогон: тестам, которым нужна чистота, её даёт tmp_paths.
+_SANDBOX = tempfile.mkdtemp(prefix="invoice-bot-tests-")
+os.environ["RUNTIME_SETTINGS_FILE"] = os.path.join(_SANDBOX, "bot_settings.json")
+os.environ["SECURITY_DB_FILE"] = os.path.join(_SANDBOX, "security.db")
+os.environ["USER_DIRECTORY_FILE"] = os.path.join(_SANDBOX, "known_users.json")
+os.environ["STORAGE_DIR"] = os.path.join(_SANDBOX, "storage")
 
 from datetime import date, datetime  # noqa: E402
 from decimal import Decimal  # noqa: E402

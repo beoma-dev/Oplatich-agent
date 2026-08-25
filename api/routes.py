@@ -702,6 +702,7 @@ async def client_error(request: Request) -> dict:
         f"@{who} (id {user['id']}): {message}" + (f" — {where}" if where else ""),
         signature=f"client-error-{message[:60]}",
         kind="error",
+        hint="Ошибка в браузере у пользователя, а не на сервере.",
     )
     return {"ok": True}
 
@@ -780,23 +781,8 @@ async def admin_alerts(request: Request) -> dict:
 
 
 def _registry_links() -> tuple[str | None, str | None]:
-    """Ссылки на Google-таблицу реестра и папку Диска со счетами.
-
-    Обе — None в локальном режиме: там реестр лежит в SQLite с xlsx-зеркалом,
-    и открывать в браузере нечего.
-    """
-    registry = (
-        f"https://docs.google.com/spreadsheets/d/{settings.google_sheet_id}"
-        if settings.storage_is_google and settings.google_sheet_id
-        else None
-    )
-    # Папка Диска, куда складываются файлы счетов, — рядом с реестром.
-    drive = (
-        f"https://drive.google.com/drive/folders/{settings.google_drive_folder_id}"
-        if settings.storage_is_google and settings.google_drive_folder_id
-        else None
-    )
-    return registry, drive
+    """Ссылки на реестр и папку счетов. Источник один — services/storage."""
+    return storage.registry_links()
 
 
 @router.get("/registry/links")

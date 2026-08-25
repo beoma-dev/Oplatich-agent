@@ -85,6 +85,32 @@ class TestAlertGating:
         assert [i["title"] for i in journal] == ["Сбой бэкапа"]
         assert journal[0]["sent"] is False, "выключен звонок, а не датчик"
 
+    async def test_journal_says_why_it_stayed_silent(self):
+        """«Не отправлялось» без причины неотличимо от сбоя доставки.
+
+        Панель показывает код словами, поэтому админ видит разницу между
+        «я сам выключил категорию» и «дозвониться не смогли».
+        """
+        rs.set_alerts_config(kinds={"backup": False})
+        await alerts.alert_admins(
+            _bot(), "Сбой бэкапа", "нет места на диске", kind="backup"
+        )
+        item = rs.recent_incidents()[0]
+        assert item["reason"] == "kind-off"
+        assert item["details"] == "нет места на диске", "хвост ошибки потерян"
+        assert item["first_ts"] <= item["ts"]
+
+    async def test_throttled_and_undelivered_have_their_own_reasons(self):
+        bot = _bot()
+        for _ in range(2):
+            await alerts.alert_admins(bot, "Связь пропала", signature="tg", kind="telegram")
+        assert rs.recent_incidents()[0]["reason"] == "", "дозвонились — причины быть не должно"
+
+        dead = _bot()
+        dead.send_message = AsyncMock(side_effect=RuntimeError("чат не начат"))
+        await alerts.alert_admins(dead, "Сбой бэкапа", signature="b", kind="backup")
+        assert rs.recent_incidents()[0]["reason"] == "undelivered"
+
     async def test_critical_goes_through_quiet_mode(self):
         rs.set_alerts_config(enabled=False)
         bot = _bot()
@@ -229,3 +255,63 @@ class TestLinkPulse:
         state = health.link_state()
         assert set(state) == {"alive", "last_ok_age", "down_for", "grace_min"}
         assert state["grace_min"] == rs.alerts_config()["link_grace_min"]
+
+    async def test_short_blink_is_silent_but_recorded(self, sent):
+        """Звонок приглушён порогом, датчик — нет.
+
+        До правки запись в журнал шла только вместе с алертом, то есть после
+        порога грации. За 23–25.08.2026 бот пережил 231 обрыв, все короче
+        порога, и панель «Здоровье бота» показывала, что сбоев не было.
+        """
+        rs.set_alerts_config(link_grace_min=5)
+        bot = MagicMock()
+        bot.get_me = AsyncMock(side_effect=ConnectionError("прокси моргнул"))
+        await health.probe_once(bot, True)
+
+        assert sent == [], "будить из-за секундного моргания незачем"
+        journal = rs.recent_incidents()
+        assert [i["title"] for i in journal] == [health.LINK_DOWN_TITLE]
+        assert journal[0]["kind"] == "telegram"
+        assert journal[0]["count"] == 1
+        assert journal[0]["sent"] is False   # не звонили — и не врём, что звонили
+
+    async def test_blink_records_the_proxy_error_and_why_it_was_silent(self, sent):
+        """По записи должно быть видно, к кому идти: «×18» само не говорит."""
+        rs.set_alerts_config(link_grace_min=5)
+        bot = MagicMock()
+        bot.get_me = AsyncMock(side_effect=ConnectionError("Proxy Server unreachable"))
+        await health.probe_once(bot, True)
+        item = rs.recent_incidents()[0]
+        assert "ConnectionError" in item["details"]
+        assert "Proxy Server unreachable" in item["details"]
+        assert item["reason"] == "below-grace"
+
+    async def test_repeated_blinks_add_up_in_the_journal(self, sent):
+        """Каждое моргание — плюс один к счётчику, а не новая строка."""
+        rs.set_alerts_config(link_grace_min=5)
+        bot = MagicMock()
+        for _ in range(3):
+            bot.get_me = AsyncMock(side_effect=ConnectionError("моргнул"))
+            await health.probe_once(bot, True)
+            bot.get_me = AsyncMock()
+            await health.probe_once(bot, False)
+
+        assert sent == []
+        journal = rs.recent_incidents()
+        assert len(journal) == 1
+        assert journal[0]["count"] == 3
+
+    async def test_long_outage_counted_once_not_twice(self, sent):
+        """Один провал — одна запись: датчик и звонок не считаются дважды."""
+        rs.set_alerts_config(link_grace_min=1)
+        bot = MagicMock()
+        bot.get_me = AsyncMock(side_effect=ConnectionError("нет сети"))
+        await health.probe_once(bot, True)          # датчик записал
+        health._down_since = time.monotonic() - 600
+        await health.probe_once(bot, False)         # звонок прошёл
+
+        assert [t for t, _d in sent] == [health.LINK_DOWN_TITLE]
+        journal = [i for i in rs.recent_incidents() if i["title"] == health.LINK_DOWN_TITLE]
+        assert len(journal) == 1
+        assert journal[0]["count"] == 1, "провал один, а не два"
+        assert journal[0]["sent"] is True   # о нём в итоге сообщили

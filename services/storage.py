@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import weakref
 from pathlib import Path
 
 from bot.models import InvoiceRequest
@@ -22,7 +23,25 @@ from services import google_backend, local_storage, registry_sqlite, registry_xl
 
 log = logging.getLogger(__name__)
 
-_xlsx_lock = asyncio.Lock()
+# Лок на КАЖДЫЙ event loop, а не один на модуль. asyncio.Lock намертво
+# привязывается к тому циклу, который первым его захватил, и в другом
+# цикле падает «bound to a different event loop». В бою цикл один, а вот
+# в тестах он свой на каждый тест — оттуда и плавающее падение
+# test_concurrency (reports/005, R18): зеркало молча не писалось.
+# Взаимное исключение внутри одного цикла — всё, что этот лок и давал.
+_xlsx_locks: weakref.WeakKeyDictionary[object, asyncio.Lock] = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _lock() -> asyncio.Lock:
+    """Блокировка xlsx для текущего цикла событий."""
+    loop = asyncio.get_running_loop()
+    lock = _xlsx_locks.get(loop)
+    if lock is None:
+        lock = asyncio.Lock()
+        _xlsx_locks[loop] = lock
+    return lock
 
 
 def _mirror_path() -> Path | None:
@@ -30,6 +49,28 @@ def _mirror_path() -> Path | None:
     if settings.storage_is_google:
         return settings.registry_xlsx_path
     return settings.registry_path
+
+
+def registry_links() -> tuple[str | None, str | None]:
+    """Ссылки на Google-таблицу реестра и папку Диска со счетами.
+
+    Обе — None в локальном режиме: там реестр лежит в SQLite с xlsx-зеркалом,
+    и открывать в браузере нечего. Живут здесь, а не в api/: ссылки нужны
+    и панели, и алертам админам, а импортировать api из services нельзя.
+    """
+    if not settings.storage_is_google:
+        return None, None
+    sheet = (
+        f"https://docs.google.com/spreadsheets/d/{settings.google_sheet_id}"
+        if settings.google_sheet_id
+        else None
+    )
+    drive = (
+        f"https://drive.google.com/drive/folders/{settings.google_drive_folder_id}"
+        if settings.google_drive_folder_id
+        else None
+    )
+    return sheet, drive
 
 
 def registry_export_path() -> Path | None:
@@ -42,7 +83,7 @@ async def _mirror_append(request: InvoiceRequest) -> None:
     if path is None:
         return
     try:
-        async with _xlsx_lock:
+        async with _lock():
             await asyncio.to_thread(registry_xlsx.append_sync, request, path)
     except Exception:  # noqa: BLE001 — зеркало вторично
         log.exception("xlsx-зеркало: не удалось записать заявку %s", request.request_id)
@@ -53,7 +94,7 @@ async def _mirror_status(request_id: str, status_text: str) -> None:
     if path is None:
         return
     try:
-        async with _xlsx_lock:
+        async with _lock():
             await asyncio.to_thread(
                 registry_xlsx.set_status_sync, request_id, status_text, path
             )
@@ -147,7 +188,7 @@ async def delete_request(request_id: str) -> bool:
         path = _mirror_path()
         if path is not None:
             try:
-                async with _xlsx_lock:
+                async with _lock():
                     await asyncio.to_thread(registry_xlsx.delete_sync, request_id, path)
             except Exception:  # noqa: BLE001 — зеркало вторично
                 log.exception("xlsx-зеркало: не удалось удалить заявку %s", request_id)

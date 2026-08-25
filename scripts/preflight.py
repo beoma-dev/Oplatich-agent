@@ -44,6 +44,16 @@ def check_telegram() -> str:
     return f"бот @{data['result']['username']}" + (" (через прокси)" if proxy else "")
 
 
+def check_telegram_pin() -> str:
+    """Прибитый IPv4 Telegram против живой DNS-выдачи."""
+    from services import dns_pin
+
+    ok, message = dns_pin.check()
+    if not ok:
+        raise RuntimeError(message)
+    return message
+
+
 def check_local_storage() -> str:
     settings.storage_path.mkdir(parents=True, exist_ok=True)
     probe = settings.storage_path / ".preflight"
@@ -91,6 +101,7 @@ def main() -> int:
     print(f"Preflight · бэкенд: {settings.storage_backend} · TZ: {settings.timezone}\n")
 
     check("Telegram Bot API (getMe)", check_telegram)
+    check("Пин адреса Telegram", check_telegram_pin)
     check("Локальное хранилище / данные", check_local_storage)
     check("SQLite аудита/дедупа", check_security_db)
 

@@ -888,26 +888,27 @@
   .state-line.bad .dot { background: var(--danger); animation: pulse-dot 1.6s ease-in-out infinite; }
   @keyframes pulse-dot { 50% { opacity: .25; } }
   /* Переключатель категории: узкий, чтобы длинная подпись сбоя не переносилась. */
-  .kind-toggle {
-    flex: 0 0 auto;
-    min-width: 58px;
-    border: 1.5px solid var(--bg2);
-    border-radius: 9px;
-    padding: 6px 10px;
-    background: var(--bg2);
-    color: var(--hint);
-    font-size: 13px;
-    cursor: pointer;
-    transition: background .18s ease, color .18s ease, border-color .18s ease,
-                transform .12s ease;
+  /* Тумблер категории сбоя. Была кнопка со словом «Вкл»: слово читалось и как
+     состояние, и как действие по нажатию — форма переключателя от глагола не
+     зависит. Ручка цветом --hint: контрастна и к светлой дорожке, и к тёмной.
+     .kind-static — критичное: тот же вид ради ровной колонки, но не нажать. */
+  .kind-toggle, .kind-static {
+    flex: 0 0 auto; position: relative; padding: 0;
+    width: 46px; height: 26px;
+    border: 1.5px solid var(--bg2); border-radius: 999px;
+    background: var(--bg2); cursor: pointer;
+    transition: background .18s ease, border-color .18s ease, transform .12s ease;
+  }
+  .kind-toggle .knob, .kind-static .knob {
+    position: absolute; top: 50%; left: 3px; margin-top: -9px;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--hint);
+    transition: transform .18s ease, background .18s ease;
   }
   .kind-toggle:active { transform: scale(.94); }
-  .kind-toggle.on {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--accent-text);
-    font-weight: 600;
-  }
+  .kind-toggle.on, .kind-static.on { background: var(--accent); border-color: var(--accent); }
+  .kind-toggle.on .knob, .kind-static.on .knob { transform: translateX(20px); background: var(--accent-text); }
+  .kind-static { cursor: default; opacity: .55; }
   .row-del {
     flex: 0 0 auto;
     width: 28px; height: 28px;

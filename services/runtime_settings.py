@@ -685,11 +685,36 @@ def alert_kind_enabled(kind: str | None) -> bool:
     return bool(cfg["kinds"].get(kind, True)) if kind in ALERT_KEYS else True
 
 
-def record_incident(kind: str | None, title: str, *, sent: bool, when: float) -> None:
+# Длина хвоста ошибки в журнале. Панель — не лог: нужна строка, по которой
+# видно, к кому идти (прокси, диск, Google), а не полный traceback.
+INCIDENT_DETAILS_LIMIT = 160
+
+
+def record_incident(
+    kind: str | None,
+    title: str,
+    *,
+    sent: bool,
+    when: float,
+    bump: bool = True,
+    details: str = "",
+    reason: str = "",
+) -> None:
     """Пишет сбой в журнал. Повтор того же в окне склейки — счётчиком.
 
     Журнал ведётся независимо от настроек: админ, выключивший категорию,
     должен видеть в панели, что она всё-таки срабатывала.
+
+    bump=False — не новый случай, а уточнение уже записанного: например
+    «о том же обрыве наконец удалось сообщить». Счётчик при этом не растёт,
+    иначе один провал считался бы за два — сначала датчиком, потом звонком.
+
+    details — короткий хвост ошибки: «×18» без причины не говорит ничего,
+    а «ProxyError: Host unreachable» сразу указывает на прокси.
+    reason — КОД причины, по которой не позвонили (категория выключена,
+    троттлинг, некому, не дозвонились). Раньше панель писала «уведомление
+    не отправлялось» без объяснений, и отличить «я сам выключил» от
+    «не смогли доставить» было нельзя. Отправленный алерт причину стирает.
     """
     with _lock:
         data = _load_locked()
@@ -698,16 +723,25 @@ def record_incident(kind: str | None, title: str, *, sent: bool, when: float) ->
             same = item.get("kind") == kind and item.get("title") == title
             if same and when - float(item.get("ts", 0.0)) < INCIDENT_MERGE_WINDOW:
                 item["ts"] = when
-                item["count"] = int(item.get("count", 1)) + 1
+                if bump:
+                    item["count"] = int(item.get("count", 1)) + 1
                 item["sent"] = bool(item.get("sent")) or sent
+                if details:
+                    item["details"] = details[:INCIDENT_DETAILS_LIMIT]
+                item["reason"] = "" if item["sent"] else (reason or item.get("reason", ""))
                 _save_locked()
                 return
         journal.insert(0, {
             "kind": kind or "other",
             "title": title,
+            # Первое срабатывание держим отдельно от последнего: «×18» без
+            # периода не говорит, шло это минуту или трое суток.
+            "first_ts": when,
             "ts": when,
             "count": 1,
             "sent": sent,
+            "details": details[:INCIDENT_DETAILS_LIMIT],
+            "reason": "" if sent else reason,
         })
         del journal[INCIDENT_LIMIT:]
         _save_locked()

@@ -24,16 +24,25 @@ from zoneinfo import ZoneInfo
 
 from telegram import Bot
 from telegram.constants import ParseMode
+from telegram.error import NetworkError
 
 from bot.models import STATUS_NEW
 from bot.validators import ValidationError, parse_amount
 from config import settings
 from services import runtime_settings as rs
-from services import storage
+from services import storage, tg_retry
 from services.notifier import resolved_finance_ids
 from services.runtime_settings import effective_admin_ids
 
 log = logging.getLogger(__name__)
+
+# Сколько повторять недоставленное напоминание, секунд. Полчаса: дольше —
+# и напоминание «оплатите сегодня» приходит, когда день уже прошёл.
+RETRY_WINDOW = 1800.0
+
+
+class ReminderNotDelivered(Exception):
+    """Напоминание собрали, но не смогли отправить: канал молчит."""
 
 # Как часто перечитываем расписание (и ловим смену суток).
 # Тикаем раз в минуту: у каждого получателя своё время, и попасть
@@ -151,15 +160,30 @@ def build_overdue_message(rows: list[dict[str, str]]) -> str:
     )
 
 
-async def _send(bot: Bot, chat_ids: list[int], text: str) -> int:
-    delivered = 0
+async def _send(bot: Bot, chat_ids: list[int], text: str) -> tuple[int, bool]:
+    """(сколько доставлено, была ли СЕТЕВАЯ потеря).
+
+    Сеть и смысл разделены намеренно. «Канал молчит» — повод попробовать
+    позже: сообщение актуально, адресат на месте. «Чата нет» или «бот
+    заблокирован» — повод забыть: повторяй хоть до вечера, ничего не
+    изменится, а день окажется съеден бесполезными попытками.
+    """
+    delivered, lost = 0, False
     for chat_id in chat_ids:
         try:
-            await bot.send_message(chat_id=chat_id, text=text, parse_mode=ParseMode.HTML)
+            await tg_retry.send_with_retry(
+                lambda cid=chat_id: bot.send_message(
+                    chat_id=cid, text=text, parse_mode=ParseMode.HTML
+                ),
+                what=f"Напоминание в чат {chat_id}",
+            )
             delivered += 1
+        except NetworkError:
+            lost = True
+            log.warning("Напоминание в чат %s: канал молчит, повторю", chat_id)
         except Exception:  # noqa: BLE001 — один недоступный не срывает остальных
             log.warning("Не удалось отправить напоминание в чат %s", chat_id)
-    return delivered
+    return delivered, lost
 
 
 def overdue_recipients(target: str) -> list[int]:
@@ -201,14 +225,23 @@ async def send_to(bot: Bot, user_id: int, rows: list[dict[str, str]],
         return 0, 0
     due, overdue = split_by_deadline(rows, today, cfg["days_before"])
     sent_due = sent_overdue = 0
+    # Была ли отправка, которая не удалась. Отличать это от «отправлять было
+    # нечего» обязательно: иначе планировщик пометит день закрытым и съест
+    # напоминание на сутки — ровно то, от чего уже защищались на чтении
+    # реестра (strict=True), но не защитились на самой отправке.
+    _lost = False
     if due and cfg["due_enabled"] and user_id in resolved_finance_ids():
-        sent_due = len(due) if await _send(
-            bot, [user_id], build_due_message(due, cfg["days_before"])) else 0
+        ok, lost = await _send(bot, [user_id], build_due_message(due, cfg["days_before"]))
+        sent_due = len(due) if ok else 0
+        _lost = _lost or lost
     wants_overdue = cfg["overdue_enabled"] and rs.reminders_config()["overdue_enabled"]
     if overdue and wants_overdue and user_id in overdue_recipients(
             rs.reminders_config()["overdue_to"]):
-        sent_overdue = len(overdue) if await _send(
-            bot, [user_id], build_overdue_message(overdue)) else 0
+        ok, lost = await _send(bot, [user_id], build_overdue_message(overdue))
+        sent_overdue = len(overdue) if ok else 0
+        _lost = _lost or lost
+    if _lost:
+        raise ReminderNotDelivered(user_id)
     return sent_due, sent_overdue
 
 
@@ -222,7 +255,12 @@ async def run_reminders(bot: Bot, today: date | None = None) -> tuple[int, int]:
     today = today or datetime.now(ZoneInfo(settings.timezone)).date()
     rows = await storage.recent_requests(limit=SCAN_LIMIT, strict=True)
     for user_id in recipients():
-        await send_to(bot, user_id, rows, today, force=True)
+        try:
+            await send_to(bot, user_id, rows, today, force=True)
+        except ReminderNotDelivered:
+            # Ручной прогон повторов не планирует: админ видит результат
+            # сразу и нажмёт ещё раз. Главное — не оборвать остальных.
+            log.warning("Ручной прогон: напоминание для %s не ушло", user_id)
     due, overdue = split_by_deadline(rows, today, cfg["days_before"])
     log.info("Напоминания: к оплате %s, просрочено %s", len(due), len(overdue))
     return len(due), len(overdue)
@@ -243,15 +281,24 @@ async def reminder_loop(bot: Bot) -> None:
     log.info("Планировщик напоминаний запущен: %s", rs.reminders_config())
     # Кому и в какой день уже отправили: защита от повтора внутри минуты.
     sent_on: dict[int, date] = {}
+    # Кому не смогли доставить: пробуем снова на каждом тике, но не вечно —
+    # к концу окна напоминание уже неактуально, а спам вреднее молчания.
+    pending: dict[int, datetime] = {}
     while True:
         await asyncio.sleep(TICK_INTERVAL)
         if not rs.reminders_config()["enabled"]:
             continue
         now = datetime.now(ZoneInfo(settings.timezone))
         today = now.date()
+        for uid, since in list(pending.items()):
+            if (now - since).total_seconds() > RETRY_WINDOW:
+                log.error("Напоминание для %s так и не ушло за %.0f мин", uid, RETRY_WINDOW / 60)
+                pending.pop(uid, None)
+                sent_on[uid] = today          # больше не пытаемся сегодня
         due_now = [
             uid for uid in recipients()
-            if rs.personal_reminders(uid)["time"] == _hhmm(now) and sent_on.get(uid) != today
+            if (rs.personal_reminders(uid)["time"] == _hhmm(now) or uid in pending)
+            and sent_on.get(uid) != today
         ]
         if not due_now:
             continue
@@ -265,6 +312,13 @@ async def reminder_loop(bot: Bot) -> None:
         for user_id in due_now:
             try:
                 await send_to(bot, user_id, rows, today)
-                sent_on[user_id] = today
+            except ReminderNotDelivered:
+                # День НЕ помечаем: получатель остаётся в окне повтора и
+                # получит своё, как только канал оживёт.
+                pending[user_id] = now
+                log.warning("Напоминание для %s не ушло, повторю", user_id)
+                continue
             except Exception:  # noqa: BLE001 — один сбой не срывает остальных
                 log.exception("Сбой напоминания для %s", user_id)
+            sent_on[user_id] = today
+            pending.pop(user_id, None)

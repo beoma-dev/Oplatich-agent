@@ -186,21 +186,33 @@ def _style_requests(sheet_id: int) -> list[dict]:
 
 def _ensure_style_sync() -> None:
     """Оформляет лист один раз: маркер «уже оформлен» — закреплённая шапка."""
-    props = (
-        _sheets()
-        .spreadsheets()
-        .get(
-            spreadsheetId=settings.google_sheet_id,
-            fields="sheets(properties(sheetId,gridProperties(frozenRowCount)))",
-        )
-        .execute()["sheets"][0]["properties"]
+    global _checked_style
+    if _checked_style:
+        return
+    sheet_id = _target_sheet()[0]
+    props = next(
+        (
+            item["properties"]
+            for item in _sheets()
+            .spreadsheets()
+            .get(
+                spreadsheetId=settings.google_sheet_id,
+                fields="sheets(properties(sheetId,gridProperties(frozenRowCount)))",
+            )
+            .execute()
+            .get("sheets", [])
+            if item.get("properties", {}).get("sheetId") == sheet_id
+        ),
+        {},
     )
     if props.get("gridProperties", {}).get("frozenRowCount", 0) >= 1:
+        _checked_style = True
         return
     _sheets().spreadsheets().batchUpdate(
         spreadsheetId=settings.google_sheet_id,
-        body={"requests": _style_requests(props["sheetId"])},
+        body={"requests": _style_requests(sheet_id)},
     ).execute()
+    _checked_style = True
     log.info("Google-таблица оформлена: шапка, ширины, фильтр, статусные цвета")
 
 
@@ -250,6 +262,82 @@ def _values():
     return _sheets().spreadsheets().values()
 
 
+# Кэш «gid → название листа» на процесс: название нужно в каждом диапазоне,
+# а лишний запрос к API на каждую операцию реестр не переживёт (см. R9).
+_sheet_ref: tuple[int, str] | None = None
+
+
+def reset_sheet_ref() -> None:
+    """Сбрасывает кэш листа. Нужен тестам и смене таблицы на лету."""
+    global _sheet_ref
+    _sheet_ref = None
+    reset_sheet_checks()
+
+
+def _target_sheet() -> tuple[int, str]:
+    """(sheetId, название) листа реестра — того, что задан GOOGLE_SHEET_GID.
+
+    Отсутствующий gid — это ОШИБКА, а не повод взять первый лист. Молча
+    уехавшая в соседнюю вкладку заявка хуже громкого отказа: отказ поднимет
+    критичный алерт «Заявка не сохранилась в реестр», который не отключается
+    ничем, а тихая запись не туда обнаружится через месяц при сверке.
+    """
+    global _sheet_ref
+    if _sheet_ref is not None:
+        return _sheet_ref
+    gid = settings.google_sheet_gid
+    sheets = (
+        _sheets()
+        .spreadsheets()
+        .get(
+            spreadsheetId=settings.google_sheet_id,
+            fields="sheets(properties(sheetId,title))",
+        )
+        .execute()
+        .get("sheets", [])
+    )
+    for item in sheets:
+        props = item.get("properties", {})
+        if props.get("sheetId") == gid:
+            _sheet_ref = (gid, props.get("title", ""))
+            return _sheet_ref
+    known = ", ".join(
+        f"«{i.get('properties', {}).get('title', '?')}» (gid={i.get('properties', {}).get('sheetId')})"
+        for i in sheets
+    ) or "их нет"
+    raise RuntimeError(
+        f"В таблице нет листа с gid={gid}; есть: {known}. "
+        "GOOGLE_SHEET_GID берётся из адреса таблицы после #gid=."
+    )
+
+
+def _rng(a1: str) -> str:
+    """Диапазон с явным именем листа.
+
+    Без имени Google адресует ПЕРВЫЙ лист книги: пока реестр был один, это
+    сходило с рук, а рядом с любой второй вкладкой («Справочник» и т. п.)
+    перестановка вкладок тихо уводит записи не туда. Апостроф в названии
+    листа по правилам A1 удваивается.
+    """
+    title = _target_sheet()[1].replace("'", "''")
+    return f"'{title}'!{a1}"
+
+
+# Шапка и оформление проверяются один раз на процесс. Обе операции по
+# смыслу однократны за всю жизнь таблицы, но звались на КАЖДУЮ заявку и
+# стоили двух лишних обращений к API — около 1,7 с из 6 с на подачу
+# (замеры reports/005, R19). Рестарт кэш сбрасывает: если таблицу подменят
+# под работающим ботом, следующий запуск всё проверит заново.
+_checked_header = False
+_checked_style = False
+
+
+def reset_sheet_checks() -> None:
+    """Сбрасывает памятку о проверках. Нужна тестам и смене таблицы."""
+    global _checked_header, _checked_style
+    _checked_header = _checked_style = False
+
+
 def _ensure_header_sync() -> None:
     """Пустой лист получает заголовки; существующий лист НЕ трогаем.
 
@@ -257,19 +345,23 @@ def _ensure_header_sync() -> None:
     оформление — неприкосновенны. Наши первые 9 колонок совпадают
     с шаблоном ТЗ, служебные данные уходят правее без своих заголовков.
     """
+    global _checked_header
+    if _checked_header:
+        return
     got = (
         _values()
-        .get(spreadsheetId=settings.google_sheet_id, range="1:1")
+        .get(spreadsheetId=settings.google_sheet_id, range=_rng("1:1"))
         .execute()
         .get("values", [])
     )
     if not got or not any(got[0]):
         _values().update(
             spreadsheetId=settings.google_sheet_id,
-            range="A1",
+            range=_rng("A1"),
             valueInputOption="RAW",
             body={"values": [SHEET_HEADERS]},
         ).execute()
+    _checked_header = True
 
 
 def append_invoice_sync(request: InvoiceRequest) -> int:
@@ -293,7 +385,7 @@ def append_invoice_sync(request: InvoiceRequest) -> int:
         _values()
         .append(
             spreadsheetId=settings.google_sheet_id,
-            range="A1",
+            range=_rng("A1"),
             valueInputOption="RAW",
             insertDataOption="OVERWRITE",
             body={"values": [values]},
@@ -317,7 +409,7 @@ def set_status_sync(request_id: str, status_text: str) -> dict[str, str] | None:
         _values()
         .get(
             spreadsheetId=settings.google_sheet_id,
-            range=f"{_ID_LETTER}2:{_ID_LETTER}",
+            range=_rng(f"{_ID_LETTER}2:{_ID_LETTER}"),
         )
         .execute()
         .get("values", [])
@@ -327,7 +419,7 @@ def set_status_sync(request_id: str, status_text: str) -> dict[str, str] | None:
             row_number = i + 2
             _values().update(
                 spreadsheetId=settings.google_sheet_id,
-                range=f"{_STATUS_LETTER}{row_number}",
+                range=_rng(f"{_STATUS_LETTER}{row_number}"),
                 valueInputOption="RAW",
                 body={"values": [[status_text]]},
             ).execute()
@@ -335,7 +427,7 @@ def set_status_sync(request_id: str, status_text: str) -> dict[str, str] | None:
                 _values()
                 .get(
                     spreadsheetId=settings.google_sheet_id,
-                    range=f"A{row_number}:{_LAST_LETTER}{row_number}",
+                    range=_rng(f"A{row_number}:{_LAST_LETTER}{row_number}"),
                 )
                 .execute()
                 .get("values", [[]])[0]
@@ -356,7 +448,7 @@ def _all_rows_sync() -> list[list[str]]:
         _values()
         .get(
             spreadsheetId=settings.google_sheet_id,
-            range=f"A2:{_LAST_LETTER}",
+            range=_rng(f"A2:{_LAST_LETTER}"),
         )
         .execute()
         .get("values", [])
@@ -386,22 +478,14 @@ def delete_request_sync(request_id: str) -> bool:
     """Удаляет строку заявки из Google Таблицы. True — строка была и удалена."""
     ids = (
         _values()
-        .get(spreadsheetId=settings.google_sheet_id, range=f"{_ID_LETTER}2:{_ID_LETTER}")
+        .get(spreadsheetId=settings.google_sheet_id, range=_rng(f"{_ID_LETTER}2:{_ID_LETTER}"))
         .execute()
         .get("values", [])
     )
     for i, row in enumerate(ids):
         if row and row[0] == request_id:
             row_number = i + 2  # +1 за шапку, +1 за нумерацию с единицы
-            sheet_id = (
-                _sheets()
-                .spreadsheets()
-                .get(
-                    spreadsheetId=settings.google_sheet_id,
-                    fields="sheets(properties(sheetId))",
-                )
-                .execute()["sheets"][0]["properties"]["sheetId"]
-            )
+            sheet_id = _target_sheet()[0]
             _sheets().spreadsheets().batchUpdate(
                 spreadsheetId=settings.google_sheet_id,
                 body={"requests": [{"deleteDimension": {"range": {
@@ -450,7 +534,7 @@ def recent_counterparties_sync(limit: int) -> list[str]:
         _values()
         .get(
             spreadsheetId=settings.google_sheet_id,
-            range=f"{_CP_LETTER}2:{_CP_LETTER}",
+            range=_rng(f"{_CP_LETTER}2:{_CP_LETTER}"),
         )
         .execute()
         .get("values", [])

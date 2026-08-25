@@ -15,8 +15,10 @@ import sqlite3
 
 from telegram import Bot, InlineKeyboardMarkup
 from telegram.constants import ParseMode
+from telegram.error import NetworkError
 
 from config import settings
+from services import alerts
 
 log = logging.getLogger(__name__)
 
@@ -133,6 +135,7 @@ async def update_all(
     if not card_list and fallback is not None:
         card_list = [fallback]
     updated = 0
+    stale = 0
     for card in card_list:
         try:
             if card["is_caption"]:
@@ -153,9 +156,32 @@ async def update_all(
                     reply_markup=keyboard,
                 )
             updated += 1
+        except NetworkError:
+            # Сеть — не «карточку удалили». Статус в реестре уже сменён, и
+            # необновлённая карточка ВРЁТ: показывает старый статус и держит
+            # живые кнопки, по которым второй финансист нажмёт ещё раз.
+            # Раньше это гасилось на уровне DEBUG, то есть не было видно
+            # вообще; теперь это заметное событие.
+            stale += 1
+            log.warning(
+                "Карточка заявки %s в чате %s не обновлена: сеть",
+                request_id, card["chat_id"],
+            )
         except Exception:  # noqa: BLE001 — карточка удалена, не изменилась и т.п.
             log.debug(
                 "Карточка заявки %s в чате %s не обновлена",
                 request_id, card["chat_id"], exc_info=True,
             )
+    if stale:
+        # Категория delivery — «карточка не дошла финансисту»: устаревшая
+        # карточка ровно из этой семьи, отдельный вид алерта заводить незачем.
+        await alerts.alert_admins(
+            bot,
+            "Карточка заявки осталась со старым статусом",
+            f"{request_id}: не обновилось карточек — {stale}. "
+            "Кнопки на них ещё живы, статус показан прежний.",
+            signature=f"card-stale-{request_id}",
+            kind="delivery",
+            hint="Статус в реестре верный. Карточку проще удалить в чате.",
+        )
     return updated

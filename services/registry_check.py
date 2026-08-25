@@ -118,6 +118,10 @@ async def alert_if_diverged(bot) -> dict:
                 details,
                 signature="registry-mirror-diverged",
                 kind="mirror",
+                hint=(
+                    "Истина — в реестре, зеркало вторично. Оно догонит на "
+                    "следующей заявке или бэкапе; расхождение важно, если растёт."
+                ),
             )
         except Exception:  # noqa: BLE001 — алерт не должен ломать сверку
             log.exception("Не удалось сообщить о расхождении реестра")

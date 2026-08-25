@@ -10,7 +10,15 @@ from telegram.ext import ApplicationHandlerStop
 import bot.finance_actions as fa
 from bot.models import Urgency
 from config import settings
-from services import cards, intake, notifier, registry_sqlite, registry_xlsx, storage
+from services import (
+    cards,
+    intake,
+    notifier,
+    registry_sqlite,
+    registry_xlsx,
+    storage,
+    tg_retry,
+)
 from tests.conftest import make_request
 
 
@@ -207,16 +215,60 @@ class TestMigration:
         assert (imported2, skipped2) == (0, 2)
 
 
+class TestStaleCards:
+    """Необновлённая карточка врёт, и об этом должно быть слышно.
+
+    Статус в реестре уже сменён; карточка со старым статусом держит живые
+    кнопки, и второй финансист нажимает по ней ещё раз. Раньше сетевой сбой
+    обновления гасился на уровне DEBUG — то есть не был виден вообще.
+    """
+
+    async def test_network_failure_raises_an_alert(self, tmp_paths, monkeypatch):
+        sent = {}
+
+        async def fake_alert(bot, title, details="", **kw):
+            sent["title"], sent["kind"] = title, kw.get("kind")
+            return 1
+
+        monkeypatch.setattr(cards.alerts, "alert_admins", fake_alert)
+        monkeypatch.setattr(cards, "for_request", AsyncMock(return_value=[
+            {"chat_id": 1, "message_id": 2, "is_caption": False, "base_html": "x"},
+        ]))
+        bot = MagicMock()
+        bot.edit_message_text = AsyncMock(side_effect=NetworkError("канал молчит"))
+
+        assert await cards.update_all(bot, "INV-1", " · статус") == 0
+        assert "старым статусом" in sent["title"]
+        assert sent["kind"] == "delivery", "своей категории для этого заводить незачем"
+
+    async def test_deleted_card_stays_quiet(self, tmp_paths, monkeypatch):
+        """Сообщение удалили или оно не изменилось — это не сбой канала."""
+        called = []
+        monkeypatch.setattr(cards.alerts, "alert_admins",
+                            AsyncMock(side_effect=lambda *a, **k: called.append(1)))
+        monkeypatch.setattr(cards, "for_request", AsyncMock(return_value=[
+            {"chat_id": 1, "message_id": 2, "is_caption": False, "base_html": "x"},
+        ]))
+        bot = MagicMock()
+        bot.edit_message_text = AsyncMock(side_effect=RuntimeError("message to edit not found"))
+
+        assert await cards.update_all(bot, "INV-1", " · статус") == 0
+        assert called == [], "об удалённой карточке будить незачем"
+
+
 class TestCardRetry:
     """Повтор отправки карточки на сетевых сбоях.
 
     Канал до Telegram идёт через WARP и пропадает на минуты. Заявка уже
     в реестре, а карточку потом никто не перешлёт — однократный сбой сети
     не должен её стоить.
+
+    Сам механизм с 25.08.2026 живёт в services/tg_retry и общий для всех
+    исходящих; зовём его через notifier — так проверяется и проводка.
     """
 
     async def test_second_attempt_succeeds(self, monkeypatch):
-        monkeypatch.setattr(notifier.asyncio, "sleep", AsyncMock())
+        monkeypatch.setattr(tg_retry.asyncio, "sleep", AsyncMock())
         calls = []
 
         async def flaky():
@@ -229,7 +281,7 @@ class TestCardRetry:
         assert len(calls) == 2
 
     async def test_gives_up_after_the_budget(self, monkeypatch):
-        monkeypatch.setattr(notifier.asyncio, "sleep", AsyncMock())
+        monkeypatch.setattr(tg_retry.asyncio, "sleep", AsyncMock())
         calls = []
 
         async def always_down():
@@ -238,11 +290,11 @@ class TestCardRetry:
 
         with pytest.raises(NetworkError):
             await notifier._send_with_retry(always_down, 42)
-        assert len(calls) == len(notifier._RETRY_PAUSES) + 1
+        assert len(calls) == len(tg_retry.DEFAULT_PAUSES) + 1
 
     async def test_meaningful_refusals_are_not_retried(self, monkeypatch):
         """Бот заблокирован или чат не найден — повторять бессмысленно."""
-        monkeypatch.setattr(notifier.asyncio, "sleep", AsyncMock())
+        monkeypatch.setattr(tg_retry.asyncio, "sleep", AsyncMock())
         calls = []
 
         async def forbidden():
@@ -302,7 +354,7 @@ class TestNotifications:
         monkeypatch.setattr(intake, "effective_finance_recipients", lambda: ["7"])
         seen = {}
 
-        async def fake_alert(bot, title, details="", *, signature=None, kind=None):
+        async def fake_alert(bot, title, details="", *, signature=None, kind=None, **_kw):
             seen["title"], seen["details"], seen["kind"] = title, details, kind
             return 1
 
@@ -319,7 +371,7 @@ class TestNotifications:
         monkeypatch.setattr(intake, "effective_finance_recipients", lambda: [])
         seen = {}
 
-        async def fake_alert(bot, title, details="", *, signature=None, kind=None):
+        async def fake_alert(bot, title, details="", *, signature=None, kind=None, **_kw):
             seen["title"], seen["kind"] = title, kind
             return 1
 

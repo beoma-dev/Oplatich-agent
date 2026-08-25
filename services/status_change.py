@@ -19,7 +19,7 @@ from telegram.constants import ParseMode
 
 from bot.models import REQUEST_STATUSES, STATUS_WITHDRAWN
 from config import settings
-from services import audit, cards, request_meta, storage
+from services import audit, cards, request_meta, storage, tg_retry
 from services.notifier import build_status_keyboard
 
 log = logging.getLogger(__name__)
@@ -103,6 +103,15 @@ async def notify_author(
     if reason:
         text += f"\n💬 Причина: {e(reason)}"
     try:
-        await bot.send_message(chat_id=author_id, text=text, parse_mode=ParseMode.HTML)
+        # С повтором: раньше сбой глушился целиком, а комментарий объяснял
+        # его закрытой личкой. При потерях на канале (reports/005) заметная
+        # доля этих «личек» была сетью, и автор просто не узнавал, что его
+        # заявку оплатили.
+        await tg_retry.send_with_retry(
+            lambda: bot.send_message(
+                chat_id=author_id, text=text, parse_mode=ParseMode.HTML
+            ),
+            what=f"Автор заявки {request_id}",
+        )
     except Exception:  # noqa: BLE001 — автор мог не открывать личку с ботом
         log.warning("Не удалось уведомить автора заявки %s (id %s)", request_id, author_id)

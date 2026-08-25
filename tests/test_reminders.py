@@ -5,6 +5,9 @@ from datetime import date
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+from telegram.error import NetworkError
+
 from config import settings
 from services import reminders, storage
 from tests.conftest import make_request
@@ -333,3 +336,41 @@ class TestPersonalSchedules:
         rows = await storage.recent_requests(limit=50)
         due, _ = await reminders.send_to(bot, 111, rows, TODAY)
         assert due == 0
+
+
+class TestLostReminders:
+    """Сетевой сбой не должен съедать напоминание на сутки.
+
+    Планировщик помечал день закрытым сразу после вызова отправки, а сбой
+    отправки глушился внутри и наружу не выходил. Одна заминка канала —
+    и «оплатите сегодня» не приходило вовсе. Ровно от этого уже защищались
+    на чтении реестра (strict=True), но не на самой отправке.
+    """
+
+    async def test_network_loss_is_reported_to_the_scheduler(self, tmp_paths, monkeypatch):
+        settings.__dict__.pop("finance_recipients", None)
+        monkeypatch.setattr(settings, "finance_chat_ids_raw", "555")
+        monkeypatch.setattr(reminders.tg_retry.asyncio, "sleep", AsyncMock())
+        await storage.append_invoice(make_request(
+            planned_date=date(2026, 8, 5), request_id="INV-20260804-100011-0011"
+        ))
+        rows = await storage.recent_requests(limit=50)
+
+        bot = MagicMock()
+        bot.send_message = AsyncMock(side_effect=NetworkError("канал молчит"))
+        with pytest.raises(reminders.ReminderNotDelivered):
+            await reminders.send_to(bot, 555, rows, TODAY, force=True)
+
+    async def test_meaningful_refusal_is_not_worth_retrying(self, tmp_paths, monkeypatch):
+        """«Чата нет» повторять бессмысленно — день закрываем."""
+        settings.__dict__.pop("finance_recipients", None)
+        monkeypatch.setattr(settings, "finance_chat_ids_raw", "555")
+        await storage.append_invoice(make_request(
+            planned_date=date(2026, 8, 5), request_id="INV-20260804-100012-0012"
+        ))
+        rows = await storage.recent_requests(limit=50)
+
+        bot = MagicMock()
+        bot.send_message = AsyncMock(side_effect=RuntimeError("чат не найден"))
+        # Не поднимает ReminderNotDelivered: повторять нечего.
+        assert await reminders.send_to(bot, 555, rows, TODAY, force=True) == (0, 0)

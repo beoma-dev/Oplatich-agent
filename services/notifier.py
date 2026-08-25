@@ -6,16 +6,14 @@ PDF-документ заявки и сам файл счёта. Кнопки «
 """
 from __future__ import annotations
 
-import asyncio
 import html
 import logging
 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
-from telegram.error import NetworkError
 
 from bot.models import REQUEST_STATUSES, InvoiceRequest
-from services import cards
+from services import cards, tg_retry
 from services.runtime_settings import effective_finance_recipients
 from services.user_directory import resolve
 
@@ -25,31 +23,14 @@ log = logging.getLogger(__name__)
 CB_STATUS_PREFIX = "ST"
 
 
-# Паузы между попытками отправки карточки, в секундах. Канал до Telegram идёт
-# через WARP и пропадает на минуты — однократный сбой сети не должен стоить
-# финансисту карточки: заявка уже записана в реестр, а карточку никто не
-# перешлёт. Бюджет короткий намеренно: подача заявки ждёт этой отправки.
-_RETRY_PAUSES = (1.0, 3.0)
-
-
 async def _send_with_retry(send, chat_id: int):
-    """Отправка с повтором ТОЛЬКО на сетевых сбоях.
+    """Карточка финансисту с повтором на сетевых сбоях.
 
-    Отказы Telegram по смыслу (бот заблокирован, чат не найден) повторять
-    бессмысленно — они прилетают как другие исключения и уходят наверх сразу.
+    Механизм общий (services/tg_retry): заявка уже записана в реестр, а
+    карточку никто не перешлёт — потерять её из-за одного сетевого сбоя
+    нельзя. Бюджет пауз короткий: подача заявки ждёт этой отправки.
     """
-    for attempt, pause in enumerate((*_RETRY_PAUSES, None), start=1):
-        try:
-            return await send()
-        except NetworkError as err:
-            if pause is None:
-                raise
-            log.warning(
-                "Финансист %s: сеть недоступна (%s), попытка %s из %s через %.0f с",
-                chat_id, err.__class__.__name__, attempt, len(_RETRY_PAUSES) + 1, pause,
-            )
-            await asyncio.sleep(pause)
-    return None
+    return await tg_retry.send_with_retry(send, what=f"Финансист {chat_id}")
 
 
 def build_status_keyboard(request_id: str) -> InlineKeyboardMarkup:

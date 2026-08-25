@@ -73,3 +73,28 @@ class TestExcelSafe:
         assert excel_safe("125000.50") == "125000.50"
         assert excel_safe("") == ""
 
+
+
+def test_tests_never_touch_the_projects_own_data_dir():
+    """Рабочие пути тестов не должны указывать в каталог проекта.
+
+    Репозиторий бывает развёрнут на сервере рядом с боевым ботом, и
+    tmp_paths спасает только тех, кто её попросил. 25.08.2026 тест пульса
+    без изоляции записал «ошибку» в настоящий журнал инцидентов, а файл,
+    переписанный от root, стал боту недоступен на запись. Страховка теперь
+    глобальная — этот тест сторожит, что её не сняли.
+    """
+    from pathlib import Path
+
+    from config import settings
+
+    project = Path(__file__).resolve().parent.parent
+    for name in (
+        settings.runtime_settings_path,
+        settings.security_db_path,
+        settings.user_directory_path,
+        settings.storage_path,
+    ):
+        assert project not in Path(name).resolve().parents, (
+            f"{name} ведёт в каталог проекта — тесты будут писать в боевые данные"
+        )

@@ -35,3 +35,9 @@ node_modules/
 *.log
 downloads/
 .DS_Store
+
+# Резервные копии окружения: в них тот же токен, что и в .env. Шаблоны
+# .env.example / .env.stage.example — наоборот, в репозитории и нужны там,
+# поэтому пятно узкое: только *.bak*, а не .env.*
+.env.bak*
+*.env.bak

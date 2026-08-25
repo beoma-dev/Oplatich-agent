@@ -1044,11 +1044,15 @@ async def step_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         )
     except Exception:  # noqa: BLE001
         log.exception("Ошибка получения файла заявки %s", request.request_id)
+        # НЕ стираем введённое: человек прошёл весь диалог, и терять его
+        # работу из-за одной сетевой заминки нельзя — канал до Telegram
+        # теряет часть вызовов (reports/005). Остаёмся на шаге счёта,
+        # чтобы хватило приложить файл заново.
         await message.reply_text(
-            "❌ Не удалось получить файл счёта. Попробуйте ещё раз позже."
+            "❌ Не удалось получить файл счёта — похоже, связь подвела.\n"
+            "Пришлите файл ещё раз: остальное я помню."
         )
-        context.user_data.clear()
-        return ConversationHandler.END
+        return FILE
 
     # Мягкая автопроверка «похоже ли на счёт» (текст PDF / OCR).
     file_warning = await asyncio.to_thread(

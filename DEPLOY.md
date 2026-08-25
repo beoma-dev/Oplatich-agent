@@ -190,9 +190,14 @@ ID берутся прямо из адресной строки:
 `docs.google.com/spreadsheets/d/`**`ЭТО_ID`**`/edit`,
 `drive.google.com/drive/folders/`**`ЭТО_ID`**.
 
-Права на файлы ключей:
+Права на файлы ключей. Внутри контейнера бот работает под **uid 1000**
+(пользователь `app` из Dockerfile), а `secrets/` монтируется как есть с хоста:
+ключ, положенный от root с правами 600, боту не читается. Поэтому кроме
+`chmod` нужен и `chown` — иначе preflight падает `PermissionError` на файле
+ключа, и это легко принять за проблему с правами в Google:
 
 ```bash
+chown -R 1000:1000 secrets
 chmod 700 secrets && chmod 600 secrets/*.json
 ```
 

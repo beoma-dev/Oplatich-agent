@@ -156,3 +156,41 @@ def test_alive_grace_then_stale(monkeypatch):
     assert health.telegram_alive()
     monkeypatch.setattr(health, "_last_ok", time.monotonic() - 10_000)
     assert not health.telegram_alive()
+
+
+class TestTelegramPin:
+    """Проверка прибитого адреса Telegram.
+
+    Проверяем ДОСТИЖИМОСТЬ, а не совпадение с DNS: 25.08.2026 выяснилось,
+    что через сессию WARP адрес из DNS не отвечал, а другой адрес Telegram
+    отвечал. Пин выбирается по тому, докуда WARP доходит, поэтому сравнение
+    с DNS давало бы ложную тревогу каждый день.
+    """
+
+    def test_no_pin_is_not_an_error(self, monkeypatch):
+        from services import dns_pin
+
+        monkeypatch.setattr(settings, "telegram_pinned_ip", "")
+        ok, message = dns_pin.check()
+        assert ok and "не используется" in message
+
+    def test_reachable_pin_is_fine_even_if_dns_disagrees(self, monkeypatch):
+        from services import dns_pin
+
+        monkeypatch.setattr(settings, "telegram_pinned_ip", "149.154.167.220")
+        monkeypatch.setattr(dns_pin, "reachable", lambda: True)
+        monkeypatch.setattr(dns_pin, "resolve_v4", lambda *_a: ["149.154.166.110"])
+        ok, message = dns_pin.check()
+        assert ok, "расхождение с DNS — не повод для тревоги"
+        assert "149.154.166.110" in message, "но знать о нём полезно"
+
+    def test_unreachable_pin_is_a_failure_with_instructions(self, monkeypatch):
+        from services import dns_pin
+
+        monkeypatch.setattr(settings, "telegram_pinned_ip", "149.154.167.220")
+        monkeypatch.setattr(dns_pin, "reachable", lambda: False)
+        monkeypatch.setattr(dns_pin, "resolve_v4", lambda *_a: ["149.154.166.110"])
+        ok, message = dns_pin.check()
+        assert not ok
+        assert "не отвечает" in message
+        assert "extra_hosts" in message and "TELEGRAM_PINNED_IP" in message

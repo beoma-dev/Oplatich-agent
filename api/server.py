@@ -32,10 +32,18 @@ def build_api(bot: Bot) -> FastAPI:
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
-        # Ответы API содержат данные заявок; страница формы — не кешируется,
-        # потому что WebView Telegram держит её очень цепко: после деплоя
-        # пользователь неделями видел бы старую разметку и старый JS.
-        response.headers["Cache-Control"] = "no-store"
+        # Ответы API содержат данные заявок — их не кешируем вовсе.
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+        else:
+            # Статике достаточно ОБЯЗАТЕЛЬНОЙ ревалидации. Раньше здесь тоже
+            # стоял no-store, потому что WebView Telegram держит страницу
+            # цепко и после деплоя показывал бы старый JS неделями. Но
+            # no-cache даёт ту же гарантию свежести — браузер обязан
+            # спросить сервер, — и при этом неизменные файлы возвращаются
+            # как 304 вместо 82 КБ тела на каждое открытие формы
+            # (замеры reports/005, R20). ETag сервер отдаёт и так.
+            response.headers["Cache-Control"] = "no-cache"
         return response
 
     app.include_router(router, prefix="/api")

@@ -20,11 +20,20 @@ def svc(monkeypatch):
     service = MagicMock()
     monkeypatch.setattr(gb, "_sheets", lambda: service)
     monkeypatch.setattr(settings, "google_sheet_id", "SHEET_ID")
+    # Лист реестра пришпилен по gid; в моке он не первый и не нулевой нарочно —
+    # иначе тест прошёл бы и на старом поведении «берём первый лист».
+    monkeypatch.setattr(settings, "google_sheet_gid", 7)
+    gb.reset_sheet_ref()
     # По умолчанию лист «уже оформлен» (закреплённая шапка) — стили не трогаем.
     service.spreadsheets.return_value.get.return_value.execute.return_value = {
-        "sheets": [{"properties": {"sheetId": 7, "gridProperties": {"frozenRowCount": 1}}}]
+        "sheets": [
+            {"properties": {"sheetId": 0, "title": "Справочник"}},
+            {"properties": {"sheetId": 7, "title": "Реестр",
+                            "gridProperties": {"frozenRowCount": 1}}},
+        ]
     }
-    return service
+    yield service
+    gb.reset_sheet_ref()
 
 
 @pytest.fixture()
@@ -67,7 +76,7 @@ def test_set_status_updates_status_cell_by_request_id(sheets, tmp_paths):
     row = gb.set_status_sync(r.request_id, "Оплачена", )
 
     update_kwargs = sheets.update.call_args.kwargs
-    assert update_kwargs["range"] == "G3"               # «Статус оплаты» найденной строки
+    assert update_kwargs["range"] == "'Реестр'!G3"               # «Статус оплаты» найденной строки
     assert update_kwargs["valueInputOption"] == "RAW"
     assert update_kwargs["body"] == {"values": [["Оплачена"]]}
     assert row is not None and row["Контрагент"] == r.counterparty
@@ -82,7 +91,11 @@ def test_set_status_missing_returns_none(sheets, tmp_paths):
 def test_styling_applied_once_by_frozen_marker(svc, sheets, tmp_paths):
     """Неоформленный лист (frozenRowCount=0) получает стили одним batchUpdate."""
     svc.spreadsheets.return_value.get.return_value.execute.return_value = {
-        "sheets": [{"properties": {"sheetId": 7, "gridProperties": {"frozenRowCount": 0}}}]
+        "sheets": [
+            {"properties": {"sheetId": 0, "title": "Справочник"}},
+            {"properties": {"sheetId": 7, "title": "Реестр",
+                            "gridProperties": {"frozenRowCount": 0}}},
+        ]
     }
     sheets.get.return_value.execute.return_value = {"values": [SHEET_HEADERS[:9]]}
     sheets.append.return_value.execute.return_value = {
@@ -98,6 +111,8 @@ def test_styling_applied_once_by_frozen_marker(svc, sheets, tmp_paths):
     assert kinds.count("addConditionalFormatRule") == 5  # 4 статуса + «Срочно»
     freeze = next(r for r in requests if "updateSheetProperties" in r)
     assert freeze["updateSheetProperties"]["properties"]["gridProperties"]["frozenRowCount"] == 1
+    # Оформление адресовано листу реестра (gid 7), а не первому в книге (gid 0).
+    assert freeze["updateSheetProperties"]["properties"]["sheetId"] == 7
 
 
 def test_amount_written_as_number(sheets, tmp_paths):
@@ -165,3 +180,56 @@ def test_recent_requests_returns_all_authors_newest_first(sheets, tmp_paths):
 
     rows = gb.recent_requests_sync(limit=10)
     assert [r["Контрагент"] for r in rows] == ["Второй", "Первый"]
+
+
+def test_every_range_names_the_registry_sheet(sheets, tmp_paths):
+    """Ни один диапазон не уходит безымянным.
+
+    Безымянный диапазон Google адресует ПЕРВОМУ листу книги. Пока лист был
+    один, это сходило с рук; рядом со «Справочником» перестановка вкладок
+    молча уводила бы заявки в соседнюю таблицу. Тест держит инвариант для
+    всех операций реестра сразу, а не для той, которую вспомнили.
+    """
+    r = make_request()
+    sheets.get.return_value.execute.return_value = {"values": [r.as_sheet_row()]}
+    sheets.append.return_value.execute.return_value = {
+        "updates": {"updatedRange": "'Реестр'!A2:O2"}
+    }
+
+    gb.append_invoice_sync(r)
+    gb.recent_requests_sync(5)
+    gb.recent_counterparties_sync(5)
+    gb.recent_by_author_sync(r.telegram_id, limit=5)
+
+    calls = sheets.get.call_args_list + sheets.append.call_args_list
+    calls += sheets.update.call_args_list
+    assert calls, "мок не зафиксировал ни одного обращения — тест бесполезен"
+    for call in calls:
+        assert call.kwargs["range"].startswith("'Реестр'!"), call.kwargs["range"]
+
+
+def test_apostrophe_in_sheet_name_is_escaped(svc, sheets, tmp_paths):
+    """Апостроф в названии листа по правилам A1 удваивается."""
+    svc.spreadsheets.return_value.get.return_value.execute.return_value = {
+        "sheets": [{"properties": {"sheetId": 7, "title": "Д'Артаньян",
+                                   "gridProperties": {"frozenRowCount": 1}}}]
+    }
+    gb.reset_sheet_ref()
+    sheets.get.return_value.execute.return_value = {"values": []}
+    gb.recent_counterparties_sync(5)
+    assert sheets.get.call_args.kwargs["range"].startswith("'Д''Артаньян'!")
+
+
+def test_missing_gid_refuses_instead_of_guessing(svc, sheets, monkeypatch, tmp_paths):
+    """Нет листа с нужным gid — отказ, а не «возьмём первый».
+
+    Тихая запись не в тот лист обнаружилась бы через месяц при сверке;
+    отказ поднимает критичный алерт «Заявка не сохранилась в реестр»,
+    который не выключается ни одним тумблером панели.
+    """
+    monkeypatch.setattr(settings, "google_sheet_gid", 12345)
+    gb.reset_sheet_ref()
+    with pytest.raises(RuntimeError, match="gid=12345"):
+        gb.append_invoice_sync(make_request())
+    sheets.append.assert_not_called()
+    sheets.update.assert_not_called()

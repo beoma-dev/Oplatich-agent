@@ -13,7 +13,7 @@ from telegram.constants import ParseMode
 
 from bot.models import InvoiceRequest
 from bot.validators import has_profanity
-from services import alerts, audit, dedup, storage
+from services import alerts, audit, dedup, storage, tg_retry
 from services.notifier import notify_finance
 from services.pdf_report import build_request_pdf
 from services.runtime_settings import effective_finance_recipients
@@ -22,6 +22,20 @@ log = logging.getLogger(__name__)
 
 # Статусы участника чата, при которых разрешаем публиковать итог в группу.
 _MEMBER_STATUSES = {"creator", "administrator", "member", "restricted"}
+
+
+def _recovery_note(request: InvoiceRequest) -> str:
+    """Что осталось от потерянной заявки — строками, годными для разбора."""
+    planned = request.planned_date.strftime("%d.%m.%Y") if request.planned_date else "—"
+    lines = [
+        f"{request.request_id} · {request.sender_username} ({request.sender_name})",
+        f"{request.counterparty} — {request.amount:.2f} {request.currency}",
+        f"Статья: {request.article or '—'} · оплата к {planned}",
+        f"Счёт: {'приложен' if request.has_invoice else 'без счёта, по реквизитам'}",
+    ]
+    if request.comment:
+        lines.append(f"Комментарий: {request.comment[:200]}")
+    return "\n".join(lines)
 
 
 async def finalize_submission(
@@ -49,13 +63,21 @@ async def finalize_submission(
             request.sender_username,
             f"{request.request_id}: ошибка записи в реестр",
         )
-        # Потеря заявки — критично: алерт админам немедленно.
+        # Потеря заявки — критично: алерт админам немедленно, и в нём —
+        # содержимое заявки. Раньше стояло «детали в логах», но по инварианту
+        # проекта суммы и реквизиты в логи не пишутся: восстанавливать было
+        # не из чего. Реквизиты не выносим и сюда — для разбора хватает того,
+        # что ниже, а сообщение живёт в переписке дольше, чем нужно.
         await alerts.alert_admins(
             bot,
             "Заявка НЕ сохранилась в реестр",
-            f"{request.request_id} от {request.sender_username} — детали в логах",
+            _recovery_note(request),
             signature="request-failed",
             kind="storage",
+            hint=(
+                "Заявка отклонена и автору не видна. Проверьте доступность "
+                "реестра, затем попросите подать её заново."
+            ),
         )
         raise
 
@@ -143,7 +165,13 @@ async def finalize_submission(
             )
         try:
             await alerts.alert_admins(
-                bot, title, details, signature="finance-undelivered", kind="delivery"
+                bot, title, details,
+                signature="finance-undelivered",
+                kind="delivery",
+                hint=(
+                    "Заявка в реестре есть, а карточки у финансиста нет — "
+                    "передайте её вручную или попросите его начать чат с ботом."
+                ),
             )
         except Exception:  # noqa: BLE001 — алерт не должен ломать подачу
             log.exception("Сбой алерта о недоставленной карточке")
@@ -277,7 +305,12 @@ async def _post_group_summary(bot: Bot, request: InvoiceRequest, chat_id: int) -
         f"{urgency_mark} · {source}"
     )
     try:
-        await bot.send_message(chat_id=chat_id, text=text, parse_mode=ParseMode.HTML)
+        await tg_retry.send_with_retry(
+            lambda: bot.send_message(
+                chat_id=chat_id, text=text, parse_mode=ParseMode.HTML
+            ),
+            what=f"Подтверждение автору {chat_id}",
+        )
     except Exception:  # noqa: BLE001
         log.exception(
             "Не удалось отправить итог заявки %s в группу %s", request.request_id, chat_id

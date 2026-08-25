@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 from telegram import Bot
 
 from config import settings
-from services import alerts, registry_check
+from services import alerts, dns_pin, registry_check, tg_retry
 from services import runtime_settings as rs
 from services.runtime_settings import effective_admin_ids
 
@@ -97,16 +97,42 @@ async def run_backup(bot: Bot) -> tuple[Path, int]:
     delivered = 0
     for admin_id in effective_admin_ids():
         try:
-            await bot.send_document(
-                chat_id=admin_id,
-                document=data,
-                filename=path.name,
-                caption=f"💾 Бэкап данных · {max(size // 1024, 1)} КБ",
+            # Длинные паузы: архив уходит раз в сутки и его никто не ждёт
+            # на экране, а копия «вне сервера» — это и есть весь смысл
+            # бэкапа. Мегабайты через нестабильный канал падают чаще
+            # коротких сообщений, поэтому терпение здесь оправдано.
+            await tg_retry.send_with_retry(
+                lambda aid=admin_id: bot.send_document(
+                    chat_id=aid,
+                    document=data,
+                    filename=path.name,
+                    caption=f"💾 Бэкап данных · {max(size // 1024, 1)} КБ",
+                ),
+                what=f"Бэкап админу {admin_id}",
+                pauses=tg_retry.PATIENT_PAUSES,
             )
             delivered += 1
         except Exception:  # noqa: BLE001 — не срываем остальных получателей
             log.warning("Не удалось отправить бэкап админу %s", admin_id)
     return path, delivered
+
+
+async def alert_if_pin_stale(bot: Bot) -> bool:
+    """Сверяет прибитый IPv4 Telegram с DNS. True — всё совпадает."""
+    ok, message = await asyncio.to_thread(dns_pin.check)
+    if ok:
+        log.info("Пин адреса Telegram: %s", message)
+        return True
+    log.error("Пин адреса Telegram протух: %s", message)
+    await alerts.alert_admins(
+        bot,
+        "Адрес Telegram сменился, а пин остался старым",
+        message,
+        signature="telegram-pin-stale",
+        kind="telegram",
+        hint="Пока не поправите, бот стучится в никуда и замолчит целиком.",
+    )
+    return False
 
 
 def _seconds_until(hhmm: str, now: datetime) -> float:
@@ -153,6 +179,10 @@ async def backup_loop(bot: Bot) -> None:
             # целостность данных, и второго планировщика ради этого заводить
             # незачем. Выключен бэкап — сверка остаётся в админ-панели.
             await registry_check.alert_if_diverged(bot)
+            # И заодно — не протух ли прибитый адрес Telegram. Пин молчит,
+            # пока Telegram не сменит IP; сверка с живой DNS-выдачей — та
+            # единственная причина, по которой пин вообще допустим.
+            await alert_if_pin_stale(bot)
         except Exception:  # noqa: BLE001 — цикл должен пережить любой сбой
             log.exception("Сбой планового бэкапа")
             await alerts.alert_admins(
@@ -161,5 +191,6 @@ async def backup_loop(bot: Bot) -> None:
                 "детали в логах",
                 signature="backup-failed",
                 kind="backup",
+                hint="Проверьте место на диске и журнал контейнера app.",
             )
         await asyncio.sleep(61)  # не сработать дважды в ту же минуту

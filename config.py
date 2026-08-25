@@ -69,7 +69,16 @@ class Settings(BaseSettings):
     google_credentials_file: str = Field(
         "secrets/service_account.json", alias="GOOGLE_CREDENTIALS_FILE"
     )
+    # IPv4 api.telegram.org, прибитый в /etc/hosts контейнера warp. Пусто —
+    # проверка выключена. Смысл — в сверке: пин лечит IPv6-таймауты, но
+    # протухает молча, если Telegram сменит адрес (см. reports/005, R17).
+    telegram_pinned_ip: str = Field("", alias="TELEGRAM_PINNED_IP")
     google_sheet_id: str = Field("", alias="GOOGLE_SHEET_ID")
+    # Лист реестра внутри книги — по gid из адреса (…/edit#gid=0), а НЕ по
+    # порядку вкладок: безымянный диапазон Google относит к первому листу,
+    # и достаточно перетащить вкладку, чтобы заявки поехали в соседнюю.
+    # gid переживает и перестановку, и переименование.
+    google_sheet_gid: int = Field(0, alias="GOOGLE_SHEET_GID")
     google_drive_folder_id: str = Field("", alias="GOOGLE_DRIVE_FOLDER_ID")
     # OAuth-токен владельца папки для Drive: на ЛИЧНЫХ аккаунтах у service
     # account нет квоты хранилища (ограничение Google), файлами должен

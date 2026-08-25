@@ -812,14 +812,26 @@ class TestDeleteEndpoint:
 
 
 class TestStaticPage:
-    async def test_form_page_is_not_cached(self, api):
-        """WebView Telegram держит страницу цепко: после деплоя пользователь
-        неделями видел бы старую разметку и старый JS."""
+    async def test_form_page_must_be_revalidated(self, api):
+        """Страница обязана проверяться на сервере при каждом открытии.
+
+        WebView Telegram держит её цепко: без указания пользователь неделями
+        видел бы старый JS после деплоя. Раньше здесь стоял no-store, но он
+        строже, чем нужно: no-cache требует спросить сервер так же, а
+        неизменный файл возвращается как 304 вместо 82 КБ тела (reports/005,
+        R20). Ослаблять до must-revalidate с max-age нельзя — вот граница.
+        """
         client, _ = api
         resp = await client.get("/")
         assert resp.status_code == 200
-        assert resp.headers["cache-control"] == "no-store"
+        assert resp.headers["cache-control"] == "no-cache"
         assert "<title>" in resp.text or "id=\"form-view\"" in resp.text
+
+    async def test_api_answers_are_never_stored(self, api):
+        """А вот ответы API кешировать нельзя вовсе: в них данные заявок."""
+        client, _ = api
+        resp = await client.get("/api/health")
+        assert resp.headers["cache-control"] == "no-store"
 
 
 class TestFinanceStatusEndpoint:

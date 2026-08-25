@@ -89,11 +89,23 @@ function buildAlertsPanel(ctx) {
         tag.textContent = "всегда";
         tag.title = "Критичное уведомление выключить нельзя";
         row.appendChild(tag);
+        // Тумблер и здесь, но неактивный: иначе строка без переключателя
+        // читается как «а эта выключена». Класс НЕ kind-toggle — по нему
+        // отличают то, что можно нажать (см. tests/e2e/settings.test.cjs).
+        var fixed = document.createElement("span");
+        fixed.className = "kind-static on";
+        fixed.title = "Критичное уведомление выключить нельзя";
+        fixed.setAttribute("role", "img");
+        fixed.setAttribute("aria-label", "Включено всегда");
+        fixed.appendChild(makeKnob());
+        row.appendChild(fixed);
       } else {
         var btn = document.createElement("button");
         btn.type = "button";
         btn.className = "kind-toggle";
+        btn.setAttribute("role", "switch");
         btn.dataset.kind = kind.key;
+        btn.appendChild(makeKnob());
         setToggle(btn, state.kinds[kind.key] !== false);
         btn.addEventListener("click", function () {
           var on = !(state.kinds[kind.key] !== false);
@@ -108,16 +120,46 @@ function buildAlertsPanel(ctx) {
     dimKinds();
   }
 
-  function setToggle(btn, on) {
-    btn.classList.toggle("on", on);
-    btn.textContent = on ? "Вкл" : "Выкл";
-    btn.setAttribute("aria-pressed", on ? "true" : "false");
+  function makeKnob() {
+    var knob = document.createElement("span");
+    knob.className = "knob";
+    return knob;
   }
 
-  /** В режиме «только критичные» выбор категорий ни на что не влияет. */
-  function dimKinds() {
-    $("alerts-kinds").style.opacity = state.enabled ? "" : ".45";
+  /** Состояние тумблера. Текст не пишем: ручку видно, а слово «Вкл» на
+   *  кнопке спрашивающие читали как «нажми, чтобы включить». Подпись ушла
+   *  в title и aria-label, где двусмысленности нет. */
+  function setToggle(btn, on) {
+    btn.classList.toggle("on", on);
+    btn.setAttribute("aria-checked", on ? "true" : "false");
+    btn.title = on
+      ? "Включено. Нажмите, чтобы выключить"
+      : "Выключено. Нажмите, чтобы включить";
   }
+
+  /** В режиме «только критичные» выбор категорий ни на что не влияет.
+   *  Приглушить мало: приглушённое читается как «недоступно почему-то».
+   *  Рядом появляется строка, объясняющая, почему тумблеры не действуют. */
+  function dimKinds() {
+    var muted = !state.enabled;
+    $("alerts-kinds").style.opacity = muted ? ".45" : "";
+    var note = $("alerts-kinds-note");
+    if (note) note.classList.toggle("hidden", !muted);
+  }
+
+  function full(ts) {
+    var d = new Date(ts * 1000);
+    return d.toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "medium" });
+  }
+
+  // Коды причин с сервера (services/alerts.py) — человеческими словами.
+  var WHY = {
+    "kind-off": "категория выключена в панели",
+    "throttled": "повтор того же в пределах получаса",
+    "no-admins": "некому — список админов пуст",
+    "undelivered": "доставить не удалось, связи не было",
+    "below-grace": "провал короче порога молчания"
+  };
 
   // --- Журнал -------------------------------------------------------------
   function renderLog(items, perDay) {
@@ -138,12 +180,43 @@ function buildAlertsPanel(ctx) {
       var main = document.createElement("div");
       main.textContent = it.title + (it.count > 1 ? " ×" + it.count : "");
       who.appendChild(main);
+      // Период вместо точки: «×18» без него не говорит, шло это минуту
+      // или трое суток. Хвост ошибки — то, по чему видно, к кому идти.
+      var span = it.first_ts && it.ts - it.first_ts > 60
+        ? stamp(it.first_ts) + " → " + stamp(it.ts) : stamp(it.ts);
       var sub = document.createElement("div");
       sub.className = "sub";
-      // «не отправлено» — это не сбой доставки, а чаще всего выключенная
-      // категория или троттлинг; человеку важно, что событие всё равно тут.
-      sub.textContent = stamp(it.ts) + (it.sent ? "" : " · уведомление не отправлялось");
+      sub.textContent = span + (it.details ? " · " + it.details : "");
+      if (it.details) sub.title = it.details;
       who.appendChild(sub);
+      if (!it.sent) {
+        // Раньше здесь стояло голое «уведомление не отправлялось», и отличить
+        // «я сам выключил категорию» от «не смогли доставить» было нельзя.
+        var why = document.createElement("div");
+        why.className = "sub";
+        why.textContent = "не отправлялось: "
+          + (WHY[it.reason] || (it.reason ? it.reason : "запись старого формата"));
+        who.appendChild(why);
+      }
+      // Строка раскрывается: в свёрнутом виде — то, что читают глазами,
+      // в развёрнутом — всё, что записано, включая полный текст ошибки.
+      var more = document.createElement("div");
+      more.className = "sub hidden";
+      more.style.whiteSpace = "pre-line";
+      more.textContent = [
+        "категория: " + (it.kind || "—"),
+        "первый раз: " + full(it.first_ts || it.ts),
+        "последний: " + full(it.ts),
+        "повторов: " + (it.count || 1),
+        it.details ? "подробности: " + it.details : "подробностей не записано"
+      ].join("\n");
+      who.appendChild(more);
+      row.style.cursor = "pointer";
+      row.title = "Нажмите, чтобы раскрыть";
+      row.addEventListener("click", function () {
+        more.classList.toggle("hidden");
+        if (ctx.haptic) ctx.haptic();
+      });
       row.appendChild(who);
       box.appendChild(row);
     });
