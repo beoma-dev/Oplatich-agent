@@ -542,3 +542,28 @@ test("получатель выбирает, о каких заявках его
   assert.deepEqual(page.errors, []);
   await page.close();
 });
+
+test("карточка получателя ужата и помещается на экран", async () => {
+  // В ней два потока настроек, и в полный рост она не влезала: человек листал,
+  // чтобы добраться до «Сохранить». Ужимаем ЛОКАЛЬНО — глобальные размеры
+  // выверены под форму заявки, где палец должен попадать с первого раза.
+  const page = await openSettings(430);
+  await page.click("#tab-fin");
+  await page.waitForTimeout(300);
+  const m = await page.evaluate(() => {
+    const card = document.getElementById("my-rem-card");
+    const inCard = getComputedStyle(card.querySelector(".seg button")).fontSize;
+    const outside = getComputedStyle(
+      document.querySelector("#pane-skin .seg button, #skin-seg button")).fontSize;
+    return {
+      height: Math.round(card.getBoundingClientRect().height),
+      inCard: parseFloat(inCard),
+      outside: parseFloat(outside),
+    };
+  });
+  assert.ok(m.inCard < m.outside,
+    `кнопки в карточке (${m.inCard}px) должны быть мельче общих (${m.outside}px)`);
+  assert.ok(m.height < 780, `карточка ${m.height}px — снова разрослась`);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
