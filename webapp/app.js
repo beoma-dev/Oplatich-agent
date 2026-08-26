@@ -9,7 +9,8 @@
   "use strict";
 
   var tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
-  var insideTelegram = !!(tg && tg.initData);
+  var initData = (tg && tg.initData) || initDataFromHash(location.hash);
+  var insideTelegram = !!initData;
 
   // Последнее слепое пятно: исключение, вылетевшее мимо всех catch, раньше
   // оставляло человека перед застывшей формой молча, и админ об этом не
@@ -22,7 +23,7 @@
       fetch("/api/client-error", {
         method: "POST",
         headers: {
-          "X-Telegram-Init-Data": tg.initData,
+          "X-Telegram-Init-Data": initData,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({ message: String(message).slice(0, 200), where: where || "" })
@@ -335,7 +336,7 @@
 
   function loadCounterparties() {
     if (!insideTelegram) return;
-    fetch("/api/counterparties", { headers: { "X-Telegram-Init-Data": tg.initData } })
+    fetch("/api/counterparties", { headers: { "X-Telegram-Init-Data": initData } })
       .then(function (r) { return r.ok ? r.json() : { items: [] }; })
       .then(function (d) {
         var all = (d && d.items) || [];
@@ -755,7 +756,7 @@
     fd.append("amount", amountEl.value || "");
     fetch("/api/check-file", {
       method: "POST",
-      headers: { "X-Telegram-Init-Data": tg.initData },
+      headers: { "X-Telegram-Init-Data": initData },
       body: fd
     })
       .then(function (r) { return r.ok ? r.json() : { warning: null }; })
@@ -889,7 +890,7 @@
    *  положена, а реестр он открывает каждый день. */
   function loadRegistryLinks() {
     if (!insideTelegram) return;
-    fetch("/api/registry/links", { headers: { "X-Telegram-Init-Data": tg.initData } })
+    fetch("/api/registry/links", { headers: { "X-Telegram-Init-Data": initData } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (!d) return;
@@ -1038,14 +1039,14 @@
     // либо start_param прямой ссылки t.me/<бот>/<имя>?startapp=<chat_id>.
     // start_param «help» — ссылка «Инструкция», а не чат возврата.
     var returnChat = new URLSearchParams(location.search).get("return_chat");
-    if (!returnChat && tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) {
-      returnChat = tg.initDataUnsafe.start_param;
+    if (!returnChat) {
+      returnChat = startParamFrom(initData, location.search);
     }
     if (returnChat && returnChat !== "help") fd.append("return_chat", returnChat);
 
     fetch("/api/invoice", {
       method: "POST",
-      headers: { "X-Telegram-Init-Data": tg ? tg.initData : "" },
+      headers: { "X-Telegram-Init-Data": initData },
       body: fd
     })
     .then(function (resp) {
@@ -1304,7 +1305,7 @@
     fetch("/api/my/withdraw", {
       method: "POST",
       headers: {
-        "X-Telegram-Init-Data": tg.initData,
+        "X-Telegram-Init-Data": initData,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ request_id: id })
@@ -1329,7 +1330,7 @@
     fetch("/api/my/withdraw", {
       method: "POST",
       headers: {
-        "X-Telegram-Init-Data": tg.initData,
+        "X-Telegram-Init-Data": initData,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ request_id: item.id })
@@ -1498,7 +1499,7 @@
 
   function loadMy() {
     if (!insideTelegram) { renderMy([]); return; }
-    fetch("/api/my-requests", { headers: { "X-Telegram-Init-Data": tg.initData } })
+    fetch("/api/my-requests", { headers: { "X-Telegram-Init-Data": initData } })
       .then(function (r) {
         return r.json().catch(function () { return {}; })
           .then(function (d) { return { ok: r.ok, d: d }; });
@@ -1550,7 +1551,7 @@
   function applyRepeatById(requestId) {
     if (!insideTelegram) return;
     fetch("/api/my-requests?request_id=" + encodeURIComponent(requestId), {
-      headers: { "X-Telegram-Init-Data": tg.initData }
+      headers: { "X-Telegram-Init-Data": initData }
     })
       .then(function (r) { return r.ok ? r.json() : { items: [] }; })
       .then(function (d) {
@@ -1657,7 +1658,7 @@
     fetch("/api/requests/delete", {
       method: "POST",
       headers: {
-        "X-Telegram-Init-Data": tg.initData,
+        "X-Telegram-Init-Data": initData,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ request_id: item.id })
@@ -1841,7 +1842,7 @@
     fetch("/api/finance/status", {
       method: "POST",
       headers: {
-        "X-Telegram-Init-Data": tg.initData,
+        "X-Telegram-Init-Data": initData,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ request_id: item.id, key: act.key, reason: reason || "" })
@@ -2013,7 +2014,7 @@
     $("fin-meta").textContent = "Загружаю…";
 
     fetch("/api/finance/requests?" + params.toString(), {
-      headers: { "X-Telegram-Init-Data": tg.initData }
+      headers: { "X-Telegram-Init-Data": initData }
     })
       .then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (d) {
@@ -2086,7 +2087,7 @@
 
   function checkAccess() {
     if (!insideTelegram) return;
-    fetch("/api/access", { headers: { "X-Telegram-Init-Data": tg.initData } })
+    fetch("/api/access", { headers: { "X-Telegram-Init-Data": initData } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (!d) return;
@@ -2152,7 +2153,7 @@
 
   function pollAccess() {
     if (!insideTelegram || document.hidden) return;
-    fetch("/api/access", { headers: { "X-Telegram-Init-Data": tg.initData } })
+    fetch("/api/access", { headers: { "X-Telegram-Init-Data": initData } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (!d) return;
@@ -2240,7 +2241,7 @@
     btn.disabled = true;
     fetch("/api/access/request", {
       method: "POST",
-      headers: { "X-Telegram-Init-Data": tg.initData }
+      headers: { "X-Telegram-Init-Data": initData }
     })
       .then(function (r) {
         return r.json().catch(function () { return {}; })
@@ -2261,7 +2262,7 @@
 
   function tryFinance() {
     if (!insideTelegram) return;
-    fetch("/api/finance/access", { headers: { "X-Telegram-Init-Data": tg.initData } })
+    fetch("/api/finance/access", { headers: { "X-Telegram-Init-Data": initData } })
       .then(function (r) { return r.ok ? r.json() : { ok: false }; })
       .then(function (d) {
         var allowed = !!(d && d.ok);
@@ -2299,7 +2300,7 @@
   // --- Админ-панель -----------------------------------------------------------------
   function tryAdmin() {
     if (!insideTelegram) return;
-    fetch("/api/admin/settings", { headers: { "X-Telegram-Init-Data": tg.initData } })
+    fetch("/api/admin/settings", { headers: { "X-Telegram-Init-Data": initData } })
       .then(function (r) { applyAdmin(r.ok); })
       .catch(function () { /* не админ или сеть — остаётся «Оформление» */ });
   }
@@ -2388,7 +2389,7 @@
    *  Отдельный список от whitelist: там видно только тех, кого вписали, а
    *  здесь — ещё и всех, кто боту писал, но доступа не получил. */
   function loadUsers() {
-    fetch("/api/admin/users", { headers: { "X-Telegram-Init-Data": tg.initData } })
+    fetch("/api/admin/users", { headers: { "X-Telegram-Init-Data": initData } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) { if (d) renderUsers(d.users || []); })
       .catch(function () { /* список не критичен */ });
@@ -2522,7 +2523,7 @@
     buildRestorePanel({
       $: $,
       showMsg: showAdminMsg,
-      initData: function () { return tg ? tg.initData : ""; },
+      initData: function () { return initData; },
       haptic: function () {
         if (tg && tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
       }
@@ -2532,14 +2533,14 @@
     $: $,
     setSeg: setSeg,
     showMsg: showAdminMsg,
-    initData: function () { return tg ? tg.initData : ""; },
+    initData: function () { return initData; },
     haptic: function () {
       if (tg && tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
     }
   }) : null;
 
   function loadAdminSettings() {
-    fetch("/api/admin/settings", { headers: { "X-Telegram-Init-Data": tg.initData } })
+    fetch("/api/admin/settings", { headers: { "X-Telegram-Init-Data": initData } })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         renderList("fin-list", d.financiers || [], "fin");
@@ -2593,7 +2594,7 @@
     fetch("/api/admin/backup", {
       method: "POST",
       headers: {
-        "X-Telegram-Init-Data": tg.initData,
+        "X-Telegram-Init-Data": initData,
         "Content-Type": "application/json"
       },
       body: JSON.stringify(body)
@@ -2632,7 +2633,7 @@
    *  кому распознавание мешает, отключает его себе сам. */
   function loadMyAutofill() {
     if (!insideTelegram) return;
-    fetch("/api/autofill/me", { headers: { "X-Telegram-Init-Data": tg.initData } })
+    fetch("/api/autofill/me", { headers: { "X-Telegram-Init-Data": initData } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) { if (d) fillMyAutofill(d); })
       .catch(function () { /* нет доступа — карточка останется как есть */ });
@@ -2655,7 +2656,7 @@
     var body = new FormData();
     body.append("enabled", value === "on" ? "1" : "0");
     fetch("/api/autofill/me", {
-      method: "POST", headers: { "X-Telegram-Init-Data": tg.initData }, body: body
+      method: "POST", headers: { "X-Telegram-Init-Data": initData }, body: body
     })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) { if (d) fillMyAutofill(d); })
@@ -2663,7 +2664,7 @@
   });
 
   function loadMyReminders() {
-    fetch("/api/reminders/me", { headers: { "X-Telegram-Init-Data": tg.initData } })
+    fetch("/api/reminders/me", { headers: { "X-Telegram-Init-Data": initData } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) { if (d) fillMyReminders(d); })
       .catch(function () { /* не получатель — карточки всё равно не видно */ });
@@ -2675,7 +2676,7 @@
     fetch("/api/reminders/me", {
       method: "POST",
       headers: {
-        "X-Telegram-Init-Data": tg.initData,
+        "X-Telegram-Init-Data": initData,
         "Content-Type": "application/json"
       },
       body: JSON.stringify(body)
@@ -2722,7 +2723,7 @@
     fetch("/api/admin/autofill", {
       method: "POST",
       headers: {
-        "X-Telegram-Init-Data": tg.initData,
+        "X-Telegram-Init-Data": initData,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ enabled: v === "on" })
@@ -2754,7 +2755,7 @@
     fetch(url, {
       method: "POST",
       headers: {
-        "X-Telegram-Init-Data": tg.initData,
+        "X-Telegram-Init-Data": initData,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ action: action, entry: entry })
@@ -2885,7 +2886,7 @@
   // Открытие сразу на инструкции: кнопка «Инструкция» в группе/канале
   // (прямая ссылка ?startapp=help) или web_app-кнопка в личке (?help=1).
   var query = new URLSearchParams(location.search);
-  var startParam = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || "";
+  var startParam = startParamFrom(initData, location.search);
   if (startParam === "help" || query.get("help") === "1") {
     openHelp();
   }

@@ -81,3 +81,29 @@ test("plural: склонение после числа", () => {
   assert.equal(f(21), "поле");
   assert.equal(f(22), "поля");
 });
+
+test("initData читается из хеша, когда SDK Telegram не загрузился", () => {
+  // Авторизация формы висела на внешнем скрипте telegram.org: не загрузился —
+  // человек заполнял всю форму и узнавал об этом на кнопке «Отправить».
+  // Telegram кладёт данные в хеш сам, SDK их только разбирает.
+  const hash =
+    "#tgWebAppData=query_id%3DAAE%26user%3D%257B%2522id%2522%253A42%257D" +
+    "%26auth_date%3D1787000000%26hash%3Ddeadbeef&tgWebAppVersion=7.0";
+  const got = lib.initDataFromHash(hash);
+  assert.match(got, /^query_id=AAE&user=/);
+  assert.match(got, /hash=deadbeef$/);
+});
+
+test("нет хеша или он битый — пустая строка, а не исключение", () => {
+  assert.equal(lib.initDataFromHash(""), "");
+  assert.equal(lib.initDataFromHash("#tgWebAppVersion=7.0"), "");
+  assert.equal(lib.initDataFromHash("#tgWebAppData=%E0%A4%A"), "");
+});
+
+test("чат возврата берётся из initData, иначе из query", () => {
+  // Кнопка в группе открывает форму ссылкой ?startapp=<chat_id>, и Telegram
+  // отдаёт его же в query как tgWebAppStartParam.
+  assert.equal(lib.startParamFrom("a=1&start_param=-100777&b=2", ""), "-100777");
+  assert.equal(lib.startParamFrom("", "?tgWebAppStartParam=-1004467808639"), "-1004467808639");
+  assert.equal(lib.startParamFrom("", ""), "");
+});

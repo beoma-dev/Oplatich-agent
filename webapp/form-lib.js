@@ -152,6 +152,8 @@ function amountText(item) {
 }
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
+    initDataFromHash: initDataFromHash,
+    startParamFrom: startParamFrom,
     parseAmount: parseAmount,
     formatAmount: formatAmount,
     innValid: innValid,
@@ -169,4 +171,33 @@ if (typeof module !== "undefined" && module.exports) {
     cssHex: cssHex,
     amountText: amountText
   };
+}
+
+/** initData из адресной строки — на случай, когда SDK Telegram не загрузился.
+ *
+ * Авторизация формы висела на внешнем скрипте telegram.org/js/telegram-web-app.js:
+ * не загрузился он — `window.Telegram` нет, `initData` пуст, и человек узнавал
+ * об этом только на кнопке «Отправить», заполнив всю форму. Между тем SDK
+ * ничего не добывает: Telegram кладёт данные в хеш адреса при запуске
+ * (`#tgWebAppData=<initData в urlencode>&tgWebAppVersion=…`), а SDK их просто
+ * разбирает. Разберём и мы — тогда чужой скрипт перестанет быть точкой отказа
+ * на пути авторизации, а SDK останется отвечать за MainButton, тему и вибрацию.
+ */
+function initDataFromHash(hash) {
+  var m = /[#&]tgWebAppData=([^&]*)/.exec(hash || "");
+  if (!m) return "";
+  try {
+    return decodeURIComponent(m[1]);
+  } catch (e) {
+    return "";                       // битый хеш — ведём себя как без него
+  }
+}
+
+/** start_param (чат возврата) — из initData или из query, без SDK. */
+function startParamFrom(initData, search) {
+  var m = /(?:^|&)start_param=([^&]*)/.exec(initData || "");
+  if (m) { try { return decodeURIComponent(m[1]); } catch (e) { /* дальше */ } }
+  m = /[?&]tgWebAppStartParam=([^&]*)/.exec(search || "");
+  if (m) { try { return decodeURIComponent(m[1]); } catch (e) { /* пусто */ } }
+  return "";
 }
