@@ -7,6 +7,7 @@ import time
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from telegram.error import NetworkError, TimedOut
 
 import services.health as health
 import services.proxy as proxy_mod
@@ -194,3 +195,77 @@ class TestTelegramPin:
         assert not ok
         assert "не отвечает" in message
         assert "extra_hosts" in message and "TELEGRAM_PINNED_IP" in message
+
+
+class TestRetryingTransport:
+    """Повтор на уровне транспорта: его получают ВСЕ вызовы Bot API.
+
+    Поставлен туда, а не на места вызова, потому что мест двадцать пять и
+    половину забудешь: правка сообщения в диалоге, «Мои заявки», решение по
+    доступу, отзыв заявки. Граница повтора — не «сетевая ошибка вообще»,
+    а «запрос точно не дошёл».
+    """
+
+    async def _run(self, monkeypatch, side_effect):
+        from telegram.request import HTTPXRequest
+
+        from services import proxy
+
+        monkeypatch.setattr(proxy.asyncio, "sleep", AsyncMock())
+        calls = []
+
+        async def fake(self, *a, **kw):
+            calls.append(1)
+            result = side_effect(len(calls))
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+        monkeypatch.setattr(HTTPXRequest, "do_request", fake)
+        req = proxy.RetryingRequest()
+        return req, calls
+
+    async def test_connection_failure_is_retried(self, monkeypatch):
+        """ProxyError — соединение не встало, запрос не дошёл: повторяем."""
+        req, calls = await self._run(
+            monkeypatch,
+            lambda n: NetworkError("httpx.ProxyError: Host unreachable") if n == 1 else (200, b"ok"),
+        )
+        assert await req.do_request() == (200, b"ok")
+        assert len(calls) == 2
+
+    async def test_timeout_is_NOT_retried(self, monkeypatch):
+        """TimedOut — ответа не дождались, но запрос мог быть исполнен.
+
+        Повтор создал бы вторую карточку, второе сообщение, второй документ.
+        Молчание здесь дешевле дубля.
+        """
+        req, calls = await self._run(monkeypatch, lambda n: TimedOut())
+        with pytest.raises(TimedOut):
+            await req.do_request()
+        assert len(calls) == 1, "таймаут повторили — риск дубля"
+
+    async def test_gives_up_after_the_budget(self, monkeypatch):
+        from services import proxy
+
+        req, calls = await self._run(
+            monkeypatch, lambda n: NetworkError("httpx.ConnectError: refused")
+        )
+        with pytest.raises(NetworkError):
+            await req.do_request()
+        assert len(calls) == len(proxy.API_RETRY_PAUSES) + 1
+
+    def test_polling_client_keeps_ptb_defaults(self):
+        """Подмена клиента не должна незаметно менять long polling."""
+        from services import proxy
+
+        api, polling = proxy.build_requests("socks5://warp:1080")
+        assert isinstance(api, proxy.RetryingRequest)
+        assert isinstance(polling, proxy.RetryingRequest)
+        # У PTB пул опроса — 1, у обычных вызовов — 256. Сверяем с тем, что
+        # реально ушло в httpx: подмена клиента не должна менять long polling.
+        def pool_size(req):
+            return req._client._transport._pool._max_connections
+
+        assert pool_size(polling) == 1
+        assert pool_size(api) == 256

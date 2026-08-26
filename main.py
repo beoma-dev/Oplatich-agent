@@ -58,7 +58,7 @@ from bot.my_requests import CB_WITHDRAW, my_command, withdraw_callback
 from config import settings
 from services import alerts, backup, health, reminders
 from services.access_requests import CB_ASK
-from services.proxy import masked, pick_working_proxy
+from services.proxy import build_requests, masked, pick_working_proxy
 from services.user_directory import remember
 
 logging.basicConfig(
@@ -176,9 +176,14 @@ def build_application(proxy_url: str | None = None) -> Application:
     )
     if proxy_url is None:
         proxy_url = settings.proxy_urls[0] if settings.proxy_urls else ""
+    # Свои клиенты вместо .proxy(): в них зашит повтор вызовов, которые до
+    # Telegram не дошли (services/proxy.RetryingRequest). Канал теряет
+    # единицы процентов вызовов, и без повтора это видно человеку как
+    # «нажал кнопку — ничего не произошло». Ставим всегда, с прокси и без:
+    # повтор от наличия прокси не зависит.
+    api_request, polling_request = build_requests(proxy_url)
+    builder = builder.request(api_request).get_updates_request(polling_request)
     if proxy_url:
-        # Прокси и для вызовов Bot API, и для long polling (getUpdates).
-        builder = builder.proxy(proxy_url).get_updates_proxy(proxy_url)
         log.info("Telegram API — через прокси: %s", masked(proxy_url))
     app = builder.build()
 
