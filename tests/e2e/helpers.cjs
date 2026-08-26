@@ -58,8 +58,10 @@ async function openApp(browser, cfg = {}) {
   page.on("pageerror", (e) => errors.push(e.message));
   // Настоящий SDK Telegram перетёр бы заглушку: в тестах он не нужен.
   await page.route("**/telegram-web-app.js", (r) => r.abort());
-  await page.addInitScript(install, cfg);
-  await page.goto(PAGE_URL, { waitUntil: "load" });
+  // cfg.noSdk — SDK Telegram не загрузился (внешний скрипт с telegram.org).
+  // Заглушку тогда не ставим вовсе: initData должен прийти из хеша адреса.
+  if (!cfg.noSdk) await page.addInitScript(install, cfg);
+  await page.goto(PAGE_URL + (cfg.hash || ""), { waitUntil: "load" });
   await page.waitForTimeout(cfg.settle || 450);
   page.errors = errors;
   return page;

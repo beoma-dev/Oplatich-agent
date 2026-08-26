@@ -78,10 +78,10 @@
     applyTheme();
     try { tg.onEvent("themeChanged", applyTheme); } catch (e) { /* старые клиенты */ }
   }
-  if (!insideTelegram) {
-    $("fallback-note").style.display = "block";
-    $("submit-fallback").style.display = "block"; // виден, но отправка вернёт 401
-  }
+  // Кнопка — когда нет SDK (MainButton рисует он), предупреждение — когда нет
+  // авторизации. РАЗНЫЕ условия: бывает «авторизован, но SDK не загрузился».
+  if (!tg) $("submit-fallback").style.display = "block";
+  if (!insideTelegram) $("fallback-note").style.display = "block";
 
   // Флаг «в форме есть ввод». Подтверждение закрытия у Telegram НЕ включаем:
   // оно рисуется в главном окне мессенджера (на десктопе — вообще на другом

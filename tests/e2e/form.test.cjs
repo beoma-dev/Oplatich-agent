@@ -561,3 +561,35 @@ test("плашка контура появляется только на сте�
   assert.equal(shown.overflow, 0, "плашка вызвала горизонтальную прокрутку");
   await stend.close();
 });
+
+test("SDK не загрузился, но авторизация есть — кнопка отправки на месте", async () => {
+  // Регресс 26.08.2026: initData научились читать из хеша, и появилось
+  // состояние «авторизован, но tg === null». Кнопка отправки висела на
+  // insideTelegram вместе с предупреждением, поэтому в этом состоянии
+  // человек видел заполненную форму и НИ ОДНОЙ кнопки отправки:
+  // родную рисует SDK, которого нет, а запасную прятало условие.
+  const hash =
+    "#tgWebAppData=query_id%3DAAE%26user%3D%257B%2522id%2522%253A42%257D" +
+    "%26auth_date%3D1787000000%26hash%3Ddeadbeef&tgWebAppVersion=7.0";
+  const page = await openApp(browser, { noSdk: true, hash });
+  const state = await page.evaluate(() => ({
+    sdk: !!(window.Telegram && window.Telegram.WebApp),
+    submit: getComputedStyle(document.getElementById("submit-fallback")).display,
+    note: getComputedStyle(document.getElementById("fallback-note")).display,
+  }));
+  assert.equal(state.sdk, false, "заглушка SDK всё-таки установилась");
+  assert.notEqual(state.submit, "none", "кнопки отправки нет — отправить нечем");
+  assert.equal(state.note, "none", "предупреждение об авторизации показано зря");
+  await page.close();
+});
+
+test("нет ни SDK, ни авторизации — и кнопка, и предупреждение", async () => {
+  const page = await openApp(browser, { noSdk: true });
+  const state = await page.evaluate(() => ({
+    submit: getComputedStyle(document.getElementById("submit-fallback")).display,
+    note: getComputedStyle(document.getElementById("fallback-note")).display,
+  }));
+  assert.notEqual(state.submit, "none");
+  assert.notEqual(state.note, "none", "человека не предупредили, что отправка не пройдёт");
+  await page.close();
+});
