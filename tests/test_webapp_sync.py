@@ -10,7 +10,7 @@ import re
 from pathlib import Path
 
 from bot.models import ARTICLES, CURRENCIES
-from bot.validators import MAX_FILE_SIZE_BYTES
+from bot.validators import MAX_EXTRA_FILES, MAX_FILE_SIZE_BYTES
 
 WEBAPP = Path(__file__).resolve().parent.parent / "webapp"
 
@@ -65,6 +65,17 @@ def test_file_size_limit_mirror():
     m = re.search(r"var MAX_FILE_SIZE = (\d+) \* 1024 \* 1024", HTML)
     assert m, "MAX_FILE_SIZE не найден в webapp/index.html"
     assert int(m.group(1)) * 1024 * 1024 == MAX_FILE_SIZE_BYTES
+
+
+def test_extra_files_limit_mirror():
+    """Предел числа дополнительных документов зеркалится в JS.
+
+    Разойдись они — форма примет шестой файл, а сервер откажет всей заявке
+    после того, как человек её заполнил.
+    """
+    m = re.search(r"var MAX_EXTRA_FILES = (\d+);", HTML)
+    assert m, "MAX_EXTRA_FILES не найден в JS формы"
+    assert int(m.group(1)) == MAX_EXTRA_FILES
 
 
 def test_field_limits_mirror():
@@ -837,6 +848,13 @@ def test_split_files_stay_reasonably_small():
     выносили в отдельный файл. Следующий раз, когда упрётся, — делить по
     смыслу: настройки категорий отдельно от журнала.
 
+    index.html поднят с 900 до 960 (26.08.2026): добавилось поле
+    «Дополнительные документы». Здесь лекарство «поделить» не работает так,
+    как с JS: это ОДИН документ, и вынести из него кусок можно только
+    сборкой шаблонов — то есть тем самым шагом сборки, который уже числится
+    в R3 отчёта 001. Пока его нет, порог растёт вместе с формой, и это
+    осознанно.
+
     app.css поднят с 1600 до 1650 (26.08.2026) — третья правка подряд, где
     места не было. Делить его страшнее, чем app.js: в шапке файла записано,
     что порядок правил значим (скиновые переопределения после базовых, блок
@@ -844,7 +862,7 @@ def test_split_files_stay_reasonably_small():
     конец каскада. Долг признан: разносить надо по шкурам и компонентам,
     а не отрезать хвост.
     """
-    for name, limit in (("index.html", 900), ("app.css", 1650), ("app.js", 2900),
+    for name, limit in (("index.html", 960), ("app.css", 1650), ("app.js", 2900),
                         ("skin-field.js", 400), ("form-lib.js", 300),
                         ("alerts-panel.js", 330), ("restore-panel.js", 200),
                         ("reminders-panel.js", 200)):

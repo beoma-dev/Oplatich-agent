@@ -81,7 +81,10 @@ async def test_happy_path_requisites(tmp_paths):
     assert await h.step_comment(_msg("аренда за июль"), ctx) == h.INVOICE_CHOICE
     assert await h.step_invoice_choice(_cb("INV_NO"), ctx) == h.REQUISITES
     # По ТЗ: запись — только после подтверждения.
-    assert await h.step_requisites(_msg("ИНН 7707083893"), ctx) == h.CONFIRM_SUBMIT
+    # Шаг дополнительных документов необязателен, но он в диалоге есть:
+    # договор бывает и у заявки по реквизитам.
+    assert await h.step_requisites(_msg("ИНН 7707083893"), ctx) == h.EXTRA_DOCS
+    assert await h.extra_docs_done(_cb("EXTRA_DONE"), ctx) == h.CONFIRM_SUBMIT
     assert await h.submit_confirm(_cb("SUB_YES"), ctx) == ConversationHandler.END
 
     assert ctx.user_data == {}  # диалог очищен
@@ -100,7 +103,8 @@ async def test_custom_date_path(tmp_paths):
     assert await h.step_work_deadline(_msg("поставка в декабре"), ctx) == h.COMMENT
     assert await h.step_comment(_msg("оплата по договору"), ctx) == h.INVOICE_CHOICE
     assert await h.step_invoice_choice(_cb("INV_NO"), ctx) == h.REQUISITES
-    assert await h.step_requisites(_msg("реквизиты"), ctx) == h.CONFIRM_SUBMIT
+    assert await h.step_requisites(_msg("реквизиты"), ctx) == h.EXTRA_DOCS
+    assert await h.extra_docs_done(_cb("EXTRA_DONE"), ctx) == h.CONFIRM_SUBMIT
     assert await h.submit_confirm(_cb("SUB_YES"), ctx) == ConversationHandler.END
 
     ws = load_workbook(settings.registry_path).active
@@ -115,7 +119,8 @@ async def test_comment_can_be_skipped(tmp_paths):
     assert ctx.user_data[h.K_COMMENT] == ""
     assert await h.step_invoice_choice(_cb("INV_NO"), ctx) == h.REQUISITES
     assert await h.step_requisites(_msg("реквизиты без комментария"), ctx) \
-        == h.CONFIRM_SUBMIT
+        == h.EXTRA_DOCS
+    assert await h.extra_docs_done(_cb("EXTRA_DONE"), ctx) == h.CONFIRM_SUBMIT
     assert await h.submit_confirm(_cb("SUB_YES"), ctx) == ConversationHandler.END
 
     ws = load_workbook(settings.registry_path).active
@@ -129,7 +134,8 @@ async def test_duplicate_requires_confirmation(tmp_paths):
         await _drive_common(ctx, "URG:NORMAL")
         await h.step_comment(_msg("аренда за июль"), ctx)
         await h.step_invoice_choice(_cb("INV_NO"), ctx)
-        assert await h.step_requisites(_msg("ИНН 7707083893"), ctx) == h.CONFIRM_SUBMIT
+        assert await h.step_requisites(_msg("ИНН 7707083893"), ctx) == h.EXTRA_DOCS
+        assert await h.extra_docs_done(_cb("EXTRA_DONE"), ctx) == h.CONFIRM_SUBMIT
         return await h.submit_confirm(_cb("SUB_YES"), ctx)
 
     assert await submit(_ctx(bot)) == ConversationHandler.END
@@ -154,7 +160,8 @@ async def test_confirmation_cancel_writes_nothing(tmp_paths):
     await _drive_common(ctx, "URG:NORMAL")
     await h.step_comment(_msg("проверка отмены"), ctx)
     await h.step_invoice_choice(_cb("INV_NO"), ctx)
-    assert await h.step_requisites(_msg("реквизиты"), ctx) == h.CONFIRM_SUBMIT
+    assert await h.step_requisites(_msg("реквизиты"), ctx) == h.EXTRA_DOCS
+    assert await h.extra_docs_done(_cb("EXTRA_DONE"), ctx) == h.CONFIRM_SUBMIT
     assert await h.submit_confirm(_cb("SUB_NO"), ctx) == ConversationHandler.END
     assert ctx.user_data == {}
     assert not settings.registry_path.exists()  # ничего не записано

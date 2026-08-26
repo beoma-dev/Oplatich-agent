@@ -96,7 +96,9 @@ class TestWorkDeadline:
         from bot.models import SHEET_HEADERS
 
         ws = load_workbook(settings.registry_path).active
-        assert ws.cell(2, len(SHEET_HEADERS)).value == "поставка в декабре"
+        # По имени, а не «последняя»: в конец приписываются новые колонки.
+        col = SHEET_HEADERS.index("Срок исполнения работ по договору") + 1
+        assert ws.cell(2, col).value == "поставка в декабре"
 
     async def test_absent_field_is_rejected(self, api, monkeypatch):
         """Поле обязательное: без него заявку не принимаем."""
@@ -123,6 +125,103 @@ class TestWorkDeadline:
         )
         # 422 — принятая в этом эндпоинте форма отказа по валидации.
         assert resp.status_code == 422
+
+
+class TestExtraDocuments:
+    """Дополнительные документы: договор, акт, спецификация.
+
+    Необязательны и не зависят от того, есть ли счёт: заявка по реквизитам
+    тоже бывает с договором. Формат и размер те же, что у счёта, — разница
+    только в количестве.
+    """
+
+    def _doc(self, name: str) -> tuple[str, bytes, str]:
+        return (name, b"%PDF-1.4 doc", "application/pdf")
+
+    async def test_several_documents_are_saved_and_linked(self, api, monkeypatch):
+        from openpyxl import load_workbook
+
+        from bot.models import SHEET_HEADERS
+
+        client, _ = api
+        _allow(monkeypatch)
+        resp = await client.post(
+            "/api/invoice",
+            data=_form(),
+            files=[
+                ("extra_files", self._doc("dogovor.pdf")),
+                ("extra_files", self._doc("akt.pdf")),
+            ],
+            headers=_auth(),
+        )
+        assert resp.status_code == 200, resp.text
+
+        saved = [p.name for p in settings.storage_path.glob("*доп*")]
+        assert len(saved) == 2, saved
+        assert any("dogovor" in n for n in saved) and any("akt" in n for n in saved)
+
+        ws = load_workbook(settings.registry_path).active
+        col = SHEET_HEADERS.index("Дополнительные документы") + 1
+        cell = ws.cell(2, col).value or ""
+        assert len(cell.splitlines()) == 2, f"в реестре не обе ссылки: {cell!r}"
+
+    async def test_no_documents_is_normal(self, api, monkeypatch):
+        """Подавляющее большинство заявок без них — колонка просто пустая."""
+        from openpyxl import load_workbook
+
+        from bot.models import SHEET_HEADERS
+
+        client, _ = api
+        _allow(monkeypatch)
+        assert (await client.post(
+            "/api/invoice", data=_form(), headers=_auth())).status_code == 200
+        ws = load_workbook(settings.registry_path).active
+        col = SHEET_HEADERS.index("Дополнительные документы") + 1
+        assert (ws.cell(2, col).value or "") == ""
+
+    async def test_too_many_is_refused(self, api, monkeypatch):
+        from bot.validators import MAX_EXTRA_FILES
+
+        client, _ = api
+        _allow(monkeypatch)
+        resp = await client.post(
+            "/api/invoice",
+            data=_form(),
+            files=[("extra_files", self._doc(f"d{i}.pdf")) for i in range(MAX_EXTRA_FILES + 1)],
+            headers=_auth(),
+        )
+        assert resp.status_code == 422
+        assert str(MAX_EXTRA_FILES) in resp.json()["detail"]
+
+    async def test_foreign_format_is_refused_by_name(self, api, monkeypatch):
+        """В отказе должно быть видно, КАКОЙ файл не подошёл: их несколько."""
+        client, _ = api
+        _allow(monkeypatch)
+        resp = await client.post(
+            "/api/invoice",
+            data=_form(),
+            files=[
+                ("extra_files", self._doc("ok.pdf")),
+                ("extra_files", ("virus.exe", b"MZ", "application/octet-stream")),
+            ],
+            headers=_auth(),
+        )
+        assert resp.status_code == 422
+        assert "virus.exe" in resp.json()["detail"]
+
+    async def test_name_cannot_escape_the_storage_dir(self, api, monkeypatch):
+        """Имя приходит от пользователя — через него ходят в соседние каталоги."""
+        client, _ = api
+        _allow(monkeypatch)
+        resp = await client.post(
+            "/api/invoice",
+            data=_form(),
+            files=[("extra_files", ("../../evil.pdf", b"%PDF", "application/pdf"))],
+            headers=_auth(),
+        )
+        assert resp.status_code == 200, resp.text
+        assert not (settings.storage_path.parent.parent / "evil.pdf").exists()
+        assert list(settings.storage_path.glob("*доп*")), "файл вообще не сохранился"
 
 
 class TestHealth:

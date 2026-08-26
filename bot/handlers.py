@@ -34,6 +34,7 @@ from bot.models import ARTICLES, CURRENCIES, InvoiceRequest, Urgency, new_reques
 from bot.my_requests import CB_REPEAT, my_command
 from bot.scheduling import auto_planned_date
 from bot.validators import (
+    MAX_EXTRA_FILES,
     ValidationError,
     looks_broken,
     looks_like_gibberish,
@@ -47,7 +48,7 @@ from config import settings
 from services import audit, dedup, invoice_check, storage
 from services import runtime_settings as rs
 from services.intake import finalize_submission
-from services.local_storage import build_invoice_filename
+from services.local_storage import build_extra_filename, build_invoice_filename
 
 log = logging.getLogger(__name__)
 
@@ -65,9 +66,12 @@ log = logging.getLogger(__name__)
     INVOICE_CHOICE,
     FILE,
     REQUISITES,
+    # Дополнительные документы: договор, акт, спецификация. Шаг общий для
+    # обеих веток — со счётом и по реквизитам: договор бывает и там, и там.
+    EXTRA_DOCS,
     CONFIRM_SUBMIT,
     DUP_CONFIRM,
-) = range(14)
+) = range(15)
 
 # Ключи во временном user_data (живут только в рамках одного диалога).
 K_AMOUNT = "amount"
@@ -85,6 +89,7 @@ K_HAS_INVOICE = "has_invoice"
 K_RETURN_CHAT = "return_chat"   # id группы, куда вернуть итоговое сообщение
 K_PENDING_REQ = "pending_request"   # заявка, ждущая подтверждения дубля
 K_PENDING_FILE = "pending_file"     # байты файла счёта для неё
+K_EXTRA_DOCS = "extra_docs"         # [(байты, имя)] дополнительных документов
 K_PENDING_WARN = "pending_warning"  # предупреждение автопроверки файла
 
 # callback_data подтверждения дубля
@@ -314,8 +319,123 @@ async def _do_finalize(
             )
             context.user_data.clear()
             return ConversationHandler.END
+    for position, (blob, original) in enumerate(
+        context.user_data.get(K_EXTRA_DOCS, []), start=1
+    ):
+        try:
+            name = build_extra_filename(original, request.request_id, position)
+            request.extra_files.append(await storage.save_invoice(blob, name))
+        except Exception:  # noqa: BLE001 — заявку из-за документа не теряем
+            log.exception("Не удалось сохранить документ %s заявки %s",
+                          original, request.request_id)
+            await update.effective_message.reply_text(
+                f"⚠️ «{original}» сохранить не удалось — заявка уходит без него."
+            )
     return await _persist_and_reply(
         update, context, request, invoice_file=invoice_file, file_warning=file_warning
+    )
+
+
+CB_EXTRA_DONE = "EXTRA_DONE"
+
+
+def _extra_keyboard(count: int) -> InlineKeyboardMarkup:
+    label = "Готово ✅" if count else "Пропустить →"
+    return InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data=CB_EXTRA_DONE)]])
+
+
+async def _ask_extra_docs(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    request: InvoiceRequest,
+    invoice_file: bytes | None,
+    file_warning: str | None,
+) -> int:
+    """Спрашивает дополнительные документы: договор, акт, спецификация.
+
+    Шаг необязательный и стоит ПЕРЕД подтверждением, а не после: на экране
+    «Проверьте заявку» человек уже принял решение, и просить его там что-то
+    донести — значит сбивать с шага, на котором он собрался нажать «Да».
+    """
+    context.user_data[K_PENDING_REQ] = request
+    context.user_data[K_PENDING_FILE] = invoice_file
+    context.user_data[K_PENDING_WARN] = file_warning
+    context.user_data.setdefault(K_EXTRA_DOCS, [])
+    await update.effective_message.reply_text(
+        "📎 Есть дополнительные документы — договор, акт, спецификация?\n"
+        f"Пришлите их по одному (до {MAX_EXTRA_FILES}) или пропустите шаг.",
+        reply_markup=_extra_keyboard(0),
+    )
+    return EXTRA_DOCS
+
+
+async def step_extra_doc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Принимает очередной дополнительный документ."""
+    message = update.message
+    doc = message.document
+    photo = message.photo[-1] if message.photo else None
+    if doc is None and photo is None:
+        await message.reply_text("⚠️ Пришлите документ или фото — либо нажмите кнопку.")
+        return EXTRA_DOCS
+
+    collected = context.user_data.setdefault(K_EXTRA_DOCS, [])
+    if len(collected) >= MAX_EXTRA_FILES:
+        await message.reply_text(
+            f"⚠️ Больше {MAX_EXTRA_FILES} документов приложить нельзя.",
+            reply_markup=_extra_keyboard(len(collected)),
+        )
+        return EXTRA_DOCS
+
+    if doc is not None:
+        mime_type, file_size = doc.mime_type, doc.file_size
+        original_name, tg_file_id = doc.file_name or "document", doc.file_id
+    else:
+        mime_type, file_size = "image/jpeg", photo.file_size
+        original_name, tg_file_id = "photo.jpg", photo.file_id
+    try:
+        validate_file(mime_type, file_size)
+    except ValidationError as exc:
+        await message.reply_text(f"⚠️ {exc}", reply_markup=_extra_keyboard(len(collected)))
+        return EXTRA_DOCS
+
+    try:
+        tg_file = await context.bot.get_file(tg_file_id)
+        content = bytes(await tg_file.download_as_bytearray())
+    except Exception:  # noqa: BLE001 — сеть; заявку из-за этого не теряем
+        log.exception("Не удалось скачать дополнительный документ")
+        await message.reply_text(
+            "❌ Не удалось получить файл — пришлите ещё раз.",
+            reply_markup=_extra_keyboard(len(collected)),
+        )
+        return EXTRA_DOCS
+
+    collected.append((content, original_name))
+    await message.reply_text(
+        f"✅ Принято: {len(collected)} из {MAX_EXTRA_FILES}. Ещё документ или готово?",
+        reply_markup=_extra_keyboard(len(collected)),
+    )
+    return EXTRA_DOCS
+
+
+async def extra_docs_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Кнопка «Готово / Пропустить» — переходим к подтверждению."""
+    query = update.callback_query
+    await query.answer()
+    request = context.user_data.get(K_PENDING_REQ)
+    if request is None:
+        await query.edit_message_text("Заявка отменена. Начать заново — /invoice")
+        context.user_data.clear()
+        return ConversationHandler.END
+    count = len(context.user_data.get(K_EXTRA_DOCS, []))
+    await query.edit_message_text(
+        f"📎 Документов приложено: {count}." if count else "📎 Без дополнительных документов."
+    )
+    return await _ask_confirmation(
+        update,
+        context,
+        request,
+        context.user_data.get(K_PENDING_FILE),
+        context.user_data.get(K_PENDING_WARN),
     )
 
 
@@ -345,6 +465,10 @@ async def _ask_confirmation(
         f"⏱ Срочность: {request.urgency.value}\n"
         f"💬 Комментарий: {e(request.comment or '—')}\n"
         f"{source}"
+        + (
+            f"\n📁 Дополнительно документов: {len(context.user_data.get(K_EXTRA_DOCS, []))}"
+            if context.user_data.get(K_EXTRA_DOCS) else ""
+        )
     )
     if file_warning:
         text += f"\n{e(file_warning)}"
@@ -1059,7 +1183,7 @@ async def step_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         invoice_check.check_invoice_file, content, original_name, request.amount
     )
     # Файл сохраняется после подтверждения и проверки на дубль.
-    return await _ask_confirmation(update, context, request, content, file_warning)
+    return await _ask_extra_docs(update, context, request, content, file_warning)
 
 
 async def step_requisites(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1072,7 +1196,7 @@ async def step_requisites(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     now = _now()
     request = _build_request(context, update, now)
     request.requisites = value
-    return await _ask_confirmation(update, context, request, None, None)
+    return await _ask_extra_docs(update, context, request, None, None)
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1184,6 +1308,12 @@ def build_conversation_handler() -> ConversationHandler:
                 )
             ],
             REQUISITES: [MessageHandler(filters.TEXT & ~filters.COMMAND, step_requisites)],
+            EXTRA_DOCS: [
+                MessageHandler(
+                    (filters.Document.ALL | filters.PHOTO) & ~filters.COMMAND, step_extra_doc
+                ),
+                CallbackQueryHandler(extra_docs_done, pattern=rf"^{CB_EXTRA_DONE}$"),
+            ],
             CONFIRM_SUBMIT: [
                 CallbackQueryHandler(submit_confirm, pattern=r"^SUB_(YES|NO)$")
             ],

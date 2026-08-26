@@ -28,6 +28,7 @@ from bot.models import (
 from bot.my_requests import LIST_LIMIT as MY_LIST_LIMIT
 from bot.scheduling import auto_planned_date
 from bot.validators import (
+    MAX_EXTRA_FILES,
     MAX_FILE_SIZE_BYTES,
     ValidationError,
     looks_broken,
@@ -57,7 +58,7 @@ from services import runtime_settings as rs
 from services.access_requests import request_access
 from services.deletion import delete_request as delete_request_service
 from services.intake import finalize_submission
-from services.local_storage import build_invoice_filename
+from services.local_storage import build_extra_filename, build_invoice_filename
 from services.reminders import PENDING_STATUSES
 from services.reminders import SCAN_LIMIT as REMINDER_SCAN_LIMIT
 from services.reminders import send_to as send_reminder_to
@@ -1184,6 +1185,7 @@ async def submit_invoice(
     force: str = Form("0"),
     confirm_text: str = Form("0"),
     file: UploadFile | None = File(None),
+    extra_files: list[UploadFile] = File(default=[]),
 ):
     # --- Аутентификация и доступ -------------------------------------------
     user = validate_init_data(
@@ -1332,6 +1334,31 @@ async def submit_invoice(
     # --- Файл счёта ИЛИ реквизиты -------------------------------------------
     invoice_bytes: bytes | None = None
     file_warning: str | None = None
+
+    # --- Дополнительные документы: договор, акт, спецификация ---------------
+    # Необязательны и не зависят от того, есть ли счёт: заявка по реквизитам
+    # тоже бывает с договором. Проверяются тем же validate_file, что и счёт,
+    # — формат и размер у них одни и те же, разница только в количестве.
+    extras = [f for f in (extra_files or []) if f is not None and f.filename]
+    if len(extras) > MAX_EXTRA_FILES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Дополнительных документов не больше {MAX_EXTRA_FILES}.",
+        )
+    for position, extra in enumerate(extras, start=1):
+        blob = await _read_limited(extra, MAX_FILE_SIZE_BYTES)
+        if len(blob) > MAX_FILE_SIZE_BYTES:
+            raise HTTPException(
+                status_code=422, detail=f"«{extra.filename}» больше 20 МБ."
+            )
+        try:
+            validate_file(extra.content_type, len(blob))
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=422, detail=f"«{extra.filename}»: {exc}"
+            ) from exc
+        name = build_extra_filename(extra.filename, invoice.request_id, position)
+        invoice.extra_files.append(await storage.save_invoice(blob, name))
     if with_invoice:
         if file is None or not file.filename:
             raise HTTPException(status_code=422, detail="Прикрепите файл счёта.")

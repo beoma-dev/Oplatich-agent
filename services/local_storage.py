@@ -28,6 +28,22 @@ def build_invoice_filename(
     return f"{now.strftime('%Y%m%d')}_{safe_cp or 'invoice'}_{amount:.0f}.{ext}"
 
 
+def build_extra_filename(original_name: str, request_id: str, index: int) -> str:
+    """Имя дополнительного документа: INV-…_доп1_dogovor.pdf.
+
+    В отличие от счёта, имя привязано к заявке, а не к контрагенту и сумме:
+    таких файлов несколько, и по имени должно быть видно, к чему они и в
+    каком порядке приложены. Символы чистятся так же строго — имя приходит
+    от пользователя, и через него ходят в соседние каталоги.
+    """
+    ext_raw = original_name.rsplit(".", 1)[-1].lower() if "." in original_name else "bin"
+    ext = re.sub(r"[^a-z0-9]", "", ext_raw)[:8] or "bin"
+    stem_raw = original_name.rsplit(".", 1)[0] if "." in original_name else original_name
+    stem = "".join(c for c in stem_raw if c.isalnum() or c in " _-").strip()[:40]
+    safe_id = re.sub(r"[^A-Za-z0-9-]", "", request_id)[:32] or "INV"
+    return f"{safe_id}_доп{index}{('_' + stem) if stem else ''}.{ext}"
+
+
 def _save_sync(*, content: bytes, filename: str) -> Path:
     """Сохраняет файл в STORAGE_DIR. При коллизии имени добавляет суффикс.
 

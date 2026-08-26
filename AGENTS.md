@@ -82,6 +82,13 @@ TELEGRAM_BOT_TOKEN=dummy:token python -c "import main, api.server, bot.handlers,
 
 ## Инварианты — менять синхронно, не ломать
 
+- **Дополнительные документы** (`extra_files`) — необязательный список,
+  до `MAX_EXTRA_FILES` штук, те же формат и размер, что у счёта. Живёт во
+  ВСЕХ каналах: `webapp` (поле в основном блоке), чат-форма (шаг
+  `EXTRA_DOCS` между счётом/реквизитами и подтверждением), `api/routes`
+  (поле формы `extra_files`), колонка «Дополнительные документы» в конце
+  реестра. Предел числа файлов зеркалится в JS — стережёт
+  `tests/test_webapp_sync.py::test_extra_files_limit_mirror`.
 - **Валидация зеркалится в трёх местах**: `bot/validators.py` (сервер),
   `webapp/index.html` (JS-зеркало: CURRENCIES, ARTICLES, лимиты длин, форматы
   файлов, парсинг суммы/даты), `api/routes.py` (использует серверные

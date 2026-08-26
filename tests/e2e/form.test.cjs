@@ -593,3 +593,59 @@ test("нет ни SDK, ни авторизации — и кнопка, и пр�
   assert.notEqual(state.note, "none", "человека не предупредили, что отправка не пройдёт");
   await page.close();
 });
+
+test("дополнительные документы: несколько файлов, список и предел", async () => {
+  const page = await openApp(browser, { routes: HINTS });
+  const mk = (name) => ({ name, mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4") });
+
+  await page.setInputFiles("#extra-input", [mk("dogovor.pdf"), mk("akt.pdf")]);
+  await page.waitForTimeout(150);
+  let shown = await page.evaluate(() => ({
+    строк: document.querySelectorAll("#extra-list .extra-item").length,
+    имена: [...document.querySelectorAll("#extra-name, .extra-name")].map((e) => e.textContent),
+    кнопка: document.getElementById("extra-pick").textContent,
+  }));
+  assert.equal(shown.строк, 2, "приложились не оба файла");
+  assert.ok(/dogovor\.pdf/.test(shown.имена.join(" ")));
+  assert.match(shown.кнопка, /2 из 5/, "счётчик на кнопке не обновился");
+
+  // Убрать один — список пересобирается.
+  await page.click("#extra-list .extra-item .row-del");
+  await page.waitForTimeout(100);
+  assert.equal(
+    await page.evaluate(() => document.querySelectorAll("#extra-list .extra-item").length), 1);
+
+  // Шестой файл не принимается: предел зеркалит bot/validators.MAX_EXTRA_FILES.
+  await page.setInputFiles("#extra-input",
+    ["a", "b", "c", "d", "e"].map((n) => mk(n + ".pdf")));
+  await page.waitForTimeout(150);
+  shown = await page.evaluate(() => ({
+    строк: document.querySelectorAll("#extra-list .extra-item").length,
+    ошибка: (document.getElementById("error-banner") || {}).textContent || "",
+  }));
+  assert.equal(shown.строк, 5, "предел в 5 документов не удержан");
+  assert.match(shown.ошибка, /Больше 5/, "человеку не сказали, почему файл не взяли");
+  // Список на экране обязан совпадать с тем, что уйдёт на сервер: ранний
+  // выход из обработчика однажды оставил принятые файлы невидимыми.
+  assert.equal(
+    await page.evaluate(() => document.querySelectorAll("#extra-list .extra-item").length),
+    await page.evaluate(() => window.__extrasCount === undefined ? 5 : window.__extrasCount),
+    "показано не то, что приложено");
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test("чужой формат в дополнительных документах не принимается", async () => {
+  const page = await openApp(browser, { routes: HINTS });
+  await page.setInputFiles("#extra-input", [{
+    name: "virus.exe", mimeType: "application/octet-stream", buffer: Buffer.from("MZ"),
+  }]);
+  await page.waitForTimeout(150);
+  const r = await page.evaluate(() => ({
+    строк: document.querySelectorAll("#extra-list .extra-item").length,
+    ошибка: (document.getElementById("error-banner") || {}).textContent || "",
+  }));
+  assert.equal(r.строк, 0);
+  assert.match(r.ошибка, /PDF, JPG, PNG или XLSX/);
+  await page.close();
+});

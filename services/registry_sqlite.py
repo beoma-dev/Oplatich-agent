@@ -36,6 +36,9 @@ _FIELDS = [
     "request_id",
     "telegram_id",
     "work_deadline",
+    # Колонку в уже существующей таблице досоздаёт _add_missing_columns:
+    # CREATE TABLE IF NOT EXISTS готовую таблицу не трогает.
+    "extra_files",
 ]
 
 

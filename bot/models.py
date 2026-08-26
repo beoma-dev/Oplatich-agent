@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
@@ -89,6 +89,10 @@ class InvoiceRequest:
     has_invoice: bool = True
     file_url: str = ""          # ссылка (Google Drive) или путь к файлу счёта
     file_name: str = ""
+    # Дополнительные документы: договор, акт, спецификация. Список ссылок —
+    # тех же, что и у счёта. Пусто у подавляющего большинства заявок, поэтому
+    # отдельной колонкой в конце, а не расширением «Ссылки на счет».
+    extra_files: list[str] = field(default_factory=list)
     requisites: str = ""        # заполняется, если счёта нет
 
     # Системные
@@ -116,6 +120,7 @@ class InvoiceRequest:
             self.request_id,                                # ID заявки
             str(self.telegram_id),                          # Telegram ID
             self.work_deadline,                             # Срок исполнения работ
+            "\n".join(self.extra_files),                     # Дополнительные документы
         ]
 
 
@@ -153,4 +158,7 @@ SHEET_HEADERS: list[str] = [
     # заполненных реестрах (Sheets, xlsx, SQLite) все старые строки уехали бы
     # на колонку влево. Дописать в конец — единственное безопасное место.
     "Срок исполнения работ по договору",
+    # Тоже в конец и по той же причине, что и предыдущая: вставка в середину
+    # сдвинула бы все заполненные строки на колонку влево.
+    "Дополнительные документы",
 ]

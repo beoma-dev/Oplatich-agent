@@ -52,6 +52,8 @@
     "Хостинг и ПО", "Командировки", "Реклама и маркетинг", "Прочее"
   ];
   var MAX_FILE_SIZE = 20 * 1024 * 1024;
+  // Зеркало bot/validators.MAX_EXTRA_FILES: правится парой.
+  var MAX_EXTRA_FILES = 5;
   var ALLOWED_EXT = ["pdf", "jpg", "jpeg", "png", "xlsx", "xls"];
 
   var state = {
@@ -60,6 +62,7 @@
     urgency: "NORMAL",
     hasInvoice: true,
     file: null,
+    extras: [],
     submitting: false,
     dirty: false
   };
@@ -932,6 +935,65 @@
     }
   }
 
+  // --- Дополнительные документы: договор, акт, спецификация ----------------
+  // Список файлов живёт в state и НЕ попадает в черновик: File из
+  // localStorage не восстановить, и обещать сохранение было бы враньём —
+  // человек вернулся бы к форме, увидел имена и отправил заявку без них.
+  function renderExtras() {
+    var box = $("extra-list");
+    box.innerHTML = "";
+    state.extras.forEach(function (f, i) {
+      var row = document.createElement("div");
+      row.className = "extra-item";
+      var name = document.createElement("span");
+      name.className = "extra-name";
+      name.textContent = f.name + " · " + (f.size / 1024 / 1024).toFixed(1) + " МБ";
+      var del = document.createElement("button");
+      del.type = "button";
+      del.className = "row-del";
+      del.textContent = "✕";
+      del.title = "Убрать документ";
+      del.addEventListener("click", function () {
+        state.extras.splice(i, 1);
+        renderExtras();
+        markDirty();
+      });
+      row.appendChild(name);
+      row.appendChild(del);
+      box.appendChild(row);
+    });
+    $("extra-pick").textContent = state.extras.length
+      ? "Добавить ещё (" + state.extras.length + " из " + MAX_EXTRA_FILES + ")"
+      : "Прикрепить файлы";
+  }
+
+  $("extra-pick").addEventListener("click", function () { $("extra-input").click(); });
+  $("extra-input").addEventListener("change", function () {
+    var picked = [].slice.call(this.files || []);
+    this.value = "";                       // тот же файл можно выбрать снова
+    // Отказ по одному файлу НЕ отменяет остальные и обязан оставить список
+    // на экране в согласии с тем, что уйдёт на сервер. Ранний return отсюда
+    // уже приводил к расхождению: принятые файлы лежали в state, а человек
+    // видел прежний список и отправлял не то, что видел.
+    var refused = "";
+    for (var i = 0; i < picked.length && !refused; i++) {
+      var f = picked[i];
+      var ext = (f.name.split(".").pop() || "").toLowerCase();
+      if (ALLOWED_EXT.indexOf(ext) === -1) {
+        refused = "«" + f.name + "»: нужен PDF, JPG, PNG или XLSX.";
+      } else if (f.size > MAX_FILE_SIZE) {
+        refused = "«" + f.name + "» больше 20 МБ.";
+      } else if (state.extras.length >= MAX_EXTRA_FILES) {
+        refused = "Больше " + MAX_EXTRA_FILES + " документов приложить нельзя.";
+      } else {
+        state.extras.push(f);
+      }
+    }
+    if (refused) showError(refused); else hideError();
+    renderExtras();
+    markDirty();
+  });
+
   /** Родная кнопка Telegram красится темой КЛИЕНТА, поэтому в неоновой шкуре
    *  «Отправить заявку» оставалась синей и выбивалась из изумруда. Берём цвет
    *  из тех же токенов, что и вся страница: в телеграмной шкуре --accent и
@@ -1020,6 +1082,7 @@
     fb.disabled = true; fb.style.opacity = ".6";
 
     var fd = new FormData();
+    state.extras.forEach(function (f) { fd.append("extra_files", f, f.name); });
     fd.append("force", force ? "1" : "0");
     fd.append("confirm_text", confirmText ? "1" : "0");
     fd.append("amount", amountEl.value);

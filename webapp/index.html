@@ -335,6 +335,15 @@
       <div class="counter"><span id="req-count">0</span>/1500</div>
       <div class="req-warn hidden" id="req-warnings"></div>
     </div>
+
+    <div id="extra-block">
+      <label class="field-label">📎 Дополнительные документы <span class="optional-mark">необязательно</span></label>
+      <button type="button" class="add-btn btn-ghost" id="extra-pick" style="width:100%">Прикрепить файлы</button>
+      <input type="file" id="extra-input" class="hidden" multiple
+             accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,application/pdf,image/jpeg,image/png">
+      <div id="extra-list"></div>
+      <div class="counter" style="text-align:left" id="extra-note">Договор, акт, спецификация — до 5 файлов, каждый до 20 МБ.</div>
+    </div>
   </div>
 
   <div class="card">

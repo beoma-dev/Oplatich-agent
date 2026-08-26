@@ -910,6 +910,22 @@
   .kind-toggle.on .knob, .kind-static.on .knob { transform: translateX(20px); background: var(--accent-text); }
   .kind-static { cursor: default; opacity: .55; }
   .my-meta.overdue { color: var(--danger); font-weight: 600; }
+  /* Список приложенных документов. Имя тянется, крестик прижат вправо —
+     иначе при длинном имени кнопка уезжает за край карточки. */
+  .extra-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    padding: 7px 10px;
+    background: var(--bg2);
+    border-radius: 9px;
+    font-size: 13px;
+  }
+  .extra-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #extra-block { margin-top: 14px; }
+  #extra-block .field-label { margin-bottom: 8px; }
+
   .row-del {
     flex: 0 0 auto;
     width: 28px; height: 28px;

@@ -87,6 +87,16 @@ def _format_card(request: InvoiceRequest, row_number: int) -> str:
     planned = (
         request.planned_date.strftime("%d.%m.%Y") if request.planned_date else "—"
     )
+    # Дополнительные документы: ссылками, а не вложениями. Подпись к документу
+    # ограничена 1024 символами, и пять файлов в одном сообщении её съедят;
+    # к тому же вложение можно отправить только одно — им идёт счёт.
+    extras_part = ""
+    if request.extra_files:
+        links = "\n".join(
+            f'  <a href="{e(url)}">документ {i}</a>'
+            for i, url in enumerate(request.extra_files, start=1)
+        )
+        extras_part = f"\n📁 Ещё документов: {len(request.extra_files)}\n{links}"
     return (
         f"{header}\n\n"
         f"💰 Сумма: <b>{e(f'{request.amount:,.2f}')} {e(request.currency)}</b>\n"
@@ -97,7 +107,7 @@ def _format_card(request: InvoiceRequest, row_number: int) -> str:
         f"👤 Отправитель: {e(request.sender_username)} ({e(request.sender_name)})\n"
         f"📝 Комментарий: {e(_clip(request.comment, 250) or '—')}\n"
         f"🧾 Заявка: {e(request.request_id)} (строка {row_number})"
-        f"{source_part}"
+        f"{source_part}{extras_part}"
     )
 
 
