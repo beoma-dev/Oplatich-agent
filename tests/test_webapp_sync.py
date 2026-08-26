@@ -527,7 +527,10 @@ def test_admin_settings_are_split_into_tabs():
     assert "function showAdminTab(" in HTML
     # Вкладка получателя: только его собственные настройки.
     fin_pane = HTML[HTML.index('id="pane-fin"'):HTML.index('id="pane-access"')]
-    assert "⏰ Мои напоминания о заявках" in fin_pane
+    # Карточка с 26.08 покрывает два потока: уведомление о новой заявке
+    # (сразу) и напоминания по срокам (раз в сутки), — отсюда заголовок шире.
+    assert "⏰ Мои уведомления" in fin_pane
+    assert 'id="my-cards-seg"' in fin_pane, "выбор срочности не на вкладке получателя"
     assert "⏰ Напоминания по умолчанию" not in fin_pane, (
         "общая карточка вернулась — расписание снова стало общим"
     )
@@ -808,6 +811,9 @@ def test_mini_app_is_split_into_files():
     assert MARKUP.index("skin-field.js") < MARKUP.index('src="app.js"')
     assert MARKUP.index("alerts-panel.js") < MARKUP.index('src="app.js"')
     assert MARKUP.index("restore-panel.js") < MARKUP.index('src="app.js"')
+    assert MARKUP.index("reminders-panel.js") < MARKUP.index('src="app.js"')
+    assert "buildRemindersPanel(" in _read("reminders-panel.js")
+    assert "buildRemindersPanel({" in JS
     assert "buildRestorePanel(" in _read("restore-panel.js")
     assert "buildRestorePanel({" in JS
     assert "buildSkinField(" in FIELD
@@ -833,7 +839,8 @@ def test_split_files_stay_reasonably_small():
     """
     for name, limit in (("index.html", 900), ("app.css", 1600), ("app.js", 2900),
                         ("skin-field.js", 400), ("form-lib.js", 300),
-                        ("alerts-panel.js", 330), ("restore-panel.js", 200)):
+                        ("alerts-panel.js", 330), ("restore-panel.js", 200),
+                        ("reminders-panel.js", 200)):
         length = len(_read(name).split("\n"))
         assert length <= limit, f"{name}: {length} строк — пора делить дальше"
 

@@ -919,6 +919,10 @@ async def my_reminders(request: Request) -> dict:
     cfg = rs.personal_reminders(uid)
     cfg["defaults"] = rs.reminders_config()
     cfg["financier"] = is_financier(uid)
+    # Едет вместе с напоминаниями, хотя настройка не о них: это один экран
+    # «мои настройки получателя» и одна кнопка «Сохранить». Заводить второй
+    # запрос ради одного поля — лишний круг по нестабильному каналу.
+    cfg["card_urgency"] = rs.personal_card_urgency(uid)
     return cfg
 
 
@@ -964,6 +968,11 @@ async def save_my_reminders(request: Request) -> dict:
         if not days_raw.isdigit() or not 0 <= int(days_raw) <= 14:
             raise HTTPException(status_code=422, detail="«За сколько дней» — число 0…14.")
         days = int(days_raw)
+    card_urgency = str(body.get("card_urgency", "")).strip()
+    if card_urgency:
+        if card_urgency not in rs.CARD_URGENCY_CHOICES:
+            raise HTTPException(status_code=422, detail="Некорректный фильтр срочности.")
+        await asyncio.to_thread(rs.set_personal_card_urgency, uid, card_urgency)
     cfg = await asyncio.to_thread(
         rs.set_personal_reminders,
         uid,
@@ -974,6 +983,7 @@ async def save_my_reminders(request: Request) -> dict:
         overdue_enabled=bool(body.get("overdue_enabled", True)),
         weekdays_only=bool(body.get("weekdays_only", False)),
     )
+    cfg["card_urgency"] = rs.personal_card_urgency(uid)
     return {"ok": True, "message": "Настройки сохранены.", "reminders": cfg}
 
 

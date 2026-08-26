@@ -374,3 +374,62 @@ class TestLostReminders:
         bot.send_message = AsyncMock(side_effect=RuntimeError("чат не найден"))
         # Не поднимает ReminderNotDelivered: повторять нечего.
         assert await reminders.send_to(bot, 555, rows, TODAY, force=True) == (0, 0)
+
+
+class TestCardUrgencyFilter:
+    """Личный фильтр срочности для карточки — той, что приходит сразу после подачи.
+
+    Это НЕ напоминания о сроках: обычных заявок в день бывает много, и
+    уведомление о каждой перестаёт читаться. Срочные приходят всем всегда —
+    отписаться от них нельзя, на то они и срочные.
+    """
+
+    def test_default_is_everything(self, tmp_paths):
+        from services import runtime_settings as rs
+
+        assert rs.personal_card_urgency(555) == rs.CARD_URGENCY_ALL, (
+            "молча перестать присылать заявки тому, кто не просил, нельзя"
+        )
+
+    def test_unknown_value_is_refused(self, tmp_paths):
+        from services import runtime_settings as rs
+
+        with pytest.raises(ValueError):
+            rs.set_personal_card_urgency(555, "иногда")
+
+    def test_ordinary_request_skips_those_who_asked_for_urgent(self, tmp_paths, monkeypatch):
+        from services import notifier
+        from services import runtime_settings as rs
+
+        monkeypatch.setattr(notifier, "resolved_finance_ids", lambda: [555, 556])
+        rs.set_personal_card_urgency(555, rs.CARD_URGENCY_URGENT)
+
+        # У make_request срочность по умолчанию обычная.
+        assert notifier.recipients_for(make_request()) == [556]
+
+    def test_urgent_reaches_everyone_anyway(self, tmp_paths, monkeypatch):
+        from bot.models import Urgency
+        from services import notifier
+        from services import runtime_settings as rs
+
+        monkeypatch.setattr(notifier, "resolved_finance_ids", lambda: [555, 556])
+        rs.set_personal_card_urgency(555, rs.CARD_URGENCY_URGENT)
+
+        urgent = make_request(urgency=Urgency.URGENT)
+        assert sorted(notifier.recipients_for(urgent)) == [555, 556]
+
+    def test_nobody_wanted_it_is_not_a_failure(self, tmp_paths, monkeypatch):
+        """Ноль получателей по их же выбору — не повод будить админа."""
+        from services import notifier
+        from services import runtime_settings as rs
+
+        monkeypatch.setattr(notifier, "resolved_finance_ids", lambda: [555])
+        rs.set_personal_card_urgency(555, rs.CARD_URGENCY_URGENT)
+        assert notifier.suppressed_by_choice(make_request()) is True
+
+    def test_no_financiers_at_all_is_still_a_failure(self, tmp_paths, monkeypatch):
+        """А вот пустой список получателей — настоящая дыра, о ней будим."""
+        from services import notifier
+
+        monkeypatch.setattr(notifier, "resolved_finance_ids", lambda: [])
+        assert notifier.suppressed_by_choice(make_request()) is False

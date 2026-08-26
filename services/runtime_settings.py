@@ -42,6 +42,12 @@ _DEFAULTS: dict = {
     # Общие остаются значением по умолчанию для тех, кто себе ничего не
     # менял, — иначе новый финансист остался бы вовсе без напоминаний.
     "reminders_by_user": {},
+    # Какие заявки присылать получателю карточкой сразу после подачи:
+    # {"<id>": "all"|"urgent"}. Это НЕ напоминания о сроках — это первое
+    # уведомление о новой заявке, и кому-то из финансистов нужны только
+    # срочные. Умолчание "all": молча перестать присылать заявки человеку,
+    # который об этом не просил, нельзя.
+    "cards_by_user": {},
     "autofill": {},
     # Личный выключатель чтения счёта: {"<id>": true|false}. Общая настройка
     # остаётся значением по умолчанию — бета есть бета, и человек, которому
@@ -79,6 +85,10 @@ def _load_locked() -> dict:
                     "access_requests": dict(raw.get("access_requests", {})),
                     "backup": dict(raw.get("backup", {})),
                     "reminders": dict(raw.get("reminders", {})),
+                    "cards_by_user": {
+                        str(k): str(v)
+                        for k, v in raw.get("cards_by_user", {}).items()
+                    },
                     "reminders_by_user": {
                         str(k): dict(v)
                         for k, v in raw.get("reminders_by_user", {}).items()
@@ -100,6 +110,7 @@ def _load_locked() -> dict:
     _cache.setdefault("access_requests", {})
     _cache.setdefault("reminders", {})
     _cache.setdefault("reminders_by_user", {})
+    _cache.setdefault("cards_by_user", {})
     _cache.setdefault("autofill", {})
     _cache.setdefault("autofill_by_user", {})
     _cache.setdefault("alerts", {})
@@ -503,6 +514,35 @@ def personal_reminders(user_id: int) -> dict:
         # ручной прогон обходит; личный отказ обходить нельзя.
         "muted": own.get("enabled") is False,
     }
+
+
+CARD_URGENCY_ALL = "all"
+CARD_URGENCY_URGENT = "urgent"
+CARD_URGENCY_CHOICES = (CARD_URGENCY_ALL, CARD_URGENCY_URGENT)
+
+
+def personal_card_urgency(user_id: int) -> str:
+    """Какие заявки слать этому получателю карточкой: все или только срочные.
+
+    Речь о первом уведомлении — том, что приходит сразу после подачи, — а не
+    о напоминаниях по срокам: у тех свои настройки. Умолчание «все»: тихо
+    перестать показывать человеку заявки, о чём он не просил, нельзя.
+    """
+    with _lock:
+        value = _load_locked()["cards_by_user"].get(str(user_id), CARD_URGENCY_ALL)
+    return value if value in CARD_URGENCY_CHOICES else CARD_URGENCY_ALL
+
+
+def set_personal_card_urgency(user_id: int, value: str) -> str:
+    """Сохраняет выбор получателя. Неизвестное значение — отказ, не «как-нибудь»."""
+    if value not in CARD_URGENCY_CHOICES:
+        raise ValueError(f"Неизвестный фильтр срочности: {value!r}")
+    with _lock:
+        data = _load_locked()
+        data["cards_by_user"][str(user_id)] = value
+        _save_locked()
+    log.info("Карточки: получатель %s теперь получает «%s»", user_id, value)
+    return value
 
 
 def set_personal_reminders(

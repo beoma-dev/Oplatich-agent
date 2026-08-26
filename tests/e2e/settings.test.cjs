@@ -179,6 +179,8 @@ test("когда админов нет, честно сообщаем, что р
     note: document.getElementById("access-note").textContent,
     askHidden: document.getElementById("access-ask").classList.contains("hidden"),
   }));
+  // Карточка с 26.08 покрывает два потока — уведомление о новой заявке
+  // и напоминания по срокам, — поэтому заголовок шире прежнего.
   assert.match(state.note, /не задан ни один админ/);
   assert.ok(state.askHidden);
   await page.close();
@@ -320,7 +322,7 @@ test("финансист настраивает напоминания себе,
       .map((c) => c.querySelector(".card-title").textContent.trim()));
   assert.equal(cards.length, 1,
     "общие настройки не для финансиста — он их всё равно не сохранит");
-  assert.match(cards[0], /^⏰ Мои напоминания/);
+  assert.match(cards[0], /^⏰ Мои уведомления/);
 
   await page.fill("#my-rem-time", "07:15");
   await page.fill("#my-rem-days", "3");
@@ -330,6 +332,9 @@ test("финансист настраивает напоминания себе,
   await page.click("#my-rem-save");
   await page.waitForTimeout(400);
   assert.deepEqual(await page.evaluate(() => window.__saved), {
+    // card_urgency едет тем же «Сохранить»: это один экран настроек
+    // получателя, и второй круг по каналу ради одного поля не нужен.
+    card_urgency: "all",
     enabled: true, time: "07:15", days_before: "3",
     due_enabled: false, overdue_enabled: true, weekdays_only: true,
   });
@@ -504,5 +509,36 @@ test("финансисту здоровье бота не показывают",
   });
   assert.deepEqual(visible, { tab: false, card: false },
     "вкладка эксплуатации досталась не админу");
+  await page.close();
+});
+
+test("получатель выбирает, о каких заявках его уведомлять сразу", async () => {
+  // Обычных заявок в день бывает много, и уведомление о каждой перестаёт
+  // читаться. Это НЕ напоминания по срокам — то первое сообщение, которое
+  // приходит сразу после подачи.
+  const page = await openSettings(430);
+  await page.click("#tab-reminders").catch(() => {});
+  await page.waitForTimeout(200);
+  const shown = await page.evaluate(() => {
+    const seg = document.getElementById("my-cards-seg");
+    return {
+      есть: !!seg,
+      выбрано: seg && seg.querySelector("button.active").dataset.value,
+      варианты: seg && [...seg.querySelectorAll("button")].map((b) => b.dataset.value),
+    };
+  });
+  assert.equal(shown.есть, true, "переключателя нет");
+  assert.deepEqual(shown.варианты, ["all", "urgent"]);
+  assert.equal(shown.выбрано, "all", "по умолчанию должны приходить все");
+
+  await page.click('#my-cards-seg button[data-value="urgent"]');
+  await page.click("#my-rem-save");
+  await page.waitForTimeout(250);
+  const sent = await page.evaluate(() => {
+    const post = window.__posts.filter((p) => p[0].indexOf("/api/reminders/me") !== -1).pop();
+    return JSON.parse(post[1]);
+  });
+  assert.equal(sent.card_urgency, "urgent", "выбор не ушёл на сервер");
+  assert.deepEqual(page.errors, []);
   await page.close();
 });

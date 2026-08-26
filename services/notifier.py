@@ -14,6 +14,7 @@ from telegram.constants import ParseMode
 
 from bot.models import REQUEST_STATUSES, InvoiceRequest
 from services import cards, tg_retry
+from services import runtime_settings as rs
 from services.runtime_settings import effective_finance_recipients
 from services.user_directory import resolve
 
@@ -100,6 +101,36 @@ def _format_card(request: InvoiceRequest, row_number: int) -> str:
     )
 
 
+def recipients_for(request: InvoiceRequest) -> list[int]:
+    """Кому эта заявка уйдёт карточкой — с учётом личного фильтра срочности.
+
+    Финансист может попросить присылать ему только срочные: обычных заявок
+    в день бывает много, и уведомление о каждой перестаёт читаться. Срочные
+    приходят всем всегда — на то они и срочные, отписаться от них нельзя.
+
+    Отдельная функция, а не условие внутри рассылки: по ней же вызывающий
+    отличает «никому не отправили» от «никому и не собирались». Первое —
+    сбой, о котором будят админа; второе — осознанный выбор получателей.
+    """
+    ids = resolved_finance_ids()
+    if request.urgency.is_urgent:
+        return ids
+    return [
+        chat_id for chat_id in ids
+        if rs.personal_card_urgency(chat_id) == rs.CARD_URGENCY_ALL
+    ]
+
+
+def suppressed_by_choice(request: InvoiceRequest) -> bool:
+    """Карточки нет ПО ВЫБОРУ получателей, а не из-за сбоя.
+
+    Истинно только когда получатели есть, но все они просили присылать им
+    лишь срочные, а заявка обычная. Пустой список финансистов сюда НЕ
+    относится: это настоящая дыра, и о ней админа будить надо.
+    """
+    return bool(resolved_finance_ids()) and not recipients_for(request)
+
+
 async def notify_finance(
     bot: Bot,
     request: InvoiceRequest,
@@ -124,9 +155,19 @@ async def notify_finance(
             log.warning("Срочная заявка %s, но финансисты не настроены", request.request_id)
         return 0
 
-    chat_ids = resolved_finance_ids()
+    chat_ids = recipients_for(request)
     if not chat_ids:
-        log.warning("Заявка %s: нет ни одного резолвнутого финансиста", request.request_id)
+        if resolved_finance_ids():
+            # Не сбой: обычную заявку никто не захотел получать карточкой.
+            # Она в реестре и видна в панели — будить админа незачем.
+            log.info(
+                "Заявка %s: все получатели просили только срочные — карточка не идёт",
+                request.request_id,
+            )
+        else:
+            log.warning(
+                "Заявка %s: нет ни одного резолвнутого финансиста", request.request_id
+            )
         return 0
 
     delivered = 0

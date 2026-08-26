@@ -526,10 +526,15 @@
 
   <div class="pane hidden" id="pane-fin" role="tabpanel" aria-labelledby="tab-fin">
     <div class="card" id="my-rem-card">
-      <div class="card-title">⏰ Мои напоминания о заявках <button type="button" class="help-q" data-help-title="Мои напоминания" data-help="Это ВАШИ настройки, они ни на кого больше не влияют: во сколько присылать, за сколько дней предупреждать о сроке и слать ли сводку по просроченным. «Проверить на себе» пришлёт напоминание прямо сейчас — по вашим настройкам и только вам.">?</button></div>
+      <div class="card-title">⏰ Мои уведомления <button type="button" class="help-q" data-help-title="Мои уведомления" data-help="Это ВАШИ настройки, они ни на кого больше не влияют.&#10;&#10;ДВА РАЗНЫХ ПОТОКА. Первый — карточка новой заявки: приходит сразу, как только её подали. Если обычных заявок много и уведомление о каждой перестало читаться, оставьте себе только срочные — срочные приходят всегда, отписаться от них нельзя.&#10;&#10;Второй — напоминания по срокам: раз в сутки, что скоро оплачивать и что уже просрочено. Во сколько, за сколько дней и слать ли просрочку — ниже. «Проверить на себе» пришлёт напоминание прямо сейчас, по вашим настройкам и только вам.">?</button></div>
       <div class="counter" style="text-align:left; margin-bottom:10px">
-        Бот раз в сутки присылает, что скоро оплачивать и что уже просрочено.
-        Ниже — только ваши настройки.
+        Карточка новой заявки — сразу; напоминания по срокам — раз в сутки. Ниже только ваши настройки.
+      </div>
+
+      <label class="field-label">Карточка новой заявки — сразу после подачи</label>
+      <div class="seg seg-even" id="my-cards-seg">
+        <button type="button" data-value="all" class="active">Все заявки</button>
+        <button type="button" data-value="urgent">🔴 Только срочные</button>
       </div>
 
       <label class="field-label">Присылать напоминания</label>
@@ -888,6 +893,7 @@
 <script src="skin-field.js"></script>
 <script src="alerts-panel.js"></script>
 <script src="restore-panel.js"></script>
+<script src="reminders-panel.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

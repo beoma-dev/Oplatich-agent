@@ -13,7 +13,7 @@ from telegram.constants import ParseMode
 
 from bot.models import InvoiceRequest
 from bot.validators import has_profanity
-from services import alerts, audit, dedup, storage, tg_retry
+from services import alerts, audit, dedup, notifier, storage, tg_retry
 from services.notifier import notify_finance
 from services.pdf_report import build_request_pdf
 from services.runtime_settings import effective_finance_recipients
@@ -145,7 +145,11 @@ async def finalize_submission(
         except Exception:  # noqa: BLE001 — алерт не должен ломать подачу
             log.exception("Сбой алерта о мате в заявке %s", request.request_id)
 
-    if notified == 0:
+    # «Никому не отправили» и «никому и не собирались» — разные вещи. Если
+    # все получатели просили только срочные, а заявка обычная, карточки нет
+    # по их же выбору: заявка в реестре и видна в панели, будить админа не за
+    # чем. Раньше такого состояния не было, и любой ноль означал сбой.
+    if notified == 0 and not notifier.suppressed_by_choice(request):
         # Тишины быть не должно: заявка записана, а карточку никто не увидел,
         # и переслать её потом нечем. Раньше об этом знал только лог — так и
         # потерялась заявка при двухминутном провале WARP. Сообщаем АДМИНУ,
