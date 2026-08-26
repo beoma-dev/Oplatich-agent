@@ -564,6 +564,29 @@ test("карточка получателя ужата и помещается �
   assert.ok(m.inCard < m.outside,
     `кнопки в карточке (${m.inCard}px) должны быть мельче общих (${m.outside}px)`);
   assert.ok(m.height < 780, `карточка ${m.height}px — снова разрослась`);
+
+  // Два потока в одной карточке разделены глазами: уведомление о новой
+  // заявке и напоминания по срокам настраиваются независимо.
+  const split = await page.evaluate(() => {
+    const card = document.getElementById("my-rem-card");
+    const heads = [...card.children].filter((e) => e.matches("label.field-label"));
+    const second = heads[1] && getComputedStyle(heads[1]);
+    const ghost = getComputedStyle(document.getElementById("my-rem-test"));
+    const save = getComputedStyle(document.getElementById("my-rem-save"));
+    return {
+      разделов: heads.length,
+      линия: second && parseFloat(second.borderTopWidth),
+      жирный: second && second.fontWeight,
+      ghost: parseFloat(ghost.fontSize),
+      save: parseFloat(save.fontSize),
+    };
+  });
+  assert.equal(split.разделов, 2, "разделов должно быть два: уведомление и напоминания");
+  assert.ok(split.линия > 0, "второй раздел не отделён линией");
+  assert.ok(Number(split.жирный) >= 700, "заголовок раздела не выделен");
+  // Второстепенные действия мельче главной: жмут их редко.
+  assert.ok(split.ghost < split.save,
+    `«Проверить на себе» (${split.ghost}px) должна быть мельче «Сохранить» (${split.save}px)`);
   assert.deepEqual(page.errors, []);
   await page.close();
 });

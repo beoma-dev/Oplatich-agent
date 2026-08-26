@@ -1286,6 +1286,26 @@
     font-size: 14px;
   }
   #my-rem-card .counter { font-size: 11.5px; }
+  /* Два потока в одной карточке надо разделить глазами: уведомление о новой
+     заявке и напоминания по срокам настраиваются независимо, а сплошной
+     столбец переключателей читается как один длинный список. Разделяем
+     стилями, а не разметкой: index.html у своего потолка, да и лишние
+     обёртки ради линии — плохой обмен. */
+  #my-rem-card > label.field-label {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  /* Подпись сразу за выбором срочности — начало второго раздела. */
+  #my-rem-card #my-cards-seg + label.field-label {
+    margin-top: 16px;
+    padding-top: 13px;
+    border-top: 1px solid var(--bg2);
+  }
+  /* Второстепенные действия жмут редко, а места занимали как «Сохранить».
+     Саму «Сохранить» не трогаем: она главная и должна оставаться крупной. */
+  #my-rem-card .add-btn.btn-ghost { padding: 9px 12px; font-size: 13px; }
+  #my-rem-card .add-row { margin-top: 9px; }
 
   .pay-date-note {
     display: inline-block;
