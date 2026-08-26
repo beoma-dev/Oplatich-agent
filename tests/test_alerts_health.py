@@ -10,6 +10,7 @@ import time
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from telegram.error import NetworkError
 
 import services.alerts as alerts
 import services.health as health
@@ -255,6 +256,40 @@ class TestLinkPulse:
         state = health.link_state()
         assert set(state) == {"alive", "last_ok_age", "down_for", "grace_min"}
         assert state["grace_min"] == rs.alerts_config()["link_grace_min"]
+
+    async def test_single_lost_packet_is_not_an_outage(self, sent, monkeypatch):
+        """Одно моргание туннеля — не провал связи.
+
+        WARP переподключается десятки раз в сутки, и одиночный getMe в это
+        окно падал. Журнал наполнялся «обрывами», которых для пользователя
+        не было: настоящие отправки идут с повтором и переживают то же самое.
+        """
+        monkeypatch.setattr(health.tg_retry.asyncio, "sleep", AsyncMock())
+        rs.set_alerts_config(link_grace_min=5)
+        calls = []
+
+        async def blink():
+            calls.append(1)
+            if len(calls) == 1:
+                raise NetworkError("туннель переподключается")
+            return object()
+
+        bot = MagicMock()
+        bot.get_me = blink
+        assert await health.probe_once(bot, True) is True, "моргание принято за провал"
+        assert len(calls) == 2, "пульс не переспросил"
+        assert rs.recent_incidents() == [], "в журнал попало то, чего не было"
+
+    async def test_real_outage_still_gets_through_the_retries(self, sent, monkeypatch):
+        """А настоящий провал повторы не переживает — и попадает в журнал."""
+        monkeypatch.setattr(health.tg_retry.asyncio, "sleep", AsyncMock())
+        rs.set_alerts_config(link_grace_min=5)
+        bot = MagicMock()
+        bot.get_me = AsyncMock(side_effect=NetworkError("канал мёртв"))
+
+        assert await health.probe_once(bot, True) is False
+        assert bot.get_me.await_count == len(health.PROBE_PAUSES) + 1
+        assert [i["title"] for i in rs.recent_incidents()] == [health.LINK_DOWN_TITLE]
 
     async def test_short_blink_is_silent_but_recorded(self, sent):
         """Звонок приглушён порогом, датчик — нет.

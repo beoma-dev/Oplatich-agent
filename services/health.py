@@ -26,12 +26,19 @@ import time
 
 from telegram import Bot
 
-from services import alerts
+from services import alerts, tg_retry
 from services import runtime_settings as rs
 
 log = logging.getLogger(__name__)
 
 PROBE_INTERVAL = 60.0
+# Пульс не объявляет провал по одному потерянному пакету. WARP переподключает
+# туннель десятки раз в сутки (26.08.2026 — 33 раза), каждое переподключение
+# длится секунды, и одиночный getMe в это окно падал. Журнал наполнялся
+# «обрывами», которых для пользователя не было: настоящие отправки идут
+# с повтором (services/tg_retry) и переживают то же самое незаметно.
+# Три попытки за ~6 с: настоящий провал их не переживёт, а моргание — да.
+PROBE_PAUSES: tuple[float, ...] = (2.0, 4.0)
 # Сколько секунд без успешного вызова Telegram API считаем нездоровьем:
 # больше двух интервалов пульса, чтобы одиночный сбой не давал ложный алерт.
 STALE_AFTER = 180.0
@@ -138,7 +145,9 @@ async def probe_once(bot: Bot, healthy: bool) -> bool:
     """
     global _down_since, _down_reported
     try:
-        await bot.get_me()
+        await tg_retry.send_with_retry(
+            bot.get_me, what="Пульс Telegram", pauses=PROBE_PAUSES
+        )
     except Exception as exc:  # noqa: BLE001 — сеть/прокси; пульс не падает
         if healthy:
             log.warning("Telegram API недоступен: %s", exc)
