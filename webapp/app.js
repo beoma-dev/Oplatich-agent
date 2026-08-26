@@ -1412,8 +1412,8 @@
       row.appendChild(meta);
 
       var dates = document.createElement("div");
-      dates.className = "my-meta";
-      dates.textContent = "📅 оплатить до " + (it.planned_date || "—") +
+      dates.className = it.overdue ? "my-meta overdue" : "my-meta";
+      dates.textContent = (it.overdue ? "⚠️ просрочено · " : "") + "📅 оплатить до " + (it.planned_date || "—") +
         (it.work_deadline ? " · 📄 срок работ: " + it.work_deadline : "") +
         (it.created_at ? " · подана " + it.created_at : "");
       row.appendChild(dates);
@@ -1961,8 +1961,8 @@
       row.appendChild(meta);
 
       var dates = document.createElement("div");
-      dates.className = "my-meta";
-      dates.textContent = "📅 оплатить до " + (it.planned_date || "—") +
+      dates.className = it.overdue ? "my-meta overdue" : "my-meta";
+      dates.textContent = (it.overdue ? "⚠️ просрочено · " : "") + "📅 оплатить до " + (it.planned_date || "—") +
         (it.work_deadline ? " · 📄 срок работ: " + it.work_deadline : "") +
         (it.created_at ? " · подана " + it.created_at : "");
       row.appendChild(dates);

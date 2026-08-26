@@ -909,6 +909,7 @@
   .kind-toggle.on, .kind-static.on { background: var(--accent); border-color: var(--accent); }
   .kind-toggle.on .knob, .kind-static.on .knob { transform: translateX(20px); background: var(--accent-text); }
   .kind-static { cursor: default; opacity: .55; }
+  .my-meta.overdue { color: var(--danger); font-weight: 600; }
   .row-del {
     flex: 0 0 auto;
     width: 28px; height: 28px;

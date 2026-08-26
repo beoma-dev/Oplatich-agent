@@ -832,6 +832,60 @@ class TestDeleteEndpoint:
         ).status_code == 401
 
 
+class TestOverdueFlag:
+    """Просрочка должна быть видна в списке, а не только в фильтре.
+
+    Признак существовал лишь внутри фильтра «Просрочены»: в списке заявка
+    со вчерашним сроком выглядела обычной «Новой», и узнать о сроке можно
+    было, только заранее заподозрив и переключив фильтр. Считаем на сервере
+    — PENDING_STATUSES и разбор даты живут там, копия логики в JS стала бы
+    четвёртым местом, которое разъедется.
+    """
+
+    def _row(self, planned: str, status: str = "Новая") -> dict:
+        return {
+            "ID заявки": "INV-1", "Статус оплаты": status,
+            "Плановая дата оплаты": planned, "Сумма": "100.00",
+        }
+
+    def test_yesterday_is_overdue(self, monkeypatch):
+        from api import routes
+
+        yesterday = (date.today() - timedelta(days=1)).strftime("%d.%m.%Y")
+        assert routes._is_overdue(self._row(yesterday)) is True
+        assert routes._as_item(self._row(yesterday), "")["overdue"] is True
+
+    def test_today_is_not_overdue_yet(self):
+        from api import routes
+
+        today = date.today().strftime("%d.%m.%Y")
+        assert routes._is_overdue(self._row(today)) is False
+
+    def test_paid_is_never_overdue(self):
+        """Оплаченную вчерашним сроком дёргать незачем."""
+        from api import routes
+
+        yesterday = (date.today() - timedelta(days=1)).strftime("%d.%m.%Y")
+        assert routes._is_overdue(self._row(yesterday, "Оплачена")) is False
+
+    def test_missing_date_is_not_overdue(self):
+        from api import routes
+
+        assert routes._is_overdue(self._row("")) is False
+
+    def test_filter_and_flag_agree(self):
+        """Фильтр «Просрочены» и признак в карточке — одна логика."""
+        from api import routes
+
+        yesterday = (date.today() - timedelta(days=1)).strftime("%d.%m.%Y")
+        row = self._row(yesterday)
+        shown = routes._matches(
+            row, status=routes.OVERDUE_FILTER, urgency="", query="",
+            date_from=None, date_to=None,
+        )
+        assert shown is routes._is_overdue(row) is True
+
+
 class TestStaticPage:
     async def test_form_page_must_be_revalidated(self, api):
         """Страница обязана проверяться на сервере при каждом открытии.

@@ -195,6 +195,24 @@ def _my_rate_limited(user_id: int) -> bool:
     return False
 
 
+def _is_overdue(row: dict[str, str]) -> bool:
+    """Срок оплаты прошёл, а заявка всё ещё ждёт.
+
+    Просрочка — не статус в реестре, а вычисляемое состояние, и считается
+    оно на сервере: `PENDING_STATUSES` и разбор даты живут здесь, а копия
+    той же логики в JS стала бы четвёртым местом, которое разъедется.
+    Раньше признак существовал только внутри фильтра «Просрочены», поэтому
+    в списке заявка выглядела обычной «Новой» — узнать о сроке можно было,
+    лишь заранее заподозрив и переключив фильтр.
+    """
+    if row.get("Статус оплаты", "") not in PENDING_STATUSES:
+        return False
+    planned = _parse_registry_date(row.get("Плановая дата оплаты", ""))
+    if planned is None:
+        return False
+    return planned < datetime.now(ZoneInfo(settings.timezone)).date()
+
+
 def _as_item(row: dict[str, str], reason: str) -> dict:
     """Строка реестра → элемент списка «Мои заявки».
 
@@ -216,6 +234,7 @@ def _as_item(row: dict[str, str], reason: str) -> dict:
         "has_invoice": bool(row.get("Ссылка на счет", "")),
         "requisites": row.get("Реквизиты", ""),
         "work_deadline": row.get("Срок исполнения работ по договору", ""),
+        "overdue": _is_overdue(row),
         "reason": reason,
     }
 
@@ -297,11 +316,7 @@ def _matches(
     date_to: date | None,
 ) -> bool:
     if status == OVERDUE_FILTER:
-        # Просрочка — не статус в реестре, а «срок прошёл, а всё ещё ждёт».
-        if row.get("Статус оплаты", "") not in PENDING_STATUSES:
-            return False
-        planned = _parse_registry_date(row.get("Плановая дата оплаты", ""))
-        if planned is None or planned >= datetime.now(ZoneInfo(settings.timezone)).date():
+        if not _is_overdue(row):
             return False
     elif status and row.get("Статус оплаты", "") != status:
         return False
