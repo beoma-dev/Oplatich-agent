@@ -1331,8 +1331,13 @@ class TestAccessRequests:
         client, _ = api
         _admins(monkeypatch, "1")
         first = (await client.get("/api/access", headers=_auth())).json()
-        assert first == {"allowed": False, "financier": False, "admin": False,
-                         "pending": False, "has_admins": True, "env_label": ""}
+        assert first == {
+            "allowed": False, "financier": False, "admin": False,
+            "pending": False, "has_admins": True, "env_label": "",
+            # Плашка «технические работы» едет тем же ответом: её видят все,
+            # кто открыл форму, и ради неё не стоит второго запроса.
+            "maintenance": {"enabled": False, "text": rs.MAINTENANCE_DEFAULT},
+        }
         await client.post("/api/access/request", headers=_auth())
         assert (await client.get("/api/access", headers=_auth())).json()["pending"] is True
 
@@ -1535,3 +1540,66 @@ class TestOverdueFilter:
         await storage.set_request_status("INV-20260804-000003-0003", "Оплачена")
         resp = await client.get("/api/finance/requests?status=__overdue__", headers=_auth())
         assert resp.json()["items"] == []
+
+
+class TestMaintenanceBanner:
+    """Плашка «технические работы»: вешает админ, видят все.
+
+    Подачу НЕ блокирует: заявка всё равно уходит в реестр. Молча не принять
+    заполненную форму хуже, чем принять её во время работ.
+    """
+
+    async def test_off_by_default(self, api, monkeypatch):
+        client, _ = api
+        _allow(monkeypatch)
+        state = (await client.get("/api/access", headers=_auth())).json()
+        assert state["maintenance"]["enabled"] is False
+
+    async def test_admin_turns_it_on_and_everyone_sees_it(self, api, monkeypatch):
+        client, _ = api
+        _allow(monkeypatch)
+        _admins(monkeypatch, "42")
+        resp = await client.post(
+            "/api/admin/maintenance",
+            json={"enabled": True, "text": "  Обновляем   реестр  "},
+            headers=_auth(),
+        )
+        assert resp.status_code == 200, resp.text
+        # Пробелы схлопываются: текст идёт в плашку как есть.
+        assert resp.json()["maintenance"]["text"] == "Обновляем реестр"
+
+        seen = (await client.get("/api/access", headers=_auth(99))).json()
+        assert seen["maintenance"] == {"enabled": True, "text": "Обновляем реестр"}
+
+    async def test_submission_still_works_during_maintenance(self, api, monkeypatch):
+        """Плашка предупреждает, а не запрещает — иначе теряется работа."""
+        client, _ = api
+        _allow(monkeypatch)
+        _admins(monkeypatch, "42")
+        await client.post(
+            "/api/admin/maintenance", json={"enabled": True}, headers=_auth()
+        )
+        resp = await client.post("/api/invoice", data=_form(), headers=_auth())
+        assert resp.status_code == 200, resp.text
+
+    async def test_only_admin_may_switch_it(self, api, monkeypatch):
+        client, _ = api
+        _allow(monkeypatch)
+        _admins(monkeypatch, "1")
+        resp = await client.post(
+            "/api/admin/maintenance", json={"enabled": True}, headers=_auth()
+        )
+        assert resp.status_code == 403
+        assert (await client.get("/api/access", headers=_auth())).json()[
+            "maintenance"
+        ]["enabled"] is False
+
+    async def test_empty_text_falls_back_to_the_default_wording(self, api, monkeypatch):
+        client, _ = api
+        _allow(monkeypatch)
+        _admins(monkeypatch, "42")
+        resp = await client.post(
+            "/api/admin/maintenance", json={"enabled": True, "text": "   "},
+            headers=_auth(),
+        )
+        assert resp.json()["maintenance"]["text"] == rs.MAINTENANCE_DEFAULT

@@ -590,3 +590,59 @@ test("карточка получателя ужата и помещается �
   assert.deepEqual(page.errors, []);
   await page.close();
 });
+
+test("админ вешает и снимает плашку технических работ", async () => {
+  const page = await openSettings(430);
+  await page.click("#tab-health");
+  await page.waitForTimeout(250);
+
+  const card = await page.evaluate(() => {
+    const c = document.getElementById("maint-card");
+    return { есть: !!c, скрыта: c && c.classList.contains("hidden"),
+             выбрано: document.querySelector("#maint-seg button.active").dataset.value };
+  });
+  assert.equal(card.есть, true, "карточки нет");
+  assert.equal(card.скрыта, false, "админу карточка должна быть видна");
+  assert.equal(card.выбрано, "off", "по умолчанию работ нет");
+
+  await page.click('#maint-seg button[data-value="on"]');
+  await page.fill("#maint-text", "Обновляем реестр, до 14:00");
+  await page.click("#maint-save");
+  await page.waitForTimeout(250);
+  const sent = await page.evaluate(() => {
+    const post = window.__posts.filter((p) => p[0].indexOf("/api/admin/maintenance") !== -1).pop();
+    return JSON.parse(post[1]);
+  });
+  assert.equal(sent.enabled, true);
+  assert.equal(sent.text, "Обновляем реестр, до 14:00");
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test("плашка работ видна всем, кто открыл форму", async () => {
+  // Не админская: её смысл в том, чтобы человек увидел предупреждение до
+  // того, как заполнит форму и удивится задержке.
+  const page = await openApp(browser, { skin: "neon", routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true,
+      maintenance: { enabled: true, text: "Обновляем реестр, до 14:00" } },
+  } });
+  await page.waitForTimeout(300);
+  const b = await page.evaluate(() => {
+    const el = document.getElementById("maint-banner");
+    return { скрыт: el.classList.contains("hidden"), текст: el.textContent };
+  });
+  assert.equal(b.скрыт, false, "плашка не показана");
+  assert.match(b.текст, /Обновляем реестр/);
+  await page.close();
+});
+
+test("работ нет — плашки нет", async () => {
+  const page = await openApp(browser, { skin: "neon", routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true,
+      maintenance: { enabled: false, text: "неважно" } },
+  } });
+  await page.waitForTimeout(300);
+  assert.ok(await page.evaluate(() =>
+    document.getElementById("maint-banner").classList.contains("hidden")));
+  await page.close();
+});

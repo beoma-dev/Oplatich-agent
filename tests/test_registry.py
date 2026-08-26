@@ -119,3 +119,42 @@ def test_csv_registry_name_maps_to_xlsx(tmp_paths, monkeypatch):
     """Бэккомпат: старое REGISTRY_FILE=registry.csv превращается в .xlsx."""
     monkeypatch.setattr(settings, "registry_file", "registry.csv")
     assert settings.registry_path.suffix == ".xlsx"
+
+
+def test_two_writers_survive_a_new_column(tmp_paths):
+    """Гонка миграции: обе одновременные подачи должны пройти.
+
+    _add_missing_columns смотрит PRAGMA и делает ALTER. Две подачи в один
+    момент обе видят, что колонки нет, и обе идут её создавать — вторая
+    получала «duplicate column name» и роняла заявку с 500. Ловилось
+    нестабильно: только в первый запуск после добавления колонки.
+    """
+    import sqlite3
+
+    from config import settings
+    from services import registry_sqlite as reg
+
+    # Таблица «из прошлой версии»: без последней колонки.
+    conn = sqlite3.connect(settings.security_db_path)
+    older = [f for f in reg._FIELDS if f != "extra_files"]
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS requests "
+        "(id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL, "
+        + ", ".join(f"{f} TEXT" for f in older) + ")"
+    )
+    conn.commit()
+
+    first = sqlite3.connect(settings.security_db_path)
+    second = sqlite3.connect(settings.security_db_path)
+    try:
+        reg._add_missing_columns(first)
+        first.commit()
+        # Второе соединение уже прочитало старую схему — повторный ALTER.
+        reg._add_missing_columns(second)
+        second.commit()
+    finally:
+        first.close()
+        second.close()
+        conn.close()
+
+    assert reg.append_sync(make_request()) == 1

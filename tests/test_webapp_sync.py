@@ -553,8 +553,11 @@ def test_admin_settings_are_split_into_tabs():
     # и смотрят её в другой момент — когда что-то сломалось.
     health_pane = HTML[HTML.index('id="pane-health"'):HTML.index('id="pane-beta"')]
     assert "🛟 Здоровье бота" in health_pane
-    assert len(re.findall(r'<div class="card[ "]', health_pane)) == 1, "лишние карточки"
-    assert "💾 Бэкап" not in health_pane
+    # Плашка «технические работы» — тоже эксплуатация и смотрится в тот же
+    # момент, что и здоровье: когда что-то идёт не так. Поэтому карточки две.
+    assert "🛠 Технические работы" in health_pane
+    assert len(re.findall(r'<div class="card[ "]', health_pane)) == 2, "лишние карточки"
+    assert "💾 Бэкап" not in health_pane, "бэкап — на вкладке данных"
 
 
 def test_tabs_fit_one_row():
@@ -823,6 +826,9 @@ def test_mini_app_is_split_into_files():
     assert MARKUP.index("alerts-panel.js") < MARKUP.index('src="app.js"')
     assert MARKUP.index("restore-panel.js") < MARKUP.index('src="app.js"')
     assert MARKUP.index("reminders-panel.js") < MARKUP.index('src="app.js"')
+    assert MARKUP.index("maint-panel.js") < MARKUP.index('src="app.js"')
+    assert "buildMaintPanel(" in _read("maint-panel.js")
+    assert "buildMaintPanel({" in JS
     assert "buildRemindersPanel(" in _read("reminders-panel.js")
     assert "buildRemindersPanel({" in JS
     assert "buildRestorePanel(" in _read("restore-panel.js")
@@ -865,7 +871,8 @@ def test_split_files_stay_reasonably_small():
     for name, limit in (("index.html", 960), ("app.css", 1650), ("app.js", 2900),
                         ("skin-field.js", 400), ("form-lib.js", 300),
                         ("alerts-panel.js", 330), ("restore-panel.js", 200),
-                        ("reminders-panel.js", 200)):
+                        ("reminders-panel.js", 200),
+                        ("maint-panel.js", 150)):
         length = len(_read(name).split("\n"))
         assert length <= limit, f"{name}: {length} строк — пора делить дальше"
 

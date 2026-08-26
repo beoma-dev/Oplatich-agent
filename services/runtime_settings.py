@@ -48,6 +48,11 @@ _DEFAULTS: dict = {
     # срочные. Умолчание "all": молча перестать присылать заявки человеку,
     # который об этом не просил, нельзя.
     "cards_by_user": {},
+    # Технические работы: плашка над формой для ВСЕХ. Не блокирует подачу —
+    # заявка всё равно уходит в реестр, — а предупреждает, что ответ может
+    # задержаться. Блокировка была бы отдельным решением: молча не принять
+    # заполненную форму хуже, чем принять её во время работ.
+    "maintenance": {},
     "autofill": {},
     # Личный выключатель чтения счёта: {"<id>": true|false}. Общая настройка
     # остаётся значением по умолчанию — бета есть бета, и человек, которому
@@ -93,6 +98,7 @@ def _load_locked() -> dict:
                         str(k): dict(v)
                         for k, v in raw.get("reminders_by_user", {}).items()
                     },
+                    "maintenance": dict(raw.get("maintenance", {})),
                     "autofill": dict(raw.get("autofill", {})),
                     "autofill_by_user": dict(raw.get("autofill_by_user", {})),
                     "alerts": dict(raw.get("alerts", {})),
@@ -111,6 +117,7 @@ def _load_locked() -> dict:
     _cache.setdefault("reminders", {})
     _cache.setdefault("reminders_by_user", {})
     _cache.setdefault("cards_by_user", {})
+    _cache.setdefault("maintenance", {})
     _cache.setdefault("autofill", {})
     _cache.setdefault("autofill_by_user", {})
     _cache.setdefault("alerts", {})
@@ -519,6 +526,33 @@ def personal_reminders(user_id: int) -> dict:
 CARD_URGENCY_ALL = "all"
 CARD_URGENCY_URGENT = "urgent"
 CARD_URGENCY_CHOICES = (CARD_URGENCY_ALL, CARD_URGENCY_URGENT)
+
+
+MAINTENANCE_TEXT_LIMIT = 200
+MAINTENANCE_DEFAULT = "Идут технические работы — ответ может задержаться."
+
+
+def maintenance_config() -> dict:
+    """Плашка «технические работы»: включена ли и что на ней написано."""
+    with _lock:
+        own = dict(_load_locked()["maintenance"])
+    return {
+        "enabled": bool(own.get("enabled", False)),
+        "text": str(own.get("text") or MAINTENANCE_DEFAULT)[:MAINTENANCE_TEXT_LIMIT],
+    }
+
+
+def set_maintenance(*, enabled: bool, text: str | None = None) -> dict:
+    """Включает или снимает плашку. Пустой текст возвращает формулировку по умолчанию."""
+    with _lock:
+        data = _load_locked()
+        data["maintenance"]["enabled"] = bool(enabled)
+        if text is not None:
+            cleaned = " ".join(str(text).split())[:MAINTENANCE_TEXT_LIMIT]
+            data["maintenance"]["text"] = cleaned or MAINTENANCE_DEFAULT
+        _save_locked()
+    log.warning("Технические работы: плашка %s", "включена" if enabled else "снята")
+    return maintenance_config()
 
 
 def personal_card_urgency(user_id: int) -> str:

@@ -140,6 +140,8 @@ async def access_state(request: Request) -> dict:
         "has_admins": bool(rs.effective_admin_ids()),
         # Пустая строка на боевом — плашки нет; на стенде «СТЕНД».
         "env_label": settings.env_label.strip()[:24],
+        # Технические работы: плашку видят все, кто открыл форму.
+        "maintenance": rs.maintenance_config(),
     }
 
 
@@ -542,6 +544,9 @@ async def admin_settings(request: Request) -> dict:
         "allowed": allowed,
         "org_name": settings.org_name,
         "backup": {**rs.backup_config(), "archive": backup.describe()},
+        # Плашка работ — тем же ответом: отдельный запрос ради двух полей
+        # не нужен, а читать состояние методом POST было бы просто неверно.
+        "maintenance": rs.maintenance_config(),
         "reminders": rs.reminders_config(),
         "registry_url": registry_url,
         "drive_url": drive_url,
@@ -986,6 +991,36 @@ async def save_my_reminders(request: Request) -> dict:
     )
     cfg["card_urgency"] = rs.personal_card_urgency(uid)
     return {"ok": True, "message": "Настройки сохранены.", "reminders": cfg}
+
+
+@router.post("/admin/maintenance")
+async def admin_maintenance(request: Request) -> dict:
+    """Плашка «технические работы»: {"enabled": bool, "text": "…"}.
+
+    Подачу НЕ блокирует: заявка всё равно уходит в реестр, а плашка
+    предупреждает, что ответ может задержаться. Молча не принять
+    заполненную форму было бы хуже, чем принять её во время работ.
+    """
+    user = await _require_admin(request)
+    body = await request.json()
+    enabled = bool(body.get("enabled"))
+    text = body.get("text")
+    cfg = await asyncio.to_thread(
+        rs.set_maintenance,
+        enabled=enabled,
+        text=None if text is None else str(text),
+    )
+    await audit.log_event(
+        audit.MAINTENANCE,
+        user["id"],
+        user.get("username"),
+        f"технические работы: {'включены' if enabled else 'сняты'}",
+    )
+    return {
+        "ok": True,
+        "message": "Плашка включена." if enabled else "Плашка снята.",
+        "maintenance": cfg,
+    }
 
 
 @router.post("/admin/autofill")

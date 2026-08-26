@@ -58,6 +58,7 @@
        одинаково, и спутать их — значит подать настоящую заявку в пустоту
        или наоборот. Текст приходит из /api/access. -->
   <div id="env-banner" class="env-banner hidden"></div>
+  <div id="maint-banner" class="env-banner hidden"></div>
   <header>
     <h1 class="brand">
       <!-- Имя убрано из вида, но остаётся заголовком экрана для скринридера. -->
@@ -693,6 +694,20 @@
     <!-- Здоровье бота. Карточка админская: она про эксплуатацию, а не про
          заявки. Список категорий рисуется по ответу сервера — источник один,
          и он на сервере: разъехавшийся список тут врал бы о том, что придёт. -->
+    <div class="card hidden" data-admin="1" id="maint-card">
+      <div class="card-title">🛠 Технические работы <button type="button" class="help-q" data-help-title="Технические работы" data-help="Вешает плашку над формой у ВСЕХ, кто её откроет. Подачу не блокирует: заявка всё равно уходит в реестр, а плашка предупреждает, что ответ может задержаться. Не принять заполненную форму молча было бы хуже, чем принять её во время работ.">?</button></div>
+      <div class="seg seg-even" id="maint-seg">
+        <button type="button" data-value="off" class="active">Выключены</button>
+        <button type="button" data-value="on">🛠 Идут</button>
+      </div>
+      <label class="field-label" for="maint-text">Что написать людям</label>
+      <input type="text" id="maint-text" maxlength="200"
+             placeholder="Идут технические работы — ответ может задержаться.">
+      <div class="add-row">
+        <button type="button" class="add-btn" id="maint-save" style="flex:1">Применить</button>
+      </div>
+    </div>
+
     <div class="card hidden" data-admin="1" id="alerts-card">
       <div class="card-title">🛟 Здоровье бота <button type="button" class="help-q" data-help-title="Здоровье бота" data-help="Сообщения о поломках приходят админам в личку. Критичное — «заявка не сохранилась» — не выключается: это единственный сбой, при котором данные теряются. Одинаковые сообщения не повторяются чаще раза в 30 минут, всего не больше 10 в час. Журнал ведётся по ВСЕМ сбоям, даже по выключенным категориям: выключен звонок, а не датчик.">?</button></div>
       <div class="state-line" id="alerts-state" title="Нажмите, чтобы обновить"><span class="dot"></span><span id="alerts-state-text">Проверяю связь…</span></div>
@@ -903,6 +918,7 @@
 <script src="alerts-panel.js"></script>
 <script src="restore-panel.js"></script>
 <script src="reminders-panel.js"></script>
+<script src="maint-panel.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

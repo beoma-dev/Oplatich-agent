@@ -79,8 +79,20 @@ def _add_missing_columns(conn: sqlite3.Connection) -> None:
     """
     have = {row[1] for row in conn.execute("PRAGMA table_info(requests)")}
     for field in _FIELDS:
-        if field not in have:
+        if field in have:
+            continue
+        try:
             conn.execute(f"ALTER TABLE requests ADD COLUMN {field} TEXT")
+        except sqlite3.OperationalError as exc:
+            # Две одновременные подачи обе видят, что колонки нет, и обе
+            # идут её создавать: вторая получает «duplicate column name»,
+            # и без этой ветки заявка отваливалась с 500 на ровном месте.
+            # Ловилось нестабильно — только когда две подачи совпали в
+            # первый запуск после добавления колонки.
+            if "duplicate column" not in str(exc).lower():
+                raise
+            log.info("Реестр SQLite: колонку %s уже добавил кто-то другой", field)
+        else:
             log.info("Реестр SQLite: добавлена колонка %s", field)
 
 

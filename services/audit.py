@@ -36,6 +36,7 @@ BACKUP_SETTINGS = "BACKUP_SETTINGS"          # админ изменил нас�
 REMINDER_SETTINGS = "REMINDER_SETTINGS"      # админ изменил напоминания
 BETA_SETTINGS = "BETA_SETTINGS"              # админ включил/выключил бету
 ALERT_SETTINGS = "ALERT_SETTINGS"            # админ изменил уведомления о сбоях
+MAINTENANCE = "MAINTENANCE"                  # админ повесил или снял плашку работ
 ADMIN_ROLE = "ADMIN_ROLE"                    # админ назначен или разжалован
 ACCESS_REQUESTED = "ACCESS_REQUESTED"        # сотрудник попросил доступ
 ACCESS_RESOLVED = "ACCESS_RESOLVED"          # админ решил по заявке на доступ

@@ -2148,6 +2148,16 @@
     box.classList.toggle("hidden", !text);
   }
 
+  /** Плашка «технические работы». Своим элементом, а не поверх стендовой:
+   *  на стенде обе уместны разом — «это не боевой» и «идут работы». */
+  function showMaintenance(cfg) {
+    var box = $("maint-banner");
+    if (!box) return;
+    var on = !!(cfg && cfg.enabled);
+    box.textContent = on ? "🛠 " + (cfg.text || "Идут технические работы") : "";
+    box.classList.toggle("hidden", !on);
+  }
+
   function checkAccess() {
     if (!insideTelegram) return;
     fetch("/api/access", { headers: { "X-Telegram-Init-Data": initData } })
@@ -2155,6 +2165,7 @@
       .then(function (d) {
         if (!d) return;
         showEnvLabel(d.env_label);
+        showMaintenance(d.maintenance);
         applyAccess(d.allowed, false);
         // Сразу, а не на первом тике опроса: иначе вкладка напоминаний
         // появлялась у финансиста через несколько секунд после открытия.
@@ -2592,6 +2603,10 @@
       }
     });
   }
+  var maintPanel = typeof buildMaintPanel === "function" ? buildMaintPanel({
+    $: $, setSeg: setSeg, bindFilterSeg: bindFilterSeg,
+    showMsg: showAdminMsg, initData: function () { return initData; }
+  }) : null;
   var alertsPanel = typeof buildAlertsPanel === "function" ? buildAlertsPanel({
     $: $,
     setSeg: setSeg,
@@ -2610,6 +2625,7 @@
         renderList("adm-list", d.admins || [], "adm");
         renderList("wl-list", d.allowed || [], "wl");
         if (d.backup) fillBackup(d.backup);
+        if (d.maintenance && maintPanel) maintPanel.fill(d.maintenance);
         if (alertsPanel) alertsPanel.fill(d);
         setSeg("autofill-seg", d.autofill === false ? "off" : "on");
         // Google-режим: прямые ссылки на живую таблицу и на папку Диска с
