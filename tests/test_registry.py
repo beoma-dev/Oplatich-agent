@@ -44,6 +44,7 @@ def test_column_order_is_frozen(tmp_paths):
         "Валюта", "Срочность", "Реквизиты", "ID заявки", "Telegram ID",
         "Срок исполнения работ по договору",
         "Дополнительные документы",
+        "Закрывающие документы",
     ]
     assert append_sync(make_request(work_deadline="услуга на 6 месяцев"), _reg()) == 1
     ws = load_workbook(settings.registry_path).active

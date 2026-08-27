@@ -114,6 +114,46 @@ def _format_card(request: InvoiceRequest, row_number: int) -> str:
     )
 
 
+async def closing_docs_notify(
+    bot: Bot,
+    request_id: str,
+    row: dict[str, str],
+    links: list[str],
+    who: str | None,
+) -> int:
+    """Сообщает финансистам, что к оплаченной заявке принесли закрывающие.
+
+    Идут ВСЕМ получателям, включая тех, кто просил только срочные: это не
+    новая заявка, поток редкий, а ждут этих документов как раз в бухгалтерии.
+    Отдельным сообщением, а не правкой карточки: карточка может быть
+    месячной давности и давно уехать вверх по переписке.
+    """
+    e = html.escape
+    author = f"@{who}" if who else "автор"
+    text = (
+        f"📄 <b>Закрывающие документы</b>\n"
+        f"{e(author)} приложил {len(links)} шт. к заявке {e(request_id)}.\n"
+        f"🏢 {e(_clip(row.get('Контрагент', '—'), 120))} · "
+        f"{e(row.get('Сумма', '—'))} {e(row.get('Валюта', ''))}\n"
+        + "\n".join(f'<a href="{e(u)}">документ {i}</a>'
+                     for i, u in enumerate(links, start=1))
+    )
+    delivered = 0
+    for chat_id in resolved_finance_ids():
+        try:
+            await tg_retry.send_with_retry(
+                lambda cid=chat_id: bot.send_message(
+                    chat_id=cid, text=text, parse_mode=ParseMode.HTML,
+                    disable_web_page_preview=True,
+                ),
+                what=f"Закрывающие документы для {chat_id}",
+            )
+            delivered += 1
+        except Exception:  # noqa: BLE001 — документы уже в реестре
+            log.warning("Не удалось сообщить финансисту %s о закрывающих", chat_id)
+    return delivered
+
+
 def recipients_for(request: InvoiceRequest) -> list[int]:
     """Кому эта заявка уйдёт карточкой — с учётом личного фильтра срочности.
 

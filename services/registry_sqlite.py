@@ -39,6 +39,7 @@ _FIELDS = [
     # Колонку в уже существующей таблице досоздаёт _add_missing_columns:
     # CREATE TABLE IF NOT EXISTS готовую таблицу не трогает.
     "extra_files",
+    "closing_files",
 ]
 
 
@@ -128,6 +129,30 @@ def set_status_sync(request_id: str, status_text: str) -> dict[str, str] | None:
             (request_id,),
         ).fetchone()
     log.info("Заявка %s: статус в SQLite → «%s»", request_id, status_text)
+    return _row_to_sheet_dict(row)
+
+
+def set_field_sync(request_id: str, field: str, value: str) -> dict[str, str] | None:
+    """Меняет ОДНУ колонку по ID заявки. Возвращает строку или None.
+
+    Общая, а не «ещё один set_status»: закрывающие документы дописываются
+    в строку, которой может быть месяц, и такой правки понадобится ещё не
+    одна. Имя колонки сверяется с _FIELDS — в SQL оно подставляется прямо,
+    и принимать его от вызывающего без проверки нельзя.
+    """
+    if field not in _FIELDS:
+        raise ValueError(f"Неизвестная колонка реестра: {field!r}")
+    with _connect() as conn:
+        cur = conn.execute(
+            f"UPDATE requests SET {field} = ? WHERE request_id = ?", (value, request_id)
+        )
+        if cur.rowcount == 0:
+            return None
+        row = conn.execute(
+            f"SELECT {', '.join(_FIELDS)} FROM requests WHERE request_id = ?",
+            (request_id,),
+        ).fetchone()
+    log.info("Заявка %s: колонка %s обновлена", request_id, field)
     return _row_to_sheet_dict(row)
 
 

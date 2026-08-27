@@ -60,6 +60,7 @@ from services.access_requests import request_access
 from services.deletion import delete_request as delete_request_service
 from services.intake import finalize_submission
 from services.local_storage import build_extra_filename, build_invoice_filename
+from services.notifier import closing_docs_notify
 from services.reminders import PENDING_STATUSES
 from services.reminders import SCAN_LIMIT as REMINDER_SCAN_LIMIT
 from services.reminders import send_to as send_reminder_to
@@ -244,6 +245,10 @@ def _as_item(row: dict[str, str], reason: str) -> dict:
         "requisites": row.get("Реквизиты", ""),
         "work_deadline": row.get("Срок исполнения работ по договору", ""),
         "overdue": _is_overdue(row),
+        # Сколько закрывающих уже приложено — для подписи на кнопке.
+        "closing_count": len(
+            [x for x in (row.get(CLOSING_HEADER, "") or "").splitlines() if x.strip()]
+        ),
         "reason": reason,
     }
 
@@ -499,6 +504,90 @@ async def my_withdraw(request: Request) -> dict:
         actor_name=f"@{username}" if username else str(user["id"]),
     )
     return {"ok": ok, "message": message}
+
+
+CLOSING_HEADER = "Закрывающие документы"
+
+
+@router.post("/my/closing-docs")
+async def my_closing_docs(
+    request: Request,
+    request_id: str = Form(...),
+    files: list[UploadFile] = File(default=[]),
+) -> dict:
+    """Закрывающие документы к УЖЕ поданной заявке: акт, УПД, накладная.
+
+    Приходят после оплаты, иногда через месяц, поэтому дописываются в
+    существующую строку реестра, а не в новую заявку. Прикладывает АВТОР
+    (у него они и есть) — или админ; чужую заявку так не дополнить, иначе
+    к платежу можно было бы подшить чей угодно документ.
+
+    Дописываем к тому, что уже есть: документы носят частями, и вторая
+    загрузка не должна стирать первую.
+    """
+    user = await _authorized_user(request)
+    if not REQUEST_ID_RE.fullmatch(request_id.strip()):
+        raise HTTPException(status_code=422, detail="Некорректный идентификатор заявки.")
+    request_id = request_id.strip()
+
+    row = await storage.get_request(request_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Заявка не найдена в реестре.")
+    is_admin = await is_bot_admin(request.app.state.bot, user["id"])
+    if row.get("Telegram ID", "") != str(user["id"]) and not is_admin:
+        await audit.log_event(
+            audit.DELETE_DENIED, user["id"], user.get("username"),
+            f"{request_id}: чужая заявка, закрывающие документы",
+        )
+        raise HTTPException(
+            status_code=403, detail="Дополнить можно только свою заявку."
+        )
+
+    picked = [f for f in (files or []) if f is not None and f.filename]
+    if not picked:
+        raise HTTPException(status_code=422, detail="Прикрепите хотя бы один документ.")
+    already = [x for x in (row.get(CLOSING_HEADER, "") or "").splitlines() if x.strip()]
+    if len(already) + len(picked) > MAX_EXTRA_FILES:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Закрывающих документов не больше {MAX_EXTRA_FILES}: "
+                f"уже приложено {len(already)}."
+            ),
+        )
+
+    saved: list[str] = []
+    for position, item in enumerate(picked, start=len(already) + 1):
+        blob = await _read_limited(item, MAX_FILE_SIZE_BYTES)
+        if len(blob) > MAX_FILE_SIZE_BYTES:
+            raise HTTPException(status_code=422, detail=f"«{item.filename}» больше 20 МБ.")
+        try:
+            validate_file(item.content_type, len(blob))
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=422, detail=f"«{item.filename}»: {exc}"
+            ) from exc
+        name = build_extra_filename(item.filename, f"{request_id}-закр", position)
+        saved.append(await storage.save_invoice(blob, name))
+
+    updated = await storage.set_request_field(
+        request_id, CLOSING_HEADER, "\n".join(already + saved)
+    )
+    if updated is None:
+        raise HTTPException(status_code=500, detail="Не удалось записать в реестр.")
+
+    await audit.log_event(
+        audit.REQUEST_SUBMITTED, user["id"], user.get("username"),
+        f"{request_id}: закрывающих документов +{len(saved)}",
+    )
+    await closing_docs_notify(
+        request.app.state.bot, request_id, row, saved, user.get("username")
+    )
+    return {
+        "ok": True,
+        "count": len(already) + len(saved),
+        "message": f"Готово: документов у заявки — {len(already) + len(saved)}.",
+    }
 
 
 # ---------------------------------------------------------------------------

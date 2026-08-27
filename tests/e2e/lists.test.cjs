@@ -115,3 +115,61 @@ test("в пустом списке герой расстроен и не зан�
   assert.equal(art.innerIds, 0, "в копии остались внутренние id");
   await page.close();
 });
+
+test("к своей заявке можно приложить закрывающие документы", async () => {
+  // Приходят после оплаты, иногда через месяц, поэтому кнопка живёт там,
+  // где человек находит свой платёж, — в «Моих заявках».
+  const page = await openApp(browser, { skin: "neon", routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true },
+    "/api/my-requests": { items: [{
+      id: "INV-20260701-120000-0001", status: "Оплачена", counterparty: "ООО «Ромашка»",
+      amount: "1000.00", currency: "RUB", article: "Аренда", urgency: "Обычная",
+      planned_date: "05.07.2026", created_at: "2026-07-01 12:00", has_invoice: true,
+      payment_source: "invoice", closing_count: 0, overdue: false,
+    }] },
+    "/api/my/closing-docs": { ok: true, count: 1, message: "Готово: документов у заявки — 1." },
+  } });
+  await page.click("#my-btn");
+  await page.waitForTimeout(400);
+
+  const btn = await page.evaluate(() => {
+    const b = [...document.querySelectorAll("#my-list .my-actions button")]
+      .find((x) => /Закрывающие/.test(x.textContent));
+    return b ? b.textContent.trim() : null;
+  });
+  assert.ok(btn, "кнопки закрывающих документов нет");
+
+  await page.setInputFiles("#my-list input[type=file]", [{
+    name: "akt.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4"),
+  }]);
+  await page.waitForTimeout(400);
+  const sent = await page.evaluate(() => {
+    const post = window.__posts.filter((p) => p[0].indexOf("/api/my/closing-docs") !== -1).pop();
+    return post ? [...post[1].keys()] : null;
+  });
+  assert.ok(sent, "запрос не ушёл");
+  assert.ok(sent.includes("request_id") && sent.includes("files"), sent.join(","));
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test("на кнопке видно, сколько документов уже приложено", async () => {
+  const page = await openApp(browser, { skin: "neon", routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true },
+    "/api/my-requests": { items: [{
+      id: "INV-20260701-120000-0002", status: "Оплачена", counterparty: "ООО «Ромашка»",
+      amount: "1000.00", currency: "RUB", article: "Аренда", urgency: "Обычная",
+      planned_date: "05.07.2026", created_at: "2026-07-01 12:00", has_invoice: true,
+      payment_source: "invoice", closing_count: 2, overdue: false,
+    }] },
+  } });
+  await page.click("#my-btn");
+  await page.waitForTimeout(400);
+  const label = await page.evaluate(() => {
+    const b = [...document.querySelectorAll("#my-list .my-actions button")]
+      .find((x) => /документы/.test(x.textContent));
+    return b ? b.textContent.trim() : null;
+  });
+  assert.match(label || "", /\(2\)/, "счётчик на кнопке не показан");
+  await page.close();
+});

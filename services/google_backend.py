@@ -457,6 +457,32 @@ def _all_rows_sync() -> list[list[str]]:
     return [list(row) + [""] * (width - len(row)) for row in values]
 
 
+def set_cell_sync(request_id: str, header: str, value: str) -> dict[str, str] | None:
+    """Меняет ОДНУ ячейку по ID заявки и имени колонки. None — заявки нет."""
+    if header not in SHEET_HEADERS:
+        raise ValueError(f"Неизвестная колонка реестра: {header!r}")
+    letter = _col_letter(SHEET_HEADERS.index(header))
+    ids = (
+        _values()
+        .get(spreadsheetId=settings.google_sheet_id,
+             range=_rng(f"{_ID_LETTER}2:{_ID_LETTER}"))
+        .execute()
+        .get("values", [])
+    )
+    for i, row in enumerate(ids):
+        if row and row[0] == request_id:
+            row_number = i + 2
+            _values().update(
+                spreadsheetId=settings.google_sheet_id,
+                range=_rng(f"{letter}{row_number}"),
+                valueInputOption="RAW",
+                body={"values": [[value]]},
+            ).execute()
+            log.info("Заявка %s: колонка «%s» обновлена", request_id, header)
+            return get_request_sync(request_id)
+    return None
+
+
 def get_request_sync(request_id: str) -> dict[str, str] | None:
     """Заявка по ID в формате SHEET_HEADERS (None — такой заявки нет)."""
     for row in _all_rows_sync():

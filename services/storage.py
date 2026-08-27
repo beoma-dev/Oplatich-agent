@@ -17,7 +17,7 @@ import logging
 import weakref
 from pathlib import Path
 
-from bot.models import InvoiceRequest
+from bot.models import SHEET_HEADERS, InvoiceRequest
 from config import settings
 from services import google_backend, local_storage, registry_sqlite, registry_xlsx
 
@@ -29,6 +29,10 @@ log = logging.getLogger(__name__)
 # в тестах он свой на каждый тест — оттуда и плавающее падение
 # test_concurrency (reports/005, R18): зеркало молча не писалось.
 # Взаимное исключение внутри одного цикла — всё, что этот лок и давал.
+# Имя колонки реестра → имя поля в SQLite. Позиции совпадают по построению
+# (_FIELDS ↔ SHEET_HEADERS), поэтому карта строится, а не пишется руками.
+_FIELD_BY_HEADER = dict(zip(SHEET_HEADERS, registry_sqlite._FIELDS, strict=True))
+
 _xlsx_locks: weakref.WeakKeyDictionary[object, asyncio.Lock] = (
     weakref.WeakKeyDictionary()
 )
@@ -153,6 +157,36 @@ async def set_request_status(request_id: str, status_text: str) -> dict[str, str
         )
     if row is not None:
         await _mirror_status(request_id, status_text)
+    return row
+
+
+async def set_request_field(
+    request_id: str, header: str, value: str
+) -> dict[str, str] | None:
+    """Меняет одну колонку существующей заявки в первичном хранилище + зеркале.
+
+    Нужна для того, что дописывается ПОСЛЕ подачи: закрывающие документы
+    приходят иногда через месяц, и строка к тому времени давно в реестре.
+    """
+    if settings.storage_is_google:
+        row = await asyncio.to_thread(
+            google_backend.set_cell_sync, request_id, header, value
+        )
+    else:
+        row = await asyncio.to_thread(
+            registry_sqlite.set_field_sync, request_id, _FIELD_BY_HEADER[header], value
+        )
+    if row is not None:
+        path = _mirror_path()
+        if path is not None:
+            try:
+                async with _lock():
+                    await asyncio.to_thread(
+                        registry_xlsx.set_cell_sync, request_id, header, value, path
+                    )
+            except Exception:  # noqa: BLE001 — зеркало вторично
+                log.exception("xlsx-зеркало: не удалось обновить «%s» у %s",
+                              header, request_id)
     return row
 
 

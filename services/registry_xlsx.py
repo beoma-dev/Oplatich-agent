@@ -201,6 +201,30 @@ def set_status_sync(request_id: str, status_text: str, path: Path) -> dict[str, 
     return None
 
 
+def set_cell_sync(
+    request_id: str, header: str, value: str, path: Path
+) -> dict[str, str] | None:
+    """Меняет ОДНУ ячейку по ID заявки и имени колонки в зеркале."""
+    if header not in SHEET_HEADERS:
+        raise ValueError(f"Неизвестная колонка реестра: {header!r}")
+    if not path.exists():
+        return None
+    col = SHEET_HEADERS.index(header)
+    wb, ws = _open_or_create(path)
+    for row in ws.iter_rows(min_row=2):
+        cell = row[_ID_COL] if len(row) > _ID_COL else None
+        if cell is not None and cell.value == request_id:
+            ws.cell(cell.row, col + 1).value = value
+            _atomic_save(wb, path)
+            values = [
+                str(row[i].value) if i < len(row) and row[i].value is not None else ""
+                for i in range(len(SHEET_HEADERS))
+            ]
+            return dict(zip(SHEET_HEADERS, values, strict=True))
+    log.warning("Заявка %s не найдена в зеркале %s", request_id, path.name)
+    return None
+
+
 def delete_sync(request_id: str, path: Path) -> bool:
     """Удаляет строку заявки из xlsx-зеркала. True — строка была и удалена."""
     if not path.exists():

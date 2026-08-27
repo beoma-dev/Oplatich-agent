@@ -1665,3 +1665,106 @@ class TestMaintenanceBanner:
             headers=_auth(),
         )
         assert resp.json()["maintenance"]["text"] == rs.MAINTENANCE_DEFAULT
+
+
+class TestClosingDocuments:
+    """Закрывающие документы: акт, УПД, накладная.
+
+    Приходят ПОСЛЕ оплаты, иногда через месяц, и дописываются в уже
+    существующую строку реестра — а не создают новую заявку.
+    """
+
+    def _doc(self, name: str) -> tuple[str, bytes, str]:
+        return (name, b"%PDF-1.4 akt", "application/pdf")
+
+    async def _submit(self, client, monkeypatch) -> str:
+        _allow(monkeypatch)
+        resp = await client.post("/api/invoice", data=_form(), headers=_auth())
+        assert resp.status_code == 200, resp.text
+        return resp.json()["request_id"]
+
+    async def test_author_attaches_and_registry_row_is_updated(self, api, monkeypatch):
+        from openpyxl import load_workbook
+
+        from bot.models import SHEET_HEADERS
+
+        client, _ = api
+        rid = await self._submit(client, monkeypatch)
+        resp = await client.post(
+            "/api/my/closing-docs",
+            data={"request_id": rid},
+            files=[("files", self._doc("akt.pdf"))],
+            headers=_auth(),
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["count"] == 1
+
+        ws = load_workbook(settings.registry_path).active
+        col = SHEET_HEADERS.index("Закрывающие документы") + 1
+        assert (ws.cell(2, col).value or "").strip(), "строка реестра не обновилась"
+
+    async def test_second_upload_appends_and_does_not_replace(self, api, monkeypatch):
+        """Документы носят частями: вторая загрузка не стирает первую."""
+        client, _ = api
+        rid = await self._submit(client, monkeypatch)
+        for name in ("akt.pdf", "upd.pdf"):
+            resp = await client.post(
+                "/api/my/closing-docs",
+                data={"request_id": rid},
+                files=[("files", self._doc(name))],
+                headers=_auth(),
+            )
+            assert resp.status_code == 200, resp.text
+        assert resp.json()["count"] == 2
+
+        row = await routes_mod.storage.get_request(rid)
+        assert len(row["Закрывающие документы"].splitlines()) == 2
+
+    async def test_someone_elses_request_is_refused(self, api, monkeypatch):
+        """Иначе к чужому платежу можно подшить какой угодно документ."""
+        client, _ = api
+        rid = await self._submit(client, monkeypatch)
+        _allow(monkeypatch, "42,77")
+        resp = await client.post(
+            "/api/my/closing-docs",
+            data={"request_id": rid},
+            files=[("files", self._doc("akt.pdf"))],
+            headers=_auth(77),
+        )
+        assert resp.status_code == 403
+
+    async def test_unknown_request_is_404(self, api, monkeypatch):
+        client, _ = api
+        _allow(monkeypatch)
+        resp = await client.post(
+            "/api/my/closing-docs",
+            data={"request_id": "INV-20260101-000000-0000"},
+            files=[("files", self._doc("akt.pdf"))],
+            headers=_auth(),
+        )
+        assert resp.status_code == 404
+
+    async def test_nothing_attached_is_refused(self, api, monkeypatch):
+        client, _ = api
+        rid = await self._submit(client, monkeypatch)
+        resp = await client.post(
+            "/api/my/closing-docs", data={"request_id": rid}, headers=_auth()
+        )
+        assert resp.status_code == 422
+
+    async def test_financiers_are_told(self, api, monkeypatch):
+        """Ждут эти документы в бухгалтерии — молча класть их в таблицу мало."""
+        from services import notifier
+
+        client, bot = api
+        rid = await self._submit(client, monkeypatch)
+        monkeypatch.setattr(notifier, "resolved_finance_ids", lambda: [555])
+        await client.post(
+            "/api/my/closing-docs",
+            data={"request_id": rid},
+            files=[("files", self._doc("akt.pdf"))],
+            headers=_auth(),
+        )
+        sent = " ".join(str(c.kwargs.get("text", "")) for c in bot.send_message.await_args_list)
+        assert "Закрывающие документы" in sent
+        assert rid in sent

@@ -1529,6 +1529,13 @@
         if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
       });
       actions.appendChild(repeat);
+      // Закрывающие документы — в closing-panel.js: приходят после оплаты,
+      // и кнопка нужна там, где человек находит свой платёж.
+      if (typeof closingButton === "function") {
+        closingButton(actions, it, {
+          initData: initData, showMsg: showMyMsg, reload: loadMy
+        });
+      }
 
       if (it.status === "Новая") {
         // Правка = отзыв прежней заявки + перенос полей в форму: менять
