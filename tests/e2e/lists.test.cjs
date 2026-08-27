@@ -726,6 +726,19 @@ test("живая инструкция: пять шагов, вперёд, наз
   assert.equal(start.scene, "tour-stage s1");
   assert.ok(start.prevOff, "на первом шаге «назад» активна");
 
+  // Все три кнопки — оформленные, а не «голые». «Пропустить» однажды
+  // потеряла класс tour-nav и рисовалась рамкой браузера по умолчанию.
+  const navs = await page.evaluate(() =>
+    [...document.querySelectorAll("#tour .tour-foot button")].map((b) => ({
+      nav: b.classList.contains("tour-nav"),
+      border: getComputedStyle(b).borderStyle,
+    })));
+  assert.equal(navs.length, 3, "кнопок под туром не три");
+  navs.forEach((b, i) => {
+    assert.ok(b.nav, `кнопка ${i + 1} без класса tour-nav`);
+    assert.equal(b.border, "none", `у кнопки ${i + 1} рамка браузера`);
+  });
+
   // Вперёд до конца: сцена и заголовок должны меняться.
   const titles = [start.title];
   for (let i = 0; i < 4; i++) {
@@ -851,5 +864,23 @@ test("живая инструкция не двигает раскладку и 
   });
   assert.deepEqual(bad, [], `анимация двигает раскладку: ${bad.join(", ")}`);
   assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test("при «уменьшить движение» живая инструкция не строится", async () => {
+  // Системная настройка для тех, кому анимация мешает. Текст при этом
+  // обязан остаться — он и есть инструкция, когда движения нет.
+  const page = await openApp(browser, {
+    skin: "light", width: 360, height: 820, reducedMotion: "reduce", routes: {
+      "/api/access": { allowed: true, pending: false, has_admins: true, animated_help: true },
+    },
+  });
+  await page.click("#help-btn");
+  await page.waitForTimeout(400);
+  assert.equal(await page.evaluate(() => !!document.getElementById("tour")), false,
+    "тур построился при «уменьшить движение»");
+  assert.ok(await page.evaluate(() =>
+    document.getElementById("help-view").textContent.indexOf("Заполните форму") !== -1),
+    "текстовая инструкция пропала");
   await page.close();
 });

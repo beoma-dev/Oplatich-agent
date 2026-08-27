@@ -36,20 +36,21 @@ var TOUR_STEPS = [
   {
     title: "Заполните форму",
     text: "Сумма понимает пробелы и запятую. Контрагент подставляется из прошлых "
-      + "заявок вместе с реквизитами. Дата считается сама.",
+      + "заявок вместе с реквизитами. Дату оплаты бот ставит сам — по срочности.",
     html: '<div class="t-form">'
       + '<div class="t-row fx" style="--d:.1s"><span>Сумма</span>'
       + '<b class="t-type" style="--d:.5s">125 000,50 ₽</b></div>'
       + '<div class="t-row fx" style="--d:.9s"><span>Контрагент</span>'
       + '<b class="t-hint fx" style="--d:1.5s">ООО «Ромашка» ✓</b></div>'
       + '<div class="t-row fx" style="--d:2.1s"><span>Срочность</span>'
-      + '<b><i class="t-pill">🟢 обычная</i><i class="t-pill t-on fx" style="--d:2.7s">🔴 срочно</i></b></div>'
+      + '<b><i class="t-pill">🟢 Обычная</i><i class="t-pill t-on fx" style="--d:2.7s">🔴 Срочно</i></b></div>'
       + "</div>"
   },
   {
     title: "Отправили",
     text: "Заявка попадает в реестр, вам приходит подтверждение с номером и "
-      + "PDF-документом. В общий чат уходит краткий итог — без файла и реквизитов.",
+      + "PDF-документом. Если форму открыли из общего чата — туда уйдёт краткий "
+      + "итог, без файла и реквизитов.",
     html: '<div class="t-col">'
       + '<div class="t-btn fx t-press" style="--d:.2s">Отправить заявку</div>'
       + '<div class="t-card fx" style="--d:1.4s"><b>✅ Заявка принята</b>'
@@ -109,7 +110,7 @@ function helpTour(enabled) {
   var prev = mkBtn("←", "Назад");
   var skip = mkBtn("Пропустить", "Пропустить инструкцию");
   var next = mkBtn("→", "Дальше");
-  skip.className = "tour-skip";
+  skip.classList.add("tour-skip");
   foot.appendChild(prev);
   foot.appendChild(skip);
   foot.appendChild(next);

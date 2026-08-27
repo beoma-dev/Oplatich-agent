@@ -18,8 +18,9 @@
   }
   .tour.hidden { display: none; }
 
-  /* Полоски прогресса. Активная едет 6.5s — на прочтение подписи хватает,
-     а досматривать пять шагов не утомительно. */
+  /* Полоски прогресса. Активная едет 7.5s: самая длинная подпись — 120
+     знаков, это около семи секунд чтения, а сцена пятого шага доигрывает
+     на 6.7s — при 6.5s её обрывало на середине. */
   .tour-bars { display: flex; gap: 4px; margin-bottom: 12px; }
   .tour-bars i {
     flex: 1 1 0;
@@ -38,7 +39,7 @@
     transform: scaleX(0);
   }
   .tour-bars i.done::after { transform: scaleX(1); }
-  .tour-bars i.run::after { animation: tour-bar 6.5s linear forwards; }
+  .tour-bars i.run::after { animation: tour-bar 7.5s linear forwards; }
   @keyframes tour-bar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
   /* Фиксированные высоты, а не min-height: сцены разной высоты двигали

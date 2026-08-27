@@ -121,6 +121,44 @@ def test_statuses_mirror():
     assert set(_js_object("STATUS_CLASS")) == statuses
 
 
+def test_animated_help_shows_what_the_app_really_does():
+    """Живая инструкция обещает ровно то, что есть в приложении.
+
+    Сцены — это картинка интерфейса, нарисованная руками, и разъезжается она
+    молча: кнопку переименовали, а тур показывает старое имя новичку, для
+    которого он и сделан. Поэтому подписи в сценах сверяются с настоящими.
+    """
+    from services.notifier import OPEN_LABEL
+
+    tour = _read("help-tour.js")
+    # Кнопки, которые тур рисует, — те же строки, что в самих панелях.
+    assert '"📄 Акт / УПД"' in _read("closing-panel.js")
+    assert '"⏰ Напомнить"' in _read("nudge-panel.js")
+    for label in ("📄 Акт / УПД", "⏰ Напомнить", OPEN_LABEL):
+        assert label in tour, f"тур не показывает «{label}» — или показывает старое"
+    # Статусы — из общего зеркала: тур рисует «Новая» и «Оплачена».
+    from bot.models import REQUEST_STATUSES, STATUS_NEW
+
+    assert STATUS_NEW in tour
+    assert REQUEST_STATUSES["PAID"][1] in tour
+    # Счёт и реквизиты необязательны с 26.08.2026 — тур обязан это показывать,
+    # иначе он учит заполнять то, чего можно не заполнять.
+    assert "ни счёта, ни реквизитов" in tour
+    # Срочность подписана как в форме, а не «своими словами».
+    for pill in ("🔴 Срочно", "🟢 Обычная"):
+        assert pill in tour and pill in MARKUP, f"подпись срочности разошлась: {pill}"
+
+
+def test_animated_help_stays_behind_its_flag():
+    """Тур строится только по флагу и только если движение не отключено."""
+    tour = _read("help-tour.js")
+    assert "function helpTour(enabled)" in tour
+    assert "if (!enabled" in tour, "тур строится без флага"
+    assert "prefers-reduced-motion" in tour, "тур игнорирует «уменьшить движение»"
+    # Флаг приезжает с сервера, а не зашит в приложение.
+    assert "helpTour(d.animated_help)" in JS
+
+
 def test_popups_are_in_app_not_native():
     """Свои модальные окна: нативные рисуются в ГЛАВНОМ окне Telegram.
 

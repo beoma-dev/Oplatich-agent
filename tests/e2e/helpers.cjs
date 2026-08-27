@@ -62,6 +62,9 @@ async function openApp(browser, cfg = {}) {
   const page = await browser.newPage({
     viewport: { width: cfg.width || 430, height: cfg.height || 900 },
     deviceScaleFactor: 2,
+    // cfg.reducedMotion — системная настройка «уменьшить движение»: её
+    // уважают живая инструкция и живой фон, и это надо проверять.
+    reducedMotion: cfg.reducedMotion,
   });
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
