@@ -433,3 +433,43 @@ class TestCardUrgencyFilter:
 
         monkeypatch.setattr(notifier, "resolved_finance_ids", lambda: [])
         assert notifier.suppressed_by_choice(make_request()) is False
+
+
+class TestLastChannelWarning:
+    """Если ВСЕ получатели просят только срочные, обычные заявки не придут
+    никому. Это законно — они в реестре и в панели, — но человек должен
+    узнать об этом в момент, когда сам это включает, а не спрашивая, почему
+    уведомление «не пришло». Именно так и вышло в первый же день.
+    """
+
+    async def _save(self, client, headers, value):
+        return await client.post(
+            "/api/reminders/me", json={"card_urgency": value}, headers=headers
+        )
+
+    async def test_last_recipient_switching_to_urgent_is_warned(
+        self, tmp_paths, monkeypatch
+    ):
+        import httpx
+
+        import api.routes as routes_mod
+        from api.server import build_api
+        from services import notifier
+        from tests.test_api_integration import _make_bot
+        from tests.test_auth import _signed_init_data
+
+        monkeypatch.setattr(routes_mod, "_my_rate", {})
+        settings.__dict__.pop("finance_recipients", None)
+        monkeypatch.setattr(settings, "finance_chat_ids_raw", "42")
+        monkeypatch.setattr(notifier, "resolved_finance_ids", lambda: [42])
+        headers = {"X-Telegram-Init-Data": _signed_init_data(
+            user={"id": 42, "first_name": "Ф", "username": "fin"})}
+
+        transport = httpx.ASGITransport(app=build_api(_make_bot()))
+        async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
+            warned = await self._save(client, headers, "urgent")
+            assert warned.status_code == 200, warned.text
+            assert "ни один получатель" in warned.json()["message"], warned.json()
+
+            back = await self._save(client, headers, "all")
+            assert "ни один получатель" not in back.json()["message"]

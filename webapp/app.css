@@ -1312,8 +1312,9 @@
     font-weight: 700;
     color: var(--text);
   }
-  /* Подпись сразу за выбором срочности — начало второго раздела. */
-  #my-rem-card #my-cards-seg + label.field-label {
+  /* Второй заголовок раздела = второй прямой label. Соседство с #my-cards-seg
+     не годится: между ними вклинилась подпись, и линия молча исчезла. */
+  #my-rem-card > label.field-label ~ label.field-label {
     margin-top: 16px;
     padding-top: 13px;
     border-top: 1px solid var(--bg2);

@@ -23,11 +23,23 @@ function buildRemindersPanel(ctx) {
   // от них нельзя, поэтому выбор только между «все» и «только срочные».
   var myCards = "all";
 
+  /** Прямым текстом, что человек сейчас получает. Без этой строки узнать,
+   *  почему заявка «не пришла», можно было только спросив — так и вышло
+   *  в первый же день. */
+  function showCardsNote() {
+    var note = $("my-cards-note");
+    if (!note) return;
+    note.textContent = myCards === "urgent"
+      ? "⚠️ Сейчас вам приходят ТОЛЬКО срочные заявки. Обычные — в реестре и в панели."
+      : "Приходят все новые заявки.";
+  }
+
   function fillMyReminders(cfg) {
     if (cfg.card_urgency) {
       myCards = cfg.card_urgency;
       setSeg("my-cards-seg", myCards);
     }
+    showCardsNote();
     myRem.enabled = !!cfg.enabled;
     myRem.overdue = !!cfg.overdue_enabled;
     setSeg("my-rem-seg", myRem.enabled ? "on" : "off");
@@ -107,7 +119,7 @@ function buildRemindersPanel(ctx) {
       .then(function () { btn.disabled = false; btn.style.opacity = ""; });
   }
 
-  bindFilterSeg("my-cards-seg", function (v) { myCards = v; });
+  bindFilterSeg("my-cards-seg", function (v) { myCards = v; showCardsNote(); });
   bindFilterSeg("my-rem-seg", function (v) {
     myRem.enabled = v === "on";
     $("my-rem-opts").style.opacity = myRem.enabled ? "" : ".45";

@@ -48,6 +48,7 @@ from services import (
     dedup,
     invoice_check,
     invoice_extract,
+    notifier,
     registry_check,
     request_meta,
     restore,
@@ -995,7 +996,21 @@ async def save_my_reminders(request: Request) -> dict:
         weekdays_only=bool(body.get("weekdays_only", False)),
     )
     cfg["card_urgency"] = rs.personal_card_urgency(uid)
-    return {"ok": True, "message": "Настройки сохранены.", "reminders": cfg}
+    # Предупреждение, а не запрет: если ВСЕ получатели просят только срочные,
+    # обычные заявки не придут никому. Заявка остаётся в реестре и видна
+    # в панели, но пуш-уведомления о ней исчезают — и никакой алерт об этом
+    # не скажет. Человек должен узнать это в момент, когда сам это включает.
+    message = "Настройки сохранены."
+    if cfg["card_urgency"] == rs.CARD_URGENCY_URGENT:
+        others = [i for i in notifier.resolved_finance_ids() if i != uid]
+        if not any(
+            rs.personal_card_urgency(i) == rs.CARD_URGENCY_ALL for i in others
+        ):
+            message += (
+                " Внимание: теперь ни один получатель не получает обычные "
+                "заявки — только срочные. Они по-прежнему в реестре и в панели."
+            )
+    return {"ok": True, "message": message, "reminders": cfg}
 
 
 @router.post("/admin/maintenance")

@@ -646,3 +646,22 @@ test("работ нет — плашки нет", async () => {
     document.getElementById("maint-banner").classList.contains("hidden")));
   await page.close();
 });
+
+test("получателю видно, что он получает только срочные", async () => {
+  // Первый же день показал: узнать, почему заявка «не пришла», можно было
+  // только спросив. Теперь это написано там же, где переключатель.
+  const page = await openSettings(430);
+  await page.click("#tab-fin");
+  await page.waitForTimeout(250);
+  const before = await page.evaluate(() =>
+    document.getElementById("my-cards-note").textContent);
+  assert.match(before, /Приходят все/);
+
+  await page.click('#my-cards-seg button[data-value="urgent"]');
+  await page.waitForTimeout(150);
+  const after = await page.evaluate(() =>
+    document.getElementById("my-cards-note").textContent);
+  assert.match(after, /ТОЛЬКО срочные/, "человека не предупредили");
+  assert.match(after, /в реестре и в панели/, "не сказано, где заявки всё же будут");
+  await page.close();
+});
