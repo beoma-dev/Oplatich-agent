@@ -1486,8 +1486,7 @@
       var meta = document.createElement("div");
       meta.className = "my-meta";
       meta.textContent = "📂 " + (it.article || "—") +
-        (it.urgency === "Срочно" ? " · 🔴 срочно" : "") +
-        (it.has_invoice ? " · 📎 счёт" : " · ✍️ реквизиты");
+        (it.urgency === "Срочно" ? " · 🔴 срочно" : "") + " · " + sourceMark(it);
       row.appendChild(meta);
 
       var dates = document.createElement("div");
@@ -1679,9 +1678,7 @@
     add("Подана", item.created_at);
     add("Сотрудник", item.sender);
     add("Комментарий", item.comment);
-    add("Счёт", { invoice: "📎 файл приложен", requisites: "✍️ по реквизитам",
-      none: "⚠️ ни счёта, ни реквизитов" }[item.payment_source]
-      || (item.has_invoice ? "📎 файл приложен" : "✍️ по реквизитам"));
+    add("Счёт", sourceMark(item, true));
     add("Причина", item.reason);
     add("Номер", item.id);
     return dl;
@@ -2068,8 +2065,7 @@
       var meta = document.createElement("div");
       meta.className = "my-meta";
       meta.textContent = "📂 " + (it.article || "—") +
-        (it.urgency === "Срочно" ? " · 🔴 срочно" : "") +
-        (it.has_invoice ? " · 📎 счёт" : " · ✍️ реквизиты");
+        (it.urgency === "Срочно" ? " · 🔴 срочно" : "") + " · " + sourceMark(it);
       row.appendChild(meta);
 
       var dates = document.createElement("div");

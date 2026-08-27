@@ -55,3 +55,23 @@ function finLinkFilters(param, els) {
   if (els.filters && (f.status || f.from)) els.filters.classList.remove("hidden");
   return f;
 }
+
+/** Чем платить — ТРИ случая, а не два.
+ *
+ * «Счёта нет» ещё не значит «есть реквизиты»: с 26.08.2026 необязательны оба,
+ * и заявка бывает пустой («оплатим по договору, документы позже»). Пока веток
+ * было две, строка списка обещала финансисту реквизиты, которых в заявке нет,
+ * — он открывал её и не находил ничего.
+ *
+ * long — для окна подробностей: там формулировки полнее.
+ */
+function sourceMark(item, long) {
+  var key = item.payment_source ||
+    (item.has_invoice ? "invoice" : (item.requisites ? "requisites" : "none"));
+  var words = long
+    ? { invoice: "📎 файл приложен", requisites: "✍️ по реквизитам",
+        none: "⚠️ ни счёта, ни реквизитов" }
+    : { invoice: "📎 счёт", requisites: "✍️ реквизиты",
+        none: "⚠️ ни счёта, ни реквизитов" };
+  return words[key] || words.none;
+}

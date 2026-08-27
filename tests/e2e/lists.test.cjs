@@ -605,3 +605,65 @@ test("ссылка из сводки «к оплате» подставляет 
   assert.deepEqual(page.errors, []);
   await page.close();
 });
+
+test("пустая заявка не обещает реквизитов ни в одном списке", async () => {
+  // Веток было две на три случая, и строка списка писала «✍️ реквизиты»
+  // там, где не приложено ни счёта, ни реквизитов.
+  const base = {
+    id: "INV-20260827-173130-5506", status: "Новая",
+    counterparty: "ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ НИЦЕВИЧ Т. В.",
+    amount: "123.00", currency: "RUB", article: "Закупка товаров",
+    urgency: "Срочно", planned_date: "27.08.2026", created_at: "2026-08-27 17:31",
+    has_invoice: false, payment_source: "none", requisites: "",
+    sender: "@x (Y)", closing_count: 0, overdue: false,
+  };
+  for (const [btn, list, route] of [
+    ["#my-btn", "#my-list", "/api/my-requests"],
+    ["#fin-btn", "#fin-req-list", "/api/finance/requests"],
+  ]) {
+    const page = await openApp(browser, { skin: "neon", routes: {
+      "/api/access": { allowed: true, pending: false, has_admins: true },
+      "/api/finance/access": { ok: true },
+      [route]: { items: [base], total_found: 1, shown: 1 },
+    } });
+    await page.evaluate((b) => document.querySelector(b).classList.remove("hidden"), btn);
+    await page.click(btn);
+    await page.waitForTimeout(400);
+    const meta = await page.evaluate((sel) => {
+      const el = [...document.querySelectorAll(sel + " .my-item .my-meta")]
+        .find((x) => x.textContent.indexOf("📂") === 0);
+      return el ? el.textContent : "(строки со статьёй нет)";
+    }, list);
+    assert.ok(!/реквизиты/.test(meta) || /ни счёта/.test(meta),
+      `${list}: обещаны реквизиты, которых нет — «${meta}»`);
+    assert.match(meta, /ни счёта, ни реквизитов/, `${list}: «${meta}»`);
+    await page.close();
+  }
+});
+
+test("заявка со счётом и заявка с реквизитами подписаны каждая своим", async () => {
+  const base = {
+    id: "INV-20260827-173130-5507", status: "Новая", counterparty: "ООО «Ромашка»",
+    amount: "123.00", currency: "RUB", article: "Аренда", urgency: "Обычная",
+    planned_date: "27.08.2026", created_at: "2026-08-27 17:31",
+    closing_count: 0, overdue: false,
+  };
+  const cases = [
+    [{ ...base, has_invoice: true, payment_source: "invoice" }, /📎 счёт/],
+    [{ ...base, has_invoice: false, payment_source: "requisites",
+       requisites: "ИНН 7707083893" }, /✍️ реквизиты/],
+  ];
+  for (const [item, expect] of cases) {
+    const page = await openApp(browser, { skin: "neon", routes: {
+      "/api/access": { allowed: true, pending: false, has_admins: true },
+      "/api/my-requests": { items: [item] },
+    } });
+    await page.click("#my-btn");
+    await page.waitForTimeout(350);
+    const meta = await page.evaluate(() =>
+      [...document.querySelectorAll("#my-list .my-item .my-meta")]
+        .find((x) => x.textContent.indexOf("📂") === 0).textContent);
+    assert.match(meta, expect, `подпись не та: «${meta}»`);
+    await page.close();
+  }
+});
