@@ -41,14 +41,21 @@
   .tour-bars i.run::after { animation: tour-bar 6.5s linear forwards; }
   @keyframes tour-bar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
+  /* Фиксированные высоты, а не min-height: сцены разной высоты двигали
+     подпись и кнопки под собой, и переход читался как рывок.
+     contain — чтобы перерисовка не выходила за сцену: вокруг лежат карточки
+     с backdrop-filter, и каждый кадр анимации заставлял бы их переблюриться. */
   .tour-stage {
-    min-height: 168px;
+    height: 176px;
+    contain: layout paint style;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 6px 0 10px;
+    animation: tour-scene .24s ease both;
   }
-  .tour-cap { min-height: 76px; }
+  @keyframes tour-scene { from { opacity: 0; } to { opacity: 1; } }
+  .tour-cap { height: 120px; contain: layout paint style; animation: tour-scene .3s ease both; }
   .tour-cap b { display: block; font-size: 15px; margin-bottom: 4px; }
   .tour-cap span { font-size: 13px; color: var(--hint); line-height: 1.45; }
 
@@ -70,7 +77,12 @@
   .tour.paused * { animation-play-state: paused !important; }
 
   /* ---------- Появление элементов сцены ---------- */
-  .tour-stage .fx { opacity: 0; animation: tour-in .45s ease forwards var(--d, 0s); }
+  /* Только opacity и transform — их считает композитор, без раскладки.
+     Кривая мягче линейной: элемент притормаживает в конце, а не втыкается. */
+  .tour-stage .fx {
+    opacity: 0;
+    animation: tour-in .5s cubic-bezier(.22, .8, .3, 1) forwards var(--d, 0s);
+  }
   @keyframes tour-in {
     from { opacity: 0; transform: translateY(7px); }
     to { opacity: 1; transform: none; }
@@ -100,15 +112,15 @@
   .t-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .t-row span { font-size: 12px; color: var(--hint); }
   .t-row b { font-size: 13px; display: flex; gap: 5px; align-items: center; }
-  /* Печать по символам: ширина, а не opacity, — иначе текст «проявляется»
-     целиком и не читается как ввод. */
+  /* Печать по символам открытием маски, а НЕ шириной: ширина — это
+     раскладка на каждом шаге (замерено: 13 пересчётов против одного), и
+     соседняя строка ехала вместе с текстом. clip-path считает композитор. */
   .t-type {
-    overflow: hidden;
     white-space: nowrap;
-    width: 0;
+    clip-path: inset(0 100% 0 0);
     animation: tour-type 1.1s steps(13) forwards var(--d, 0s);
   }
-  @keyframes tour-type { to { width: 6.7em; } }
+  @keyframes tour-type { to { clip-path: inset(0 0 0 0); } }
   .t-hint { color: var(--ok); }
   .t-pill {
     font-style: normal;
@@ -203,6 +215,6 @@
     color: var(--accent-text);
   }
   /* Подсвечиваем по очереди — глаз идёт за тем, о чём говорит подпись. */
-  .t-act-1 { animation: tour-beat 1.6s ease 1s 2; }
-  .t-act-2 { animation: tour-beat 1.6s ease 2.6s 2; }
-  @keyframes tour-beat { 40% { transform: scale(1.07); } }
+  .t-act-1 { animation: tour-beat 1.8s cubic-bezier(.22, .8, .3, 1) 1.1s 2; }
+  .t-act-2 { animation: tour-beat 1.8s cubic-bezier(.22, .8, .3, 1) 3.1s 2; }
+  @keyframes tour-beat { 40% { transform: scale(1.06); } }

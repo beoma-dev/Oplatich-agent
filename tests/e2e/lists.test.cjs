@@ -795,3 +795,61 @@ test("текстовая инструкция остаётся и вместе �
   }
   await page.close();
 });
+
+test("живая инструкция не двигает раскладку и не прыгает в высоте", async () => {
+  // Печать суммы анимировала width — это пересчёт раскладки на каждом шаге
+  // (13 против одного), а вокруг лежат карточки с backdrop-filter, которым
+  // каждый такой пересчёт стоит переблюра. Теперь только clip-path.
+  const page = await openApp(browser, { skin: "light", width: 360, height: 900, routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true, animated_help: true },
+  } });
+  await page.click("#help-btn");
+  await page.waitForTimeout(400);
+
+  const heights = [];
+  const capsFit = [];
+  for (let i = 0; i < 5; i++) {
+    const r = await page.evaluate(() => {
+      const t = document.getElementById("tour");
+      const c = t.querySelector(".tour-cap");
+      return {
+        h: Math.round(t.getBoundingClientRect().height),
+        fits: c.scrollHeight <= c.clientHeight + 1,
+      };
+    });
+    heights.push(r.h);
+    capsFit.push(r.fits);
+    if (i < 4) {
+      await page.evaluate(() => {
+        const b = document.querySelectorAll("#tour .tour-nav");
+        b[b.length - 1].click();
+      });
+      await page.waitForTimeout(120);
+    }
+  }
+  // Высота не должна гулять: иначе подпись и кнопки под сценой дёргаются.
+  assert.ok(Math.max(...heights) - Math.min(...heights) <= 2,
+    `тур меняет высоту между шагами: ${heights.join("/")}`);
+  assert.deepEqual(capsFit, [true, true, true, true, true], "подпись обрезана");
+
+  // Ни одна анимация сцены не трогает свойства, вызывающие раскладку.
+  const bad = await page.evaluate(() => {
+    const out = [];
+    for (const sheet of document.styleSheets) {
+      let rules;
+      try { rules = sheet.cssRules; } catch (e) { continue; }
+      for (const rule of rules) {
+        if (!(rule instanceof CSSKeyframesRule) || rule.name.indexOf("tour") !== 0) continue;
+        for (const frame of rule.cssRules) {
+          ["width", "height", "top", "left", "margin", "padding"].forEach((prop) => {
+            if (frame.style.getPropertyValue(prop)) out.push(rule.name + " → " + prop);
+          });
+        }
+      }
+    }
+    return out;
+  });
+  assert.deepEqual(bad, [], `анимация двигает раскладку: ${bad.join(", ")}`);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});

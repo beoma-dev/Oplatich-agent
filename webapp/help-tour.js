@@ -137,9 +137,16 @@ function helpTour(enabled) {
     // Разметка сцен — свои строки из этого файла, данных пользователя в них
     // нет; иначе здесь был бы textContent.
     stage.innerHTML = step.html;
-    stage.className = "tour-stage s" + (i + 1);
     capTitle.textContent = step.title;
     capText.textContent = step.text;
+    // Перезапуск проявления сцены и подписи: без этого смена шага была
+    // подменой содержимого в один кадр и читалась рывком. Чтение offsetWidth
+    // — та самая принудительная перерисовка, ради которой оно и написано.
+    stage.className = "tour-stage";
+    cap.style.animation = "none";
+    void stage.offsetWidth;
+    stage.className = "tour-stage s" + (i + 1);
+    cap.style.animation = "";
     [].forEach.call(bars.children, function (bar, n) {
       bar.className = n < i ? "done" : (n === i ? "run" : "");
     });
