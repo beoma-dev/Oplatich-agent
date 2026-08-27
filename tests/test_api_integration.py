@@ -1768,3 +1768,6 @@ class TestClosingDocuments:
         sent = " ".join(str(c.kwargs.get("text", "")) for c in bot.send_message.await_args_list)
         assert "Закрывающие документы" in sent
         assert rid in sent
+        # Ссылки на каждый документ не перечисляем: безымянные «документ 1,
+        # 2, 3» ничего не говорили, а открывают их из строки реестра.
+        assert "документ 1" not in sent, sent

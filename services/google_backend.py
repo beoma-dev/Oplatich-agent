@@ -399,6 +399,9 @@ def append_invoice_sync(request: InvoiceRequest) -> int:
     m = re.search(r"[A-Z]+(\d+)", cell_ref)
     row = int(m.group(1)) if m else 0
     number = max(row - 1, 1)  # минус строка заголовков
+    if request.extra_files:
+        _apply_link_runs(row, "Дополнительные документы",
+                         "\n".join(request.extra_files))
     log.info("Заявка %s записана в Google Sheets (№%s)", request.request_id, number)
     return number
 
@@ -457,6 +460,54 @@ def _all_rows_sync() -> list[list[str]]:
     return [list(row) + [""] * (width - len(row)) for row in values]
 
 
+# Колонки, где в одной ячейке лежит НЕСКОЛЬКО ссылок через перенос строки.
+LINK_COLUMNS = ("Дополнительные документы", "Закрывающие документы")
+
+
+def _link_runs(text: str) -> list[dict]:
+    """Разметка «каждая строка — своя ссылка» для ячейки с несколькими URL.
+
+    Sheets сам делает ссылку кликабельной, только если ВСЯ ячейка — один URL
+    (проверено: «Ссылка на счет» получает hyperlink, а две ссылки через \n —
+    уже нет). Ставить формулу =HYPERLINK нельзя: она требует USER_ENTERED,
+    а он в этом реестре запрещён — через него пользовательский текст стал бы
+    формулой. Поэтому размечаем текст напрямую: каждому куску свой link.
+    """
+    runs: list[dict] = []
+    offset = 0
+    for line in text.split("\n"):
+        stripped = line.strip()
+        run: dict = {"startIndex": offset, "format": {}}
+        if stripped.startswith("http://") or stripped.startswith("https://"):
+            run["format"] = {"link": {"uri": stripped}, "underline": True}
+        runs.append(run)
+        offset += len(line) + 1          # +1 на сам перенос строки
+    return runs
+
+
+def _apply_link_runs(row_number: int, header: str, text: str) -> None:
+    """Делает ссылки в ячейке кликабельными. Сбой не отменяет саму запись."""
+    if header not in LINK_COLUMNS or not text.strip():
+        return
+    sheet_id = _target_sheet()[0]
+    column = SHEET_HEADERS.index(header)
+    try:
+        _sheets().spreadsheets().batchUpdate(
+            spreadsheetId=settings.google_sheet_id,
+            body={"requests": [{"updateCells": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": row_number - 1, "endRowIndex": row_number,
+                    "startColumnIndex": column, "endColumnIndex": column + 1,
+                },
+                "rows": [{"values": [{"textFormatRuns": _link_runs(text)}]}],
+                "fields": "textFormatRuns",
+            }}]},
+        ).execute()
+    except Exception:  # noqa: BLE001 — ссылки уже в ячейке, кликабельность вторична
+        log.exception("Не удалось сделать ссылки кликабельными в «%s»", header)
+
+
 def set_cell_sync(request_id: str, header: str, value: str) -> dict[str, str] | None:
     """Меняет ОДНУ ячейку по ID заявки и имени колонки. None — заявки нет."""
     if header not in SHEET_HEADERS:
@@ -478,6 +529,7 @@ def set_cell_sync(request_id: str, header: str, value: str) -> dict[str, str] | 
                 valueInputOption="RAW",
                 body={"values": [[value]]},
             ).execute()
+            _apply_link_runs(row_number, header, value)
             log.info("Заявка %s: колонка «%s» обновлена", request_id, header)
             return get_request_sync(request_id)
     return None

@@ -233,3 +233,36 @@ def test_missing_gid_refuses_instead_of_guessing(svc, sheets, monkeypatch, tmp_p
         gb.append_invoice_sync(make_request())
     sheets.append.assert_not_called()
     sheets.update.assert_not_called()
+
+
+def test_several_links_in_one_cell_are_made_clickable(svc, sheets, tmp_paths):
+    """Sheets сам делает ссылку кликабельной, только если ВСЯ ячейка — один URL.
+
+    Проверено на боевой таблице: «Ссылка на счет» получает hyperlink, а две
+    ссылки через перенос строки — уже нет, и человек копирует их руками.
+    Формулу =HYPERLINK поставить нельзя: она требует USER_ENTERED, а он тут
+    запрещён — через него пользовательский текст стал бы формулой. Поэтому
+    размечаем текст напрямую.
+    """
+    sheets.get.return_value.execute.return_value = {"values": [["INV-1"]]}
+    gb.set_cell_sync("INV-1", "Закрывающие документы",
+                     "https://drive.google.com/a\nhttps://drive.google.com/b")
+
+    batch = svc.spreadsheets.return_value.batchUpdate
+    assert batch.called, "разметка ссылок не отправлена"
+    cell = batch.call_args.kwargs["body"]["requests"][0]["updateCells"]
+    assert cell["fields"] == "textFormatRuns", "правим только разметку, не значение"
+    runs = cell["rows"][0]["values"][0]["textFormatRuns"]
+    assert [r["format"]["link"]["uri"] for r in runs] == [
+        "https://drive.google.com/a", "https://drive.google.com/b",
+    ]
+    # Вторая ссылка начинается после первой и переноса строки.
+    assert runs[1]["startIndex"] == len("https://drive.google.com/a") + 1
+
+
+def test_plain_columns_are_not_touched_by_link_markup(svc, sheets, tmp_paths):
+    """Разметку получают только колонки со ссылками — не «Комментарий»."""
+    sheets.get.return_value.execute.return_value = {"values": [["INV-1"]]}
+    svc.spreadsheets.return_value.batchUpdate.reset_mock()
+    gb.set_cell_sync("INV-1", "Комментарий", "https://example.org и текст")
+    assert not svc.spreadsheets.return_value.batchUpdate.called

@@ -130,13 +130,14 @@ async def closing_docs_notify(
     """
     e = html.escape
     author = f"@{who}" if who else "автор"
+    # Ссылки на каждый документ НЕ перечисляем: в сообщении они были
+    # безымянными («документ 1, 2, 3») и ничего не говорили, а открывать их
+    # всё равно удобнее из строки реестра, где виден и сам платёж.
     text = (
         f"📄 <b>Закрывающие документы</b>\n"
         f"{e(author)} приложил {len(links)} шт. к заявке {e(request_id)}.\n"
         f"🏢 {e(_clip(row.get('Контрагент', '—'), 120))} · "
-        f"{e(row.get('Сумма', '—'))} {e(row.get('Валюта', ''))}\n"
-        + "\n".join(f'<a href="{e(u)}">документ {i}</a>'
-                     for i, u in enumerate(links, start=1))
+        f"{e(row.get('Сумма', '—'))} {e(row.get('Валюта', ''))}"
     )
     delivered = 0
     for chat_id in resolved_finance_ids():
