@@ -8,11 +8,16 @@
  * потолка. Наружу отдаёт одну функцию — «добавь кнопку в этот ряд действий».
  */
 function closingButton(actions, item, ctx) {
+  // Закрывающие приходят ПОСЛЕ оплаты, поэтому на неоплаченной заявке
+  // кнопка только занимала место в ряду. Уже приложенные показываем при
+  // любом статусе: иначе к ним не вернуться, если статус потом поменяли.
+  if (item.status !== "Оплачена" && !Number(item.closing_count || 0)) return;
+
   var btn = document.createElement("button");
   btn.type = "button";
   btn.className = "add-btn btn-ghost";
   var already = Number(item.closing_count || 0);
-  btn.textContent = "📄 Закрывающие" + (already ? " (" + already + ")" : "");
+  btn.textContent = "📄 Акт / УПД" + (already ? " (" + already + ")" : "");
   btn.title = "Приложить акт, УПД или накладную к этой заявке";
 
   var input = document.createElement("input");
@@ -54,7 +59,7 @@ function closingButton(actions, item, ctx) {
       .then(function () {
         btn.disabled = false;
         btn.style.opacity = "";
-        btn.textContent = "📄 Закрывающие" + (already ? " (" + already + ")" : "");
+        btn.textContent = "📄 Акт / УПД" + (already ? " (" + already + ")" : "");
       });
   });
 

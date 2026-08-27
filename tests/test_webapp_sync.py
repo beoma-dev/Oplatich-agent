@@ -884,7 +884,8 @@ def test_split_files_stay_reasonably_small():
                         ("alerts-panel.js", 330), ("restore-panel.js", 200),
                         ("reminders-panel.js", 200),
                         ("maint-panel.js", 150),
-                        ("closing-panel.js", 150)):
+                        ("closing-panel.js", 150),
+                        ("nudge-panel.js", 100)):
         length = len(_read(name).split("\n"))
         assert length <= limit, f"{name}: {length} строк — пора делить дальше"
 

@@ -155,6 +155,55 @@ async def closing_docs_notify(
     return delivered
 
 
+async def overdue_nudge(
+    bot: Bot,
+    request_id: str,
+    row: dict[str, str],
+    who: str | None,
+    days: int,
+) -> int:
+    """Автор напоминает финансистам, что его заявка просрочена.
+
+    Не дубль планировщика: тот шлёт сводку в назначенный час по ВСЕМ
+    просроченным сразу, и одна конкретная заявка теряется в списке —
+    особенно если получатель настроил себе редкие напоминания или отключил
+    их вовсе. Здесь просит человек и про свой платёж, поэтому сообщение
+    идёт всем получателям и мимо настроек напоминаний.
+
+    Кнопки статуса под сообщением те же, что у карточки: напоминание без
+    возможности тут же поставить «Оплачено» заставляло бы искать исходную
+    карточку, которой месяц.
+    """
+    e = html.escape
+    author = f"@{who}" if who else "автор"
+    plural = "день" if days % 10 == 1 and days % 100 != 11 else (
+        "дня" if 2 <= days % 10 <= 4 and not 12 <= days % 100 <= 14 else "дней"
+    )
+    text = (
+        f"⏰ <b>Напоминание от автора</b>\n"
+        f"{e(author)} ждёт оплату по заявке {e(request_id)} — "
+        f"просрочка {days} {plural}.\n"
+        f"🏢 {e(_clip(row.get('Контрагент', '—'), 120))} · "
+        f"<b>{e(row.get('Сумма', '—'))} {e(row.get('Валюта', ''))}</b>\n"
+        f"📅 Плановая дата: {e(row.get('Плановая дата оплаты', '—'))}"
+    )
+    keyboard = build_status_keyboard(request_id)
+    delivered = 0
+    for chat_id in resolved_finance_ids():
+        try:
+            await tg_retry.send_with_retry(
+                lambda cid=chat_id: bot.send_message(
+                    chat_id=cid, text=text, parse_mode=ParseMode.HTML,
+                    reply_markup=keyboard, disable_web_page_preview=True,
+                ),
+                what=f"Напоминание о просрочке для {chat_id}",
+            )
+            delivered += 1
+        except Exception:  # noqa: BLE001 — остальным получателям всё равно шлём
+            log.warning("Не удалось напомнить финансисту %s о просрочке", chat_id)
+    return delivered
+
+
 def recipients_for(request: InvoiceRequest) -> list[int]:
     """Кому эта заявка уйдёт карточкой — с учётом личного фильтра срочности.
 

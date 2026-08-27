@@ -1525,6 +1525,14 @@
           initData: initData, showMsg: showMyMsg, reload: loadMy
         });
       }
+      // Напоминание о просрочке — в nudge-panel.js. Показывается только у
+      // просроченной заявки, поэтому с «Актом / УПД» в ряду не встречается:
+      // просрочена = ещё не оплачена.
+      if (typeof nudgeButton === "function") {
+        nudgeButton(actions, it, {
+          initData: initData, showMsg: showMyMsg, confirm: askConfirm
+        });
+      }
 
       if (it.status === "Новая") {
         // Правка = отзыв прежней заявки + перенос полей в форму: менять

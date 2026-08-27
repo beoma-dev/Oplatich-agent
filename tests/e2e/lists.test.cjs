@@ -134,7 +134,7 @@ test("к своей заявке можно приложить закрываю�
 
   const btn = await page.evaluate(() => {
     const b = [...document.querySelectorAll("#my-list .my-actions button")]
-      .find((x) => /Закрывающие/.test(x.textContent));
+      .find((x) => /Акт \/ УПД/.test(x.textContent));
     return b ? b.textContent.trim() : null;
   });
   assert.ok(btn, "кнопки закрывающих документов нет");
@@ -167,7 +167,7 @@ test("на кнопке видно, сколько документов уже �
   await page.waitForTimeout(400);
   const label = await page.evaluate(() => {
     const b = [...document.querySelectorAll("#my-list .my-actions button")]
-      .find((x) => /Закрывающие/.test(x.textContent));
+      .find((x) => /Акт \/ УПД/.test(x.textContent));
     return b ? b.textContent.trim() : null;
   });
   assert.match(label || "", /\(2\)/, "счётчик на кнопке не показан");
@@ -175,43 +175,123 @@ test("на кнопке видно, сколько документов уже �
 });
 
 test("ряд кнопок заявки помещается и не обрезается", async () => {
-  // «Повторить» убрана, «Закрывающие документы» добавлены — надпись длинная,
-  // и с прежними размерами кнопок ряд разъезжался.
-  const item = {
-    id: "INV-20260701-120000-0003", status: "Новая", counterparty: "ООО «Ромашка»",
-    amount: "1000.00", currency: "RUB", article: "Аренда", urgency: "Обычная",
-    planned_date: "05.07.2026", created_at: "2026-07-01 12:00", has_invoice: true,
-    payment_source: "invoice", closing_count: 0, overdue: false,
+  // Раньше кнопки делились на равные доли: длинная надпись переносилась
+  // внутри кнопки, а одинокая кнопка на второй строке растягивалась на всю
+  // ширину — 294px при экране в 360. Проверяем оба ряда, которые бывают:
+  // просроченная «Новая» — самый длинный (три кнопки), «Оплачена» — та,
+  // где живут закрывающие.
+  const base = {
+    counterparty: "ООО «Ромашка»", amount: "1000.00", currency: "RUB",
+    article: "Аренда", urgency: "Обычная", planned_date: "05.07.2026",
+    created_at: "2026-07-01 12:00", has_invoice: true,
+    payment_source: "invoice", closing_count: 0,
   };
-  for (const width of [360, 390, 430]) {
-    const page = await openApp(browser, { skin: "neon", width, routes: {
-      "/api/access": { allowed: true, pending: false, has_admins: true },
-      "/api/my-requests": { items: [item] },
-    } });
-    await page.click("#my-btn");
-    await page.waitForTimeout(350);
-    const r = await page.evaluate(() => {
-      const btns = [...document.querySelectorAll("#my-list .my-actions button")];
-      return {
-        labels: btns.map((b) => b.textContent.trim()),
-        clipped: btns.filter((b) => b.scrollWidth > b.clientWidth + 1)
-          .map((b) => b.textContent.trim()),
-        widths: btns.map((b) => Math.round(b.getBoundingClientRect().width)),
-        multiline: btns.filter((b) => b.getBoundingClientRect().height > 34)
-          .map((b) => b.textContent.trim()),
-      };
-    });
-    assert.deepEqual(r.clipped, [], `на ${width}px надписи обрезаны`);
-    assert.ok(r.labels.some((x) => /Закрывающие/.test(x)),
-      `на ${width}px нет кнопки закрывающих`);
-    // Кнопки по ширине надписи: раньше они делились на равные доли, длинный
-    // текст переносился внутри кнопки, а одинокая кнопка на второй строке
-    // растягивалась на всю ширину — 294px при экране в 360.
-    assert.ok(r.widths.every((x) => x < width * 0.6),
-      `на ${width}px кнопка растянулась: ${r.widths.join("/")}`);
-    assert.deepEqual(r.multiline, [], `на ${width}px надпись перенеслась внутри кнопки`);
-    assert.ok(!r.labels.some((x) => /Повторить/.test(x)),
-      `на ${width}px «Повторить» вернулась`);
-    await page.close();
+  const cases = [
+    { item: { ...base, id: "INV-20260701-120000-0003", status: "Новая", overdue: true },
+      expect: /Напомнить/ },
+    { item: { ...base, id: "INV-20260701-120000-0004", status: "Оплачена", overdue: false },
+      expect: /Акт \/ УПД/ },
+  ];
+  for (const { item, expect } of cases) {
+    for (const width of [360, 390, 430]) {
+      const page = await openApp(browser, { skin: "neon", width, routes: {
+        "/api/access": { allowed: true, pending: false, has_admins: true },
+        "/api/my-requests": { items: [item] },
+      } });
+      await page.click("#my-btn");
+      await page.waitForTimeout(350);
+      const r = await page.evaluate(() => {
+        const btns = [...document.querySelectorAll("#my-list .my-actions button")];
+        return {
+          labels: btns.map((b) => b.textContent.trim()),
+          clipped: btns.filter((b) => b.scrollWidth > b.clientWidth + 1)
+            .map((b) => b.textContent.trim()),
+          widths: btns.map((b) => Math.round(b.getBoundingClientRect().width)),
+          multiline: btns.filter((b) => b.getBoundingClientRect().height > 34)
+            .map((b) => b.textContent.trim()),
+        };
+      });
+      const where = `${item.status}/${width}px`;
+      assert.deepEqual(r.clipped, [], `на ${where} надписи обрезаны`);
+      assert.ok(r.labels.some((x) => expect.test(x)),
+        `на ${where} нет ожидаемой кнопки: ${r.labels.join("/")}`);
+      // Кнопки по ширине надписи, а не по равным долям ряда.
+      assert.ok(r.widths.every((x) => x < width * 0.6),
+        `на ${where} кнопка растянулась: ${r.widths.join("/")}`);
+      assert.deepEqual(r.multiline, [], `на ${where} надпись перенеслась внутри кнопки`);
+      assert.ok(!r.labels.some((x) => /Повторить/.test(x)),
+        `на ${where} «Повторить» вернулась`);
+      await page.close();
+    }
   }
 });
+
+test("закрывающие не предлагаются, пока заявка не оплачена", async () => {
+  // Акт приходит ПОСЛЕ оплаты. На «Новой» кнопка только занимала место
+  // в ряду — а место там пересчитано под три кнопки, не под четыре.
+  const page = await openApp(browser, { skin: "neon", routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true },
+    "/api/my-requests": { items: [{
+      id: "INV-20260701-120000-0005", status: "Новая", counterparty: "ООО «Ромашка»",
+      amount: "1000.00", currency: "RUB", article: "Аренда", urgency: "Обычная",
+      planned_date: "05.07.2026", created_at: "2026-07-01 12:00", has_invoice: true,
+      payment_source: "invoice", closing_count: 0, overdue: false,
+    }] },
+  } });
+  await page.click("#my-btn");
+  await page.waitForTimeout(350);
+  const labels = await page.evaluate(() =>
+    [...document.querySelectorAll("#my-list .my-actions button")].map((b) => b.textContent.trim()));
+  assert.ok(!labels.some((x) => /Акт/.test(x)), `кнопка акта на новой заявке: ${labels.join("/")}`);
+  // …но если документы уже приложены, кнопка остаётся при любом статусе:
+  // иначе к ним не вернуться, когда статус поменяли после загрузки.
+  await page.close();
+});
+
+test("напомнить о просрочке может только автор просроченной заявки", async () => {
+  const base = {
+    counterparty: "ООО «Ромашка»", amount: "1000.00", currency: "RUB",
+    article: "Аренда", urgency: "Обычная", planned_date: "05.07.2026",
+    created_at: "2026-07-01 12:00", has_invoice: true,
+    payment_source: "invoice", closing_count: 0, status: "Новая",
+  };
+  const page = await openApp(browser, { skin: "neon", routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true },
+    "/api/my-requests": { items: [
+      { ...base, id: "INV-20260701-120000-0006", overdue: true },
+      { ...base, id: "INV-20260701-120000-0007", overdue: false },
+    ] },
+    "/api/my/nudge": { ok: true, message: "Напомнили: получателей — 2." },
+  } });
+  await page.click("#my-btn");
+  await page.waitForTimeout(400);
+
+  const perRow = await page.evaluate(() =>
+    [...document.querySelectorAll("#my-list .my-item")].map((row) =>
+      [...row.querySelectorAll(".my-actions button")].map((b) => b.textContent.trim())));
+  assert.equal(perRow.length, 2, "заявок в списке не две");
+  assert.ok(perRow[0].some((x) => /Напомнить/.test(x)), "у просроченной нет напоминания");
+  assert.ok(!perRow[1].some((x) => /Напомнить/.test(x)), "напоминание у непросроченной");
+
+  // Сообщение уходит всем финансистам, поэтому спрашиваем подтверждение.
+  await page.evaluate(() => {
+    [...document.querySelectorAll("#my-list .my-actions button")]
+      .find((b) => /Напомнить/.test(b.textContent)).click();
+  });
+  await page.waitForTimeout(200);
+  assert.equal(
+    await page.evaluate(() => window.__posts.filter((p) => p[0].indexOf("/api/my/nudge") !== -1).length),
+    0, "запрос ушёл без подтверждения");
+  await page.evaluate(() => {
+    [...document.querySelectorAll("#modal-actions button")]
+      .find((b) => /Напомнить/.test(b.textContent)).click();
+  });
+  await page.waitForTimeout(400);
+  const post = await page.evaluate(() =>
+    window.__posts.filter((p) => p[0].indexOf("/api/my/nudge") !== -1).pop());
+  assert.ok(post, "запрос не ушёл");
+  assert.match(String(post[1]), /INV-20260701-120000-0006/, "напомнили не по той заявке");
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+

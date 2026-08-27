@@ -1,4 +1,4 @@
-"""Служебные пометки к заявке: причина смены статуса.
+"""Служебные пометки к заявке: причина смены статуса, отметка о напоминании.
 
 Причина живёт не в реестре (порядок колонок реестра — по ТЗ и менять его
 нельзя), а рядом, в той же SQLite, что аудит/дедуп/карточки. Нужна, чтобы
@@ -34,6 +34,14 @@ def _connect() -> sqlite3.Connection:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS request_nudges (
+            request_id TEXT PRIMARY KEY,
+            ts REAL NOT NULL
+        )
+        """
+    )
     return conn
 
 
@@ -58,6 +66,51 @@ def reasons_for_sync(request_ids: list[str]) -> dict[str, str]:
             request_ids,
         ).fetchall()
     return dict(rows)
+
+
+def claim_nudge_sync(request_id: str, interval: float, now: float | None = None) -> float:
+    """Занимает право напомнить по заявке. 0 — можно, иначе сколько ждать.
+
+    Отметка живёт в БД, а не в памяти процесса: перезапуск бота не должен
+    открывать окно для второго напоминания подряд, а перезапускается он
+    при каждом деплое.
+
+    Проверка и отметка — одним запросом в одной транзакции: два нажатия
+    подряд (палец дрогнул, сеть переспросила) иначе оба увидели бы, что
+    напоминаний ещё не было, и финансист получил бы дубль.
+    """
+    stamp = time.time() if now is None else now
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT ts FROM request_nudges WHERE request_id = ?", (request_id,)
+        ).fetchone()
+        if row is not None:
+            left = float(row[0]) + interval - stamp
+            if left > 0:
+                return left
+        conn.execute(
+            "INSERT OR REPLACE INTO request_nudges (request_id, ts) VALUES (?, ?)",
+            (request_id, stamp),
+        )
+    return 0.0
+
+
+def forget_nudge_sync(request_id: str) -> None:
+    """Снимает отметку — на случай, если разослать не удалось никому."""
+    with _connect() as conn:
+        conn.execute("DELETE FROM request_nudges WHERE request_id = ?", (request_id,))
+
+
+async def claim_nudge(request_id: str, interval: float) -> float:
+    return await asyncio.to_thread(claim_nudge_sync, request_id, interval)
+
+
+async def forget_nudge(request_id: str) -> None:
+    try:
+        await asyncio.to_thread(forget_nudge_sync, request_id)
+    except Exception:  # noqa: BLE001 — отметка вторична
+        log.exception("Не удалось снять отметку о напоминании по %s", request_id)
 
 
 async def save_reason(request_id: str, status: str, reason: str, actor: str) -> None:

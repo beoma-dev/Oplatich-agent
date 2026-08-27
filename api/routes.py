@@ -60,7 +60,7 @@ from services.access_requests import request_access
 from services.deletion import delete_request as delete_request_service
 from services.intake import finalize_submission
 from services.local_storage import build_extra_filename, build_invoice_filename
-from services.notifier import closing_docs_notify
+from services.notifier import closing_docs_notify, overdue_nudge
 from services.reminders import PENDING_STATUSES
 from services.reminders import SCAN_LIMIT as REMINDER_SCAN_LIMIT
 from services.reminders import send_to as send_reminder_to
@@ -504,6 +504,77 @@ async def my_withdraw(request: Request) -> dict:
         actor_name=f"@{username}" if username else str(user["id"]),
     )
     return {"ok": ok, "message": message}
+
+
+# Как часто автор может напомнить по ОДНОЙ заявке. Шесть часов, а не сутки:
+# внутри рабочего дня уместно поторопить утром и ещё раз к вечеру, но не
+# чаще — иначе кнопка превращается в способ забрасывать бухгалтерию.
+NUDGE_INTERVAL_SECONDS = 6 * 3600
+
+
+@router.post("/my/nudge")
+async def my_nudge(request: Request) -> dict:
+    """Напоминание финансистам о просрочке по своей заявке: {"request_id": …}.
+
+    Автор видит, что срок прошёл, а денег нет, — и до сих пор мог только
+    писать финансисту лично, мимо бота. Теперь просьба уходит всем
+    получателям, с кнопками статуса, и попадает в аудит.
+
+    «Просрочена» проверяется на сервере: признак вычисляемый, и доверять
+    тому, что прислало приложение, нельзя — иначе напоминание можно было
+    бы слать по любой заявке.
+    """
+    user = await _authorized_user(request)
+    body = await request.json()
+    request_id = str(body.get("request_id", "")).strip()
+    if not REQUEST_ID_RE.fullmatch(request_id):
+        raise HTTPException(status_code=422, detail="Некорректный идентификатор заявки.")
+
+    row = await storage.get_request(request_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Заявка не найдена в реестре.")
+    if row.get("Telegram ID", "") != str(user["id"]) and not await is_bot_admin(
+        request.app.state.bot, user["id"]
+    ):
+        await audit.log_event(
+            audit.WITHDRAW_DENIED, user["id"], user.get("username"),
+            f"{request_id}: чужая заявка, напоминание о просрочке",
+        )
+        raise HTTPException(status_code=403, detail="Напомнить можно только по своей заявке.")
+    if not _is_overdue(row):
+        raise HTTPException(
+            status_code=422,
+            detail="Срок оплаты ещё не прошёл — напоминать пока не о чем.",
+        )
+
+    left = await request_meta.claim_nudge(request_id, NUDGE_INTERVAL_SECONDS)
+    if left > 0:
+        hours = max(1, round(left / 3600))
+        raise HTTPException(
+            status_code=429,
+            detail=f"По этой заявке уже напомнили. Следующее — через {hours} ч.",
+        )
+
+    planned = _parse_registry_date(row.get("Плановая дата оплаты", ""))
+    days = (datetime.now(ZoneInfo(settings.timezone)).date() - planned).days
+    delivered = await overdue_nudge(
+        request.app.state.bot, request_id, row, user.get("username"), days
+    )
+    if not delivered:
+        # Никому не дошло — отметку снимаем, иначе человек шесть часов
+        # думал бы, что напоминание ушло.
+        await request_meta.forget_nudge(request_id)
+        raise HTTPException(
+            status_code=502, detail="Не удалось доставить напоминание. Попробуйте позже."
+        )
+    await audit.log_event(
+        audit.REQUEST_SUBMITTED, user["id"], user.get("username"),
+        f"{request_id}: напоминание о просрочке ({days} дн.), получателей {delivered}",
+    )
+    return {
+        "ok": True,
+        "message": f"Напомнили: получателей — {delivered}.",
+    }
 
 
 CLOSING_HEADER = "Закрывающие документы"

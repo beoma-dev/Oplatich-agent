@@ -1771,3 +1771,118 @@ class TestClosingDocuments:
         # Ссылки на каждый документ не перечисляем: безымянные «документ 1,
         # 2, 3» ничего не говорили, а открывают их из строки реестра.
         assert "документ 1" not in sent, sent
+
+
+class TestOverdueNudge:
+    """Автор напоминает финансистам, что его заявка просрочена.
+
+    Планировщик шлёт сводку по всем просроченным сразу, и одна заявка в ней
+    теряется; здесь просит человек и про свой конкретный платёж.
+    """
+
+    async def _overdue(
+        self, client, monkeypatch, when: str = "01.01.2020", who: str = "ООО «Ромашка»"
+    ) -> str:
+        _allow(monkeypatch)
+        resp = await client.post(
+            "/api/invoice", data=_form(counterparty=who), headers=_auth()
+        )
+        assert resp.status_code == 200, resp.text
+        rid = resp.json()["request_id"]
+        # Просрочку не подать через форму — валидатор не пустит прошедшую
+        # дату. Двигаем её в реестре, как двигает её само время.
+        await routes_mod.storage.set_request_field(rid, "Плановая дата оплаты", when)
+        return rid
+
+    async def test_financiers_get_the_reminder_with_status_buttons(self, api, monkeypatch):
+        from services import notifier
+
+        client, bot = api
+        rid = await self._overdue(client, monkeypatch)
+        monkeypatch.setattr(notifier, "resolved_finance_ids", lambda: [555, 556])
+        bot.send_message.reset_mock()
+
+        resp = await client.post("/api/my/nudge", json={"request_id": rid}, headers=_auth())
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["ok"] is True
+
+        calls = bot.send_message.await_args_list
+        assert [c.kwargs["chat_id"] for c in calls] == [555, 556]
+        text = str(calls[0].kwargs["text"])
+        assert rid in text and "просрочка" in text
+        # Кнопки статуса под напоминанием: искать карточку месячной
+        # давности, чтобы поставить «Оплачено», человек не должен.
+        assert calls[0].kwargs.get("reply_markup") is not None
+
+    async def test_not_overdue_yet_is_refused(self, api, monkeypatch):
+        """Иначе кнопкой можно было бы дёргать по любой заявке."""
+        client, _ = api
+        _allow(monkeypatch)
+        resp = await client.post("/api/invoice", data=_form(), headers=_auth())
+        rid = resp.json()["request_id"]
+        resp = await client.post("/api/my/nudge", json={"request_id": rid}, headers=_auth())
+        assert resp.status_code == 422
+
+    async def test_paid_request_is_not_overdue(self, api, monkeypatch):
+        """Просрочка — это «срок прошёл И всё ещё ждёт»."""
+        client, _ = api
+        rid = await self._overdue(client, monkeypatch)
+        await routes_mod.storage.set_request_field(rid, "Статус оплаты", "Оплачена")
+        resp = await client.post("/api/my/nudge", json={"request_id": rid}, headers=_auth())
+        assert resp.status_code == 422
+
+    async def test_second_nudge_within_the_window_is_refused(self, api, monkeypatch):
+        """Кнопка не должна превращаться в способ забрасывать бухгалтерию."""
+        from services import notifier
+
+        client, _ = api
+        rid = await self._overdue(client, monkeypatch)
+        monkeypatch.setattr(notifier, "resolved_finance_ids", lambda: [555])
+        assert (await client.post(
+            "/api/my/nudge", json={"request_id": rid}, headers=_auth()
+        )).status_code == 200
+        again = await client.post("/api/my/nudge", json={"request_id": rid}, headers=_auth())
+        assert again.status_code == 429
+        assert "через" in again.json()["detail"]
+
+    async def test_another_request_is_not_blocked_by_the_window(self, api, monkeypatch):
+        """Окно на заявку, а не на человека: просрочек может быть несколько."""
+        from services import notifier
+
+        client, _ = api
+        first = await self._overdue(client, monkeypatch)
+        monkeypatch.setattr(notifier, "resolved_finance_ids", lambda: [555])
+        await client.post("/api/my/nudge", json={"request_id": first}, headers=_auth())
+        second = await self._overdue(client, monkeypatch, who="ООО «Василёк»")
+        resp = await client.post("/api/my/nudge", json={"request_id": second}, headers=_auth())
+        assert resp.status_code == 200, resp.text
+
+    async def test_someone_elses_request_is_refused(self, api, monkeypatch):
+        client, _ = api
+        rid = await self._overdue(client, monkeypatch)
+        _allow(monkeypatch, "42,77")
+        resp = await client.post("/api/my/nudge", json={"request_id": rid}, headers=_auth(77))
+        assert resp.status_code == 403
+
+    async def test_unknown_request_is_404(self, api, monkeypatch):
+        client, _ = api
+        _allow(monkeypatch)
+        resp = await client.post(
+            "/api/my/nudge", json={"request_id": "INV-20260101-000000-0000"},
+            headers=_auth(),
+        )
+        assert resp.status_code == 404
+
+    async def test_undelivered_nudge_frees_the_window(self, api, monkeypatch):
+        """Иначе человек шесть часов думал бы, что напоминание ушло."""
+        from services import notifier
+
+        client, _ = api
+        rid = await self._overdue(client, monkeypatch)
+        monkeypatch.setattr(notifier, "resolved_finance_ids", lambda: [])
+        assert (await client.post(
+            "/api/my/nudge", json={"request_id": rid}, headers=_auth()
+        )).status_code == 502
+        monkeypatch.setattr(notifier, "resolved_finance_ids", lambda: [555])
+        resp = await client.post("/api/my/nudge", json={"request_id": rid}, headers=_auth())
+        assert resp.status_code == 200, resp.text
