@@ -685,3 +685,56 @@ test("счёт и реквизиты необязательны: форма от
     "выбран «файл счёта», файла нет — форма не должна этого требовать");
   await page.close();
 });
+
+test("ошибка валидации показывается словами, а не [object Object]", async () => {
+  // FastAPI на ошибке валидации кладёт в detail СПИСОК объектов. Он выводился
+  // как «[object Object]»: человек видел, что что-то не так, и ничего больше.
+  const page = await openApp(browser, { skin: "neon", routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true },
+    "/api/invoice": { __status: 422, detail: [
+      { loc: ["body", "file"], msg: "Expected UploadFile, received: <class 'str'>" },
+    ] },
+  } });
+  const fill = (id, value) => page.evaluate(([i, v]) => {
+    const el = document.getElementById(i);
+    el.value = v;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  }, [id, value]);
+  await fill("amount", "1000");
+  await fill("counterparty", "ООО «Ромашка»");
+  await fill("article-custom", "Аренда");
+  await fill("work-deadline", "текущий месяц");
+  await page.evaluate(() => document.getElementById("submit-fallback").click());
+  await page.waitForTimeout(400);
+  const shown = await page.evaluate(() =>
+    document.getElementById("error-banner").textContent);
+  assert.doesNotMatch(shown, /\[object Object\]/, "снова показали объект вместо текста");
+  assert.match(shown, /Expected UploadFile/);
+  await page.close();
+});
+
+test("без файла поле file вообще не отправляется", async () => {
+  // append(null) слал строку "null", и сервер отвечал ошибкой валидации —
+  // ровно та, что показывалась как «[object Object]».
+  const page = await openApp(browser, { skin: "neon", routes: HINTS });
+  const fill = (id, value) => page.evaluate(([i, v]) => {
+    const el = document.getElementById(i);
+    el.value = v;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  }, [id, value]);
+  await fill("amount", "1000");
+  await fill("counterparty", "ООО «Ромашка»");
+  await fill("article-custom", "Аренда");
+  await fill("work-deadline", "текущий месяц");
+  await page.click('#invoice-seg button[data-value="1"]');   // «Файл счёта», файла нет
+  await page.waitForTimeout(150);
+  await page.evaluate(() => document.getElementById("submit-fallback").click());
+  await page.waitForTimeout(400);
+  const keys = await page.evaluate(() => {
+    const post = window.__posts.filter((p) => p[0].indexOf("/api/invoice") !== -1).pop();
+    return post ? [...post[1].keys()] : null;
+  });
+  assert.ok(keys, "заявка не ушла вовсе");
+  assert.ok(!keys.includes("file"), `поле file всё-таки отправлено: ${keys}`);
+  await page.close();
+});

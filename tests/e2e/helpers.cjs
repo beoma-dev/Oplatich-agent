@@ -43,7 +43,12 @@ function install(cfg) {
     if (opt && opt.method === "POST") window.__posts.push([u, opt.body || null]);
     const key = Object.keys(cfg.routes || {}).find((k) => u.indexOf(k) !== -1);
     const body = key ? cfg.routes[key] : { ok: true, items: [] };
-    return Promise.resolve({ ok: body.__status !== 403, status: body.__status || 200,
+    // ok считаем как настоящий fetch — по коду, а не по одному 403. С прежней
+    // проверкой любой 4xx кроме 403 приходил в приложение как успех, и ветку
+    // «сервер отказал» нельзя было проверить вовсе. 409 у дедупа приложение
+    // разбирает отдельно, до resp.ok, — на него это не влияет.
+    const status = body.__status || 200;
+    return Promise.resolve({ ok: status < 400, status,
       json: () => Promise.resolve(body) });
   };
 }

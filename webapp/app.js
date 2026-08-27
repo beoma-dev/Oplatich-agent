@@ -1023,6 +1023,16 @@
   }
 
   // --- Ошибки ---------------------------------------------------------------------
+  /** Текст из detail: у наших отказов это строка, у ошибок валидации
+   *  FastAPI — список объектов, который выводился как «[object Object]». */
+  function detailText(detail, fallback) {
+    if (typeof detail === "string" && detail) return detail;
+    if (Array.isArray(detail) && detail.length) {
+      return detail.map(function (d) { return (d && d.msg) ? d.msg : String(d); }).join("; ");
+    }
+    return fallback;
+  }
+
   function showError(msg) {
     var b = $("error-banner");
     b.textContent = "⚠️ " + msg;
@@ -1097,8 +1107,11 @@
     // «Настраиваемая» — это про дату, для реестра срочность обычная.
     fd.append("urgency", state.urgency === "URGENT" ? "URGENT" : "NORMAL");
     fd.append("has_invoice", state.hasInvoice ? "1" : "0");
-    if (state.hasInvoice) fd.append("file", state.file);
-    else fd.append("requisites", reqEl.value);
+    // Файл прикладываем, ТОЛЬКО если он есть: с 26.08.2026 он необязателен,
+    // а append(null) отправляет строку "null" — сервер не может разобрать её
+    // как файл и отвечает ошибкой валидации со списком в detail.
+    if (state.hasInvoice && state.file) fd.append("file", state.file);
+    if (!state.hasInvoice) fd.append("requisites", reqEl.value);
 
     // Возврат итога в группу/канал: либо ?return_chat= (web_app-кнопка в личке),
     // либо start_param прямой ссылки t.me/<бот>/<имя>?startapp=<chat_id>.
@@ -1136,7 +1149,8 @@
           return null;
         }
         if (!resp.ok) {
-          throw new Error(data.detail || ("Ошибка сервера (" + resp.status + "). Попробуйте позже."));
+          throw new Error(detailText(
+            data.detail, "Ошибка сервера (" + resp.status + "). Попробуйте позже."));
         }
         return data;
       });
