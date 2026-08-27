@@ -100,6 +100,20 @@ class InvoiceRequest:
     request_id: str = ""
     status: str = STATUS_NEW
 
+    @property
+    def payment_source(self) -> str:
+        """На основании чего платить: "invoice" | "requisites" | "none".
+
+        Один источник истины на все тексты — карточку финансисту, ответ
+        автору, PDF, групповую сводку и «Мои заявки». Пока их различали
+        условием `if has_invoice: … else: …`, каждое место утверждало «оплата
+        по реквизитам» и там, где реквизитов не было: случаев ТРИ, а веток
+        писали две. Правится здесь — исправляется везде.
+        """
+        if self.has_invoice:
+            return "invoice"
+        return "requisites" if self.requisites else "none"
+
     def as_sheet_row(self) -> list[str]:
         """Строка реестра. Порядок строго совпадает с SHEET_HEADERS."""
         created = self.created_at.strftime("%Y-%m-%d %H:%M") if self.created_at else ""

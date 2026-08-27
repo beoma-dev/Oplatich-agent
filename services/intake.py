@@ -20,6 +20,18 @@ from services.runtime_settings import effective_finance_recipients
 
 log = logging.getLogger(__name__)
 
+# Три случая, а не два: см. InvoiceRequest.payment_source.
+_SOURCE_WORDS = {
+    "invoice": "приложен",
+    "requisites": "без счёта, по реквизитам",
+    "none": "ни счёта, ни реквизитов",
+}
+_SOURCE_MARKS = {
+    "invoice": "📎 со счётом",
+    "requisites": "✍️ по реквизитам",
+    "none": "⚠️ без счёта и реквизитов",
+}
+
 # Статусы участника чата, при которых разрешаем публиковать итог в группу.
 _MEMBER_STATUSES = {"creator", "administrator", "member", "restricted"}
 
@@ -31,7 +43,7 @@ def _recovery_note(request: InvoiceRequest) -> str:
         f"{request.request_id} · {request.sender_username} ({request.sender_name})",
         f"{request.counterparty} — {request.amount:.2f} {request.currency}",
         f"Статья: {request.article or '—'} · оплата к {planned}",
-        f"Счёт: {'приложен' if request.has_invoice else 'без счёта, по реквизитам'}",
+        f"Счёт: {_SOURCE_WORDS[request.payment_source]}",
     ]
     if request.comment:
         lines.append(f"Комментарий: {request.comment[:200]}")
@@ -216,10 +228,19 @@ async def _send_user_confirmation(
     финансиста, автор об этом узнает — в групповую сводку это не попадает.
     """
     e = html.escape
-    if request.has_invoice:
+    # Три случая, а не два. «Счёта нет» ещё не значит «есть реквизиты»:
+    # с 26.08.2026 можно подать заявку и без того, и без другого, и обещать
+    # автору оплату «по указанным реквизитам», которых он не указывал, —
+    # значит сообщать неправду в самом первом ответе бота.
+    if request.payment_source == "invoice":
         source_line = "Счёт сохранён в каталог «Счета на оплату»."
-    else:
+    elif request.payment_source == "requisites":
         source_line = "Счёта нет — оплата по указанным реквизитам."
+    else:
+        source_line = (
+            "Ни счёта, ни реквизитов — финансисту придётся уточнять. "
+            "Пришлите документы ему, когда появятся."
+        )
     # Про финансиста автору сообщаем только хорошее: что срочную заявку
     # реально доставили. Об осечке узнаёт АДМИН отдельным алертом — сотрудник
     # с ней всё равно ничего не сделает, а «сообщите администратору» в чужих
@@ -294,7 +315,7 @@ async def _post_group_summary(bot: Bot, request: InvoiceRequest, chat_id: int) -
 
     e = html.escape
     urgency_mark = "🔴 Срочно" if request.urgency.is_urgent else "🟢 Обычная"
-    source = "📎 со счётом" if request.has_invoice else "✍️ по реквизитам"
+    source = _SOURCE_MARKS[request.payment_source]
     planned = request.planned_date.strftime("%d.%m.%Y") if request.planned_date else "—"
     text = (
         "✅ <b>Создана заявка на оплату</b>\n"

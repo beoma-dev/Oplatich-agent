@@ -1657,7 +1657,9 @@
     add("Подана", item.created_at);
     add("Сотрудник", item.sender);
     add("Комментарий", item.comment);
-    add("Счёт", item.has_invoice ? "📎 файл приложен" : "✍️ по реквизитам");
+    add("Счёт", { invoice: "📎 файл приложен", requisites: "✍️ по реквизитам",
+      none: "⚠️ ни счёта, ни реквизитов" }[item.payment_source]
+      || (item.has_invoice ? "📎 файл приложен" : "✍️ по реквизитам"));
     add("Причина", item.reason);
     add("Номер", item.id);
     return dl;

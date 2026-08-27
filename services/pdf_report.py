@@ -307,19 +307,23 @@ def build_request_pdf(request: InvoiceRequest) -> bytes:
     ]
     right = [
         ("Дата подачи:", e(created)),
-        ("Оплата:", "Счёт на оплату" if request.has_invoice else "По реквизитам"),
+        ("Оплата:", {"invoice": "Счёт на оплату", "requisites": "По реквизитам",
+                     "none": "Документы не приложены"}[request.payment_source]),
         ("Получатель:", e(request.counterparty)),
     ]
     story.append(_pairs_table(left, right, st))
     story.append(Spacer(1, 5 * mm))
 
     # --- Табличная часть ------------------------------------------------------------
-    basis = (
-        f"Счёт на оплату, файл «{e(request.file_name)}»"
-        if request.has_invoice and request.file_name
-        else ("Счёт на оплату (файл приложен)" if request.has_invoice
-              else "Оплата по реквизитам получателя")
-    )
+    if request.payment_source == "invoice":
+        basis = (
+            f"Счёт на оплату, файл «{e(request.file_name)}»"
+            if request.file_name else "Счёт на оплату (файл приложен)"
+        )
+    elif request.payment_source == "requisites":
+        basis = "Оплата по реквизитам получателя"
+    else:
+        basis = "Основание не приложено — уточнить у заявителя"
     planned = request.planned_date.strftime("%d.%m.%Y") if request.planned_date else "—"
     widths = [8 * mm, 40 * mm, inner - 8 * mm - 40 * mm - 24 * mm - 26 * mm - 21 * mm,
               24 * mm, 26 * mm, 21 * mm]

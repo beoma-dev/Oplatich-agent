@@ -74,9 +74,9 @@ def _format_card(request: InvoiceRequest, row_number: int) -> str:
         "🔴 <b>СРОЧНАЯ оплата</b>" if request.urgency.is_urgent
         else "🧾 <b>Новая заявка на оплату</b>"
     )
-    if request.has_invoice:
+    if request.payment_source == "invoice":
         source_part = "\n📎 Счёт — этим файлом."
-    elif request.requisites:
+    elif request.payment_source == "requisites":
         # tg-spoiler: реквизиты скрыты до нажатия (как ||спойлер|| в Telegram).
         source_part = (
             f"\n✍️ <b>Без счёта.</b> Реквизиты — нажмите, чтобы показать:\n"

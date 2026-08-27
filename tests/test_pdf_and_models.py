@@ -77,3 +77,46 @@ def test_pdf_names_the_basis_of_payment():
     by_requisites, _ = _pdf_text(build_request_pdf(make_request()))
     assert "по реквизитам" in by_requisites.lower()
     assert "Реквизиты для оплаты:" in by_requisites
+
+
+class TestPaymentSource:
+    """Основание платежа: случаев ТРИ, а веток исторически писали две.
+
+    «Счёта нет» ещё не значит «есть реквизиты» — с 26.08.2026 заявка может
+    прийти без того и без другого. Пока каждое место решало это само,
+    подтверждение автору обещало «оплату по указанным реквизитам», которых
+    он не указывал. Признак теперь один на всех.
+    """
+
+    def test_three_cases(self):
+        from tests.conftest import make_request
+
+        assert make_request(has_invoice=True).payment_source == "invoice"
+        assert make_request(has_invoice=False,
+                            requisites="ИНН 7707083893").payment_source == "requisites"
+        assert make_request(has_invoice=False, requisites="").payment_source == "none"
+
+    def test_no_text_promises_requisites_that_do_not_exist(self):
+        """Ни один текст не должен обещать реквизиты у пустой заявки."""
+        from services.intake import _SOURCE_MARKS, _SOURCE_WORDS
+        from services.notifier import _format_card
+        from services.pdf_report import build_request_pdf
+        from tests.conftest import make_request
+
+        empty = make_request(has_invoice=False, requisites="")
+        # Ловим не слово «реквизиты» — оно законно в отрицании, — а ОБЕЩАНИЕ
+        # платить по ним: «по реквизитам», «по указанным реквизитам».
+        promise = ("по реквизитам", "по указанным реквизитам")
+
+        card = _format_card(empty, row_number=1)
+        assert "Ни счёта, ни реквизитов" in card
+        assert not any(x in card.lower() for x in promise), card
+
+        for text in (_SOURCE_WORDS["none"], _SOURCE_MARKS["none"]):
+            assert not any(x in text.lower() for x in promise), text
+        # А в своих случаях обещание как раз должно быть — иначе проверка
+        # прошла бы и на тексте, из которого реквизиты вырезали совсем.
+        assert "по реквизитам" in _SOURCE_MARKS["requisites"]
+
+        pdf = build_request_pdf(empty)
+        assert pdf[:4] == b"%PDF", "PDF пустой заявки вообще не собрался"

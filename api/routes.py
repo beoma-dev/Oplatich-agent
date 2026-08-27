@@ -235,6 +235,11 @@ def _as_item(row: dict[str, str], reason: str) -> dict:
         "planned_date": row.get("Плановая дата оплаты", ""),
         "created_at": row.get("Дата внесения в реестр", ""),
         "has_invoice": bool(row.get("Ссылка на счет", "")),
+        # Три случая, а не два: «нет счёта» ещё не значит «есть реквизиты».
+        "payment_source": (
+            "invoice" if row.get("Ссылка на счет", "")
+            else ("requisites" if row.get("Реквизиты", "") else "none")
+        ),
         "requisites": row.get("Реквизиты", ""),
         "work_deadline": row.get("Срок исполнения работ по договору", ""),
         "overdue": _is_overdue(row),
