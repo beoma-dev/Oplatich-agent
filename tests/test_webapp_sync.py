@@ -215,7 +215,8 @@ def test_request_rows_open_details():
     # переехало админское удаление, и после него список надо обновить.
     calls = HTML.count("makeTappable(row, it,") + HTML.count("makeTappable(row, it)")
     assert calls == 2, "не в обоих списках"
-    assert "makeTappable(row, it, loadMy)" in HTML
+    assert 'makeTappable(row, it, it.status === "Отозвана" ? null : loadMy)' in HTML
+    assert "makeTappable(row, it, loadFinance)" in HTML
     # Реквизиты — отдельным действием, как спойлер в чате.
     assert "function showRequisites(" in HTML
 

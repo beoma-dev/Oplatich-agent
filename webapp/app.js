@@ -1113,14 +1113,14 @@
     if (state.hasInvoice && state.file) fd.append("file", state.file);
     if (!state.hasInvoice) fd.append("requisites", reqEl.value);
 
-    // Возврат итога в группу/канал: либо ?return_chat= (web_app-кнопка в личке),
-    // либо start_param прямой ссылки t.me/<бот>/<имя>?startapp=<chat_id>.
-    // start_param «help» — ссылка «Инструкция», а не чат возврата.
+    // Возврат итога в группу/канал: ?return_chat= или start_param прямой
+    // ссылки. Берём ТОЛЬКО число: там же ходят «help» и «fin_INV-…» — это
+    // экраны, а не чаты, и уезжали в return_chat на отбраковку сервером.
     var returnChat = new URLSearchParams(location.search).get("return_chat");
     if (!returnChat) {
       returnChat = startParamFrom(initData, location.search);
     }
-    if (returnChat && returnChat !== "help") fd.append("return_chat", returnChat);
+    if (/^-?\d+$/.test(returnChat || "")) fd.append("return_chat", returnChat);
 
     fetch("/api/invoice", {
       method: "POST",
@@ -1577,7 +1577,9 @@
         actions.appendChild(deleteButton(it, loadMy));
       }
       row.appendChild(actions);
-      makeTappable(row, it, loadMy);
+      // У отозванной удаление уже кнопкой в ряду (это уборка автора,
+      // не админская) — второй раз в окне оно не нужно.
+      makeTappable(row, it, it.status === "Отозвана" ? null : loadMy);
       box.appendChild(row);
     });
   }
@@ -1690,7 +1692,8 @@
     var buttons = [{ text: "Закрыть", style: "ghost" }];
     // Админское «удалить любую» живёт здесь, а не в ряду списка: это
     // осознанное действие над одной заявкой, которую ты открыл нарочно.
-    if (onDeleted && isBotAdmin && item.status !== "Отозвана") {
+    // Вызывающий не передаёт onDeleted там, где кнопка уже есть в ряду.
+    if (onDeleted && isBotAdmin) {
       buttons.unshift({
         text: "🗑 Удалить",
         style: "danger",
@@ -1966,7 +1969,11 @@
   function statusButton(item, act) {
     var btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "add-btn " + (act.key === "REJECTED" ? "btn-danger" : "btn-ghost");
+    // «Оплачено» — то, ради чего панель и открыта: заливкой. «Отклонить» —
+    // красным, «Отложить» призрачная. В ряду одинаковых кнопок глазу не за
+    // что зацепиться, а нажимают почти всегда первую.
+    btn.className = "add-btn" + (act.key === "PAID" ? ""
+      : act.key === "REJECTED" ? " btn-danger" : " btn-ghost");
     btn.textContent = act.label;
     btn.addEventListener("click", function () {
       if (!act.reason) {
@@ -2098,10 +2105,11 @@
           actions.appendChild(statusButton(it, act));
         });
       }
-      if (isBotAdmin) actions.appendChild(deleteButton(it, loadFinance));
       row.appendChild(actions);
 
-      makeTappable(row, it);
+      // Удаление — в подробностях, а не в ряду: у новой заявки кнопок и так
+      // четыре, и на 360px они не помещались. Права проверяет сервер.
+      makeTappable(row, it, loadFinance);
       box.appendChild(row);
     });
   }

@@ -20,7 +20,9 @@ function install(cfg) {
   window.__params = [];
   window.__opened = null;
   window.Telegram = { WebApp: {
-    initData: "signed", initDataUnsafe: {}, themeParams: {},
+    // cfg.initData — когда проверяем разбор start_param: настоящий клиент
+    // кладёт его именно сюда, в строку initData, а не в адрес страницы.
+    initData: cfg.initData || "signed", initDataUnsafe: {}, themeParams: {},
     colorScheme: cfg.skin === "neon" ? "dark" : "light",
     ready() {}, expand() {}, close() {},
     openLink(u) { window.__opened = u; },

@@ -31,11 +31,12 @@ test.before(async () => { browser = await launch(); });
 test.after(async () => { await browser.close(); });
 
 for (const [name, button, list, deleteInRow] of [
-  // В «Моих заявках» админское удаление переехало в подробности: ряд не
-  // тянул четвёртую кнопку, а рядом с «Отозвать» две красные читались как
-  // одно и то же. В панели финансиста ряд короче — там кнопка осталась.
+  // Админское удаление в обоих списках переехало в подробности: ряд не
+  // тянул четвёртую кнопку. В «Моих заявках» рядом с «Отозвать» две красные
+  // вдобавок читались как одно и то же, а в панели у новой заявки к трём
+  // статусам добавлялась четвёртая и ряд ломался на 360px.
   ["мои заявки", "#my-btn", "#my-list", false],
-  ["панель финансиста", "#fin-btn", "#fin-req-list", true],
+  ["панель финансиста", "#fin-btn", "#fin-req-list", false],
 ]) {
   test(`${name}: подробности открывает строка, отдельной кнопки нет`, async () => {
     const page = await openApp(browser, { skin: "neon", width: 430, routes: ROUTES });
@@ -345,6 +346,67 @@ test("ссылка из уведомления открывает панель �
   }));
   assert.ok(state.open, "панель финансиста не открылась");
   assert.equal(state.query, rid, "номер заявки не подставлен в поиск");
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test("ряд панели финансиста тоже в одну строку", async () => {
+  // У новой заявки в панели три кнопки статуса, и админское удаление делало
+  // четвёртую: на 360px ряд разъезжался ровно так же, как в «Моих заявках».
+  const base = {
+    counterparty: 'ООО "АТОЛ ОНЛАЙН"', amount: "52205.00", currency: "RUB",
+    article: "Инвестиции", urgency: "Срочно", planned_date: "26.08.2026",
+    created_at: "2026-08-26 18:08", has_invoice: false, payment_source: "requisites",
+    sender: "@t (Т)", work_deadline: "12 месяцев", closing_count: 0, overdue: false,
+  };
+  for (const status of ["Новая", "Оплачена"]) {
+    for (const width of [360, 430]) {
+      const page = await openApp(browser, { skin: "neon", width, routes: {
+        "/api/access": { allowed: true, pending: false, has_admins: true, admin: true },
+        "/api/finance/access": { ok: true },
+        "/api/finance/requests": {
+          items: [{ ...base, id: "INV-20260826-180840-2541", status }],
+          total_found: 1, shown: 1,
+        },
+      } });
+      await page.evaluate(() => document.querySelector("#fin-btn").classList.remove("hidden"));
+      await page.click("#fin-btn");
+      await page.waitForTimeout(500);
+      const r = await page.evaluate(() => {
+        const btns = [...document.querySelectorAll("#fin-req-list .my-actions button")];
+        return {
+          labels: btns.map((b) => b.textContent.trim()),
+          rows: new Set(btns.map((b) => Math.round(b.getBoundingClientRect().top))).size,
+          widths: btns.map((b) => Math.round(b.getBoundingClientRect().width)),
+        };
+      });
+      const where = `${status}/${width}px`;
+      assert.equal(r.rows, 1, `на ${where} ряд разъехался: ${r.widths.join("/")}`);
+      assert.ok(!r.labels.some((x) => /Удалить/.test(x)),
+        `на ${where} удаление вернулось в ряд: ${r.labels.join("/")}`);
+      await page.close();
+    }
+  }
+});
+
+test("разбор start_param из initData, а не только из адреса", async () => {
+  // Настоящий клиент кладёт startapp в initData; через ?fin= приложение
+  // открывают только web_app-кнопки. Проверяли раньше лишь второй путь.
+  const rid = "INV-20260701-120000-0010";
+  const initData =
+    "query_id=AAA&user=%7B%22id%22%3A1%7D&start_param=fin_" + rid + "&auth_date=1&hash=x";
+  const page = await openApp(browser, { skin: "neon", initData, routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true },
+    "/api/finance/access": { ok: true },
+    "/api/finance/requests": { items: [], total_found: 0, shown: 0 },
+  } });
+  await page.waitForTimeout(600);
+  const state = await page.evaluate(() => ({
+    open: !document.getElementById("fin-view").classList.contains("hidden"),
+    query: document.getElementById("fin-query").value,
+  }));
+  assert.ok(state.open, "панель не открылась по start_param");
+  assert.equal(state.query, rid);
   assert.deepEqual(page.errors, []);
   await page.close();
 });

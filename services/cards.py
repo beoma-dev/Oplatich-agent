@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sqlite3
+from collections.abc import Callable
 
 from telegram import Bot, InlineKeyboardMarkup
 from telegram.constants import ParseMode
@@ -121,12 +122,17 @@ async def update_all(
     request_id: str,
     status_line: str,
     *,
-    keyboard: InlineKeyboardMarkup | None = None,
+    keyboard: InlineKeyboardMarkup
+    | Callable[[int], InlineKeyboardMarkup | None]
+    | None = None,
     fallback: dict | None = None,
 ) -> int:
     """Дописывает строку статуса во ВСЕ карточки заявки. Возвращает число обновлённых.
 
     keyboard=None убирает кнопки — так закрывается карточка отозванной заявки.
+    Функция вместо готовой клавиатуры — когда кнопки зависят от получателя:
+    в личке «Открыть в приложении» это web_app, в группе — обычная ссылка,
+    и одной клавиатурой на всех тут не обойтись.
     fallback — карточка, на которой нажали: резерв для заявок, разосланных до
     появления таблицы карточек. Сбой одной карточки не срывает остальные:
     сообщение могло быть удалено или уже содержать тот же текст.
@@ -137,6 +143,7 @@ async def update_all(
     updated = 0
     stale = 0
     for card in card_list:
+        markup = keyboard(card["chat_id"]) if callable(keyboard) else keyboard
         try:
             if card["is_caption"]:
                 await bot.edit_message_caption(
@@ -144,7 +151,7 @@ async def update_all(
                     message_id=card["message_id"],
                     caption=card["base_html"] + status_line,
                     parse_mode=ParseMode.HTML,
-                    reply_markup=keyboard,
+                    reply_markup=markup,
                 )
             else:
                 await bot.edit_message_text(
@@ -153,7 +160,7 @@ async def update_all(
                     message_id=card["message_id"],
                     parse_mode=ParseMode.HTML,
                     disable_web_page_preview=True,
-                    reply_markup=keyboard,
+                    reply_markup=markup,
                 )
             updated += 1
         except NetworkError:

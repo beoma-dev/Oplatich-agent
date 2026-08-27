@@ -9,7 +9,7 @@ from __future__ import annotations
 import html
 import logging
 
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.constants import ParseMode
 
 from bot.models import REQUEST_STATUSES, InvoiceRequest
@@ -60,8 +60,38 @@ def miniapp_link(bot: Bot, request_id: str) -> str | None:
     )
 
 
+OPEN_LABEL = "🔎 Открыть в приложении"
+
+
+def open_button(
+    bot: Bot, request_id: str, chat_id: int
+) -> InlineKeyboardButton | None:
+    """Кнопка «Открыть в приложении» для КОНКРЕТНОГО получателя.
+
+    В личке — web_app: он открывает приложение сразу и не зависит от
+    короткого имени Mini App. Прямая ссылка t.me/<бот>/<имя>?startapp=…
+    работает, только если имя зарегистрировано в BotFather, а оно там
+    бывает не тем, что записано в `MINIAPP_SHORT_NAME` (у стенда имя с
+    дефисом, каких BotFather не даёт) — и кнопка молча никуда не ведёт.
+
+    В группе web_app-кнопку Telegram не разрешает, поэтому там остаётся
+    прямая ссылка; нет короткого имени — кнопки не будет вовсе. Отличаем
+    по знаку chat_id: у людей он положительный, у групп и каналов — нет.
+    """
+    url = (settings.webapp_url or "").strip()
+    if not url.startswith("https://"):
+        return None
+    if chat_id > 0:
+        sep = "&" if "?" in url else "?"
+        return InlineKeyboardButton(
+            OPEN_LABEL, web_app=WebAppInfo(url=f"{url}{sep}fin={request_id}")
+        )
+    link = miniapp_link(bot, request_id)
+    return InlineKeyboardButton(OPEN_LABEL, url=link) if link else None
+
+
 def build_status_keyboard(
-    request_id: str, link: str | None = None
+    request_id: str, open_btn: InlineKeyboardButton | None = None
 ) -> InlineKeyboardMarkup:
     """Кнопки смены статуса под карточкой финансиста.
 
@@ -73,8 +103,8 @@ def build_status_keyboard(
         InlineKeyboardButton(label, callback_data=f"{CB_STATUS_PREFIX}:{request_id}:{key}")
         for key, (label, _status) in REQUEST_STATUSES.items()
     ]]
-    if link:
-        rows.append([InlineKeyboardButton("🔎 Открыть в приложении", url=link)])
+    if open_btn is not None:
+        rows.append([open_btn])
     return InlineKeyboardMarkup(rows)
 
 
@@ -175,19 +205,15 @@ async def closing_docs_notify(
         f"🏢 {e(_clip(row.get('Контрагент', '—'), 120))} · "
         f"{e(row.get('Сумма', '—'))} {e(row.get('Валюта', ''))}"
     )
-    link = miniapp_link(bot, request_id)
-    keyboard = (
-        InlineKeyboardMarkup([[
-            InlineKeyboardButton("🔎 Открыть в приложении", url=link)
-        ]]) if link else None
-    )
     delivered = 0
     for chat_id in resolved_finance_ids():
+        btn = open_button(bot, request_id, chat_id)
+        keyboard = InlineKeyboardMarkup([[btn]]) if btn else None
         try:
             await tg_retry.send_with_retry(
-                lambda cid=chat_id: bot.send_message(
+                lambda cid=chat_id, kb=keyboard: bot.send_message(
                     chat_id=cid, text=text, parse_mode=ParseMode.HTML,
-                    reply_markup=keyboard, disable_web_page_preview=True,
+                    reply_markup=kb, disable_web_page_preview=True,
                 ),
                 what=f"Закрывающие документы для {chat_id}",
             )
@@ -229,14 +255,17 @@ async def overdue_nudge(
         f"<b>{e(row.get('Сумма', '—'))} {e(row.get('Валюта', ''))}</b>\n"
         f"📅 Плановая дата: {e(row.get('Плановая дата оплаты', '—'))}"
     )
-    keyboard = build_status_keyboard(request_id, miniapp_link(bot, request_id))
     delivered = 0
     for chat_id in resolved_finance_ids():
+        # Клавиатура своя на каждого: в личке кнопка web_app, в группе ссылка.
+        keyboard = build_status_keyboard(
+            request_id, open_button(bot, request_id, chat_id)
+        )
         try:
             await tg_retry.send_with_retry(
-                lambda cid=chat_id: bot.send_message(
+                lambda cid=chat_id, kb=keyboard: bot.send_message(
                     chat_id=cid, text=text, parse_mode=ParseMode.HTML,
-                    reply_markup=keyboard, disable_web_page_preview=True,
+                    reply_markup=kb, disable_web_page_preview=True,
                 ),
                 what=f"Напоминание о просрочке для {chat_id}",
             )
@@ -319,9 +348,6 @@ async def notify_finance(
     text = _format_card(request, row_number)
     if file_warning:
         text += f"\n{html.escape(file_warning)}"
-    keyboard = build_status_keyboard(
-        request.request_id, miniapp_link(bot, request.request_id)
-    )
     # Приоритет вложения: файл счёта (нужен для оплаты); без счёта — PDF
     # заявки (там реквизиты целиком и сумма прописью).
     if invoice_file is not None:
@@ -332,27 +358,31 @@ async def notify_finance(
         document, filename = None, ""
 
     for chat_id in chat_ids:
+        # Клавиатура своя на каждого: в личке кнопка web_app, в группе ссылка.
+        keyboard = build_status_keyboard(
+            request.request_id, open_button(bot, request.request_id, chat_id)
+        )
         try:
             if document is not None:
                 message = await _send_with_retry(
-                    lambda cid=chat_id: bot.send_document(
+                    lambda cid=chat_id, kb=keyboard: bot.send_document(
                         chat_id=cid,
                         document=document,
                         filename=filename,
                         caption=text,
                         parse_mode=ParseMode.HTML,
-                        reply_markup=keyboard,
+                        reply_markup=kb,
                     ),
                     chat_id,
                 )
             else:
                 message = await _send_with_retry(
-                    lambda cid=chat_id: bot.send_message(
+                    lambda cid=chat_id, kb=keyboard: bot.send_message(
                         chat_id=cid,
                         text=text,
                         parse_mode=ParseMode.HTML,
                         disable_web_page_preview=True,
-                        reply_markup=keyboard,
+                        reply_markup=kb,
                     ),
                     chat_id,
                 )

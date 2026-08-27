@@ -1890,7 +1890,7 @@ class TestOverdueNudge:
 
 
 class TestMiniappLink:
-    """Ссылка «Открыть в приложении» под сообщением финансисту.
+    """Кнопка «Открыть в приложении» под сообщением финансисту.
 
     В сообщении заявка описана коротко: счёт, реквизиты и историю видно
     только в приложении, а искать там номер руками — лишний шаг.
@@ -1903,53 +1903,87 @@ class TestMiniappLink:
         bot.username = username if username is not None else MagicMock()
         return bot
 
-    def test_link_points_at_the_finance_panel_for_this_request(self, monkeypatch):
+    def _webapp(self, monkeypatch, short_name: str = "form") -> None:
+        monkeypatch.setattr(settings, "webapp_url", "https://pay.example")
+        monkeypatch.setattr(settings, "miniapp_short_name", short_name)
+
+    def test_private_chat_gets_a_web_app_button(self, monkeypatch):
+        """Главный случай: финансисту пишут в личку.
+
+        web_app открывает приложение сразу и НЕ зависит от короткого имени
+        Mini App — прямая ссылка t.me/<бот>/<имя> работает только с именем,
+        зарегистрированным в BotFather, и на стенде вела в никуда.
+        """
         from services import notifier
 
-        monkeypatch.setattr(settings, "webapp_url", "https://pay.example")
-        monkeypatch.setattr(settings, "miniapp_short_name", "form")
-        link = notifier.miniapp_link(self._bot(), "INV-20260101-000000-0001")
-        assert link == (
+        self._webapp(monkeypatch)
+        btn = notifier.open_button(self._bot(), "INV-20260101-000000-0001", 555)
+        assert btn.web_app is not None
+        assert btn.url is None
+        assert btn.web_app.url == "https://pay.example?fin=INV-20260101-000000-0001"
+
+    def test_group_gets_a_plain_link(self, monkeypatch):
+        """web_app-кнопку Telegram в группах не разрешает — там только ссылка."""
+        from services import notifier
+
+        self._webapp(monkeypatch)
+        btn = notifier.open_button(self._bot(), "INV-20260101-000000-0001", -100500)
+        assert btn.web_app is None
+        assert btn.url == (
             "https://t.me/oplatych_bot/form?startapp=fin_INV-20260101-000000-0001"
         )
 
-    def test_no_short_name_means_no_button(self, monkeypatch):
-        """Mini App не зарегистрирован — сообщение уходит как раньше."""
+    def test_group_without_short_name_gets_no_button(self, monkeypatch):
+        """Прямую ссылку без имени Mini App не собрать — кнопки не будет."""
         from services import notifier
 
-        monkeypatch.setattr(settings, "webapp_url", "https://pay.example")
-        monkeypatch.setattr(settings, "miniapp_short_name", "")
-        assert notifier.miniapp_link(self._bot(), "INV-20260101-000000-0001") is None
+        self._webapp(monkeypatch, short_name="")
+        assert notifier.open_button(self._bot(), "INV-1", -100500) is None
+        # А в личке короткое имя не нужно вовсе.
+        assert notifier.open_button(self._bot(), "INV-1", 555) is not None
 
-    def test_unknown_bot_username_means_no_button(self, monkeypatch):
+    def test_no_webapp_means_no_button_anywhere(self, monkeypatch):
         from services import notifier
 
-        monkeypatch.setattr(settings, "webapp_url", "https://pay.example")
-        monkeypatch.setattr(settings, "miniapp_short_name", "form")
+        monkeypatch.setattr(settings, "webapp_url", "")
+        assert notifier.open_button(self._bot(), "INV-1", 555) is None
+
+    def test_existing_query_in_webapp_url_is_kept(self, monkeypatch):
+        from services import notifier
+
+        monkeypatch.setattr(settings, "webapp_url", "https://pay.example/?v=2")
+        btn = notifier.open_button(self._bot(), "INV-1", 555)
+        assert btn.web_app.url == "https://pay.example/?v=2&fin=INV-1"
+
+    def test_unknown_bot_username_means_no_link(self, monkeypatch):
+        from services import notifier
+
+        self._webapp(monkeypatch)
         assert notifier.miniapp_link(self._bot(None), "INV-1") is None
 
-    def test_keyboard_keeps_the_link_out_of_the_status_row(self):
+    def test_keyboard_keeps_the_button_out_of_the_status_row(self):
         """Три кнопки статуса — один выбор; четвёртая читалась бы как часть его."""
+        from telegram import InlineKeyboardButton
+
         from services import notifier
 
-        markup = notifier.build_status_keyboard("INV-1", "https://t.me/x/y?startapp=z")
-        rows = markup.inline_keyboard
+        extra = InlineKeyboardButton("🔎 Открыть", url="https://t.me/x/y?startapp=z")
+        rows = notifier.build_status_keyboard("INV-1", extra).inline_keyboard
         assert len(rows) == 2
         assert len(rows[0]) == len(REQUEST_STATUSES)
-        assert rows[1][0].url == "https://t.me/x/y?startapp=z"
+        assert rows[1][0] is extra
         assert all(b.callback_data for b in rows[0])
 
-    def test_no_link_leaves_the_keyboard_as_before(self):
+    def test_no_button_leaves_the_keyboard_as_before(self):
         from services import notifier
 
         assert len(notifier.build_status_keyboard("INV-1").inline_keyboard) == 1
 
-    async def test_nudge_carries_the_link(self, api, monkeypatch):
+    async def test_nudge_carries_the_button(self, api, monkeypatch):
         from services import notifier
 
         client, bot = api
-        monkeypatch.setattr(settings, "webapp_url", "https://pay.example")
-        monkeypatch.setattr(settings, "miniapp_short_name", "form")
+        self._webapp(monkeypatch)
         bot.username = "oplatych_bot"
         monkeypatch.setattr(notifier, "resolved_finance_ids", lambda: [555])
 
@@ -1965,5 +1999,34 @@ class TestMiniappLink:
         )).status_code == 200
 
         markup = bot.send_message.await_args_list[0].kwargs["reply_markup"]
-        urls = [b.url for row in markup.inline_keyboard for b in row if b.url]
-        assert urls == [f"https://t.me/oplatych_bot/form?startapp=fin_{rid}"]
+        apps = [b.web_app.url for row in markup.inline_keyboard for b in row if b.web_app]
+        assert apps == [f"https://pay.example?fin={rid}"]
+
+    async def test_card_button_matches_each_recipient(self, api, monkeypatch):
+        """Одной клавиатурой на всех не обойтись: личка и группа разные."""
+        from services import notifier
+
+        client, bot = api
+        self._webapp(monkeypatch)
+        bot.username = "oplatych_bot"
+        # Список получателей проверяется дважды: сначала «настроены ли они
+        # вообще» (по .env), потом «кому именно слать» (после резолва).
+        monkeypatch.setattr(settings, "finance_chat_ids_raw", "555,-100500")
+        monkeypatch.setattr(notifier, "resolved_finance_ids", lambda: [555, -100500])
+        _allow(monkeypatch)
+        bot.send_document.reset_mock()
+        bot.send_message.reset_mock()
+
+        assert (await client.post(
+            "/api/invoice", data=_form(), headers=_auth()
+        )).status_code == 200
+
+        sent = list(bot.send_message.await_args_list) + list(
+            bot.send_document.await_args_list
+        )
+        by_chat = {
+            c.kwargs["chat_id"]: c.kwargs.get("reply_markup")
+            for c in sent if c.kwargs.get("reply_markup") is not None
+        }
+        assert by_chat[555].inline_keyboard[1][0].web_app is not None
+        assert by_chat[-100500].inline_keyboard[1][0].url.startswith("https://t.me/")
