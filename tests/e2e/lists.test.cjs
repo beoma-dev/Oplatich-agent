@@ -634,9 +634,8 @@ test("пустая заявка не обещает реквизитов ни в
         .find((x) => x.textContent.indexOf("📂") === 0);
       return el ? el.textContent : "(строки со статьёй нет)";
     }, list);
-    assert.ok(!/реквизиты/.test(meta) || /ни счёта/.test(meta),
-      `${list}: обещаны реквизиты, которых нет — «${meta}»`);
-    assert.match(meta, /ни счёта, ни реквизитов/, `${list}: «${meta}»`);
+    assert.ok(!/реквизиты/.test(meta), `${list}: обещаны реквизиты — «${meta}»`);
+    assert.match(meta, /⚠️ без документов/, `${list}: «${meta}»`);
     await page.close();
   }
 });
@@ -665,5 +664,41 @@ test("заявка со счётом и заявка с реквизитами �
         .find((x) => x.textContent.indexOf("📂") === 0).textContent);
     assert.match(meta, expect, `подпись не та: «${meta}»`);
     await page.close();
+  }
+});
+
+test("строки карточки не переносятся, как бы ни была длинна статья", async () => {
+  // Переносились обе строки мета сразу, и каждая карточка списка съедала
+  // два лишних ряда. Длинная статья теперь обрывается многоточием, а флаги
+  // справа остаются целиком: пропасть должна она, а не «нет счёта».
+  const base = {
+    id: "INV-20260827-173130-5506", status: "Новая",
+    counterparty: "ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ НИЦЕВИЧ Т. В.",
+    amount: "123.00", currency: "RUB", urgency: "Срочно",
+    planned_date: "27.08.2026", created_at: "2026-08-27 17:31",
+    has_invoice: false, payment_source: "none", work_deadline: "123",
+    closing_count: 0,
+  };
+  for (const overdue of [true, false]) {
+    for (const width of [320, 360]) {
+      const page = await openApp(browser, { skin: "light", width, routes: {
+        "/api/access": { allowed: true, pending: false, has_admins: true },
+        "/api/my-requests": { items: [{ ...base, overdue,
+          article: "Закупка товаров и материалов для склада" }] },
+      } });
+      await page.click("#my-btn");
+      await page.waitForTimeout(350);
+      const r = await page.evaluate(() => {
+        const line = getComputedStyle(document.querySelector("#my-list .my-meta")).lineHeight;
+        return [...document.querySelectorAll("#my-list .my-item .my-meta")].map((el) => ({
+          rows: Math.round(el.getBoundingClientRect().height / parseFloat(line)),
+          text: el.textContent,
+        }));
+      });
+      const where = `${overdue ? "просрочена" : "обычная"}/${width}px`;
+      r.forEach((l) => assert.equal(l.rows, 1, `на ${where} перенос: «${l.text}»`));
+      // Флаг «без документов» не должен уехать в многоточие.
+      assert.match(r[0].text, /без документов$/, `на ${where}: «${r[0].text}»`);
+    }
   }
 });

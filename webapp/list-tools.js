@@ -72,6 +72,49 @@ function sourceMark(item, long) {
     ? { invoice: "📎 файл приложен", requisites: "✍️ по реквизитам",
         none: "⚠️ ни счёта, ни реквизитов" }
     : { invoice: "📎 счёт", requisites: "✍️ реквизиты",
-        none: "⚠️ ни счёта, ни реквизитов" };
+        // Коротко: в строке списка полная формулировка переносилась и
+        // съедала лишнюю строку у КАЖДОЙ карточки. Полностью — в окне.
+        none: "⚠️ без документов" };
   return words[key] || words.none;
+}
+
+/** Строка «📂 статья · 🔴 срочно · 📎 счёт» ОДНОЙ строкой.
+ *
+ * Статья приходит от человека и бывает какой угодно длины, поэтому она
+ * в отдельном span, который сжимается и обрывается многоточием, а флаги
+ * справа — нет: пропасть должна статья, а не предупреждение об отсутствии
+ * счёта. Раньше вся строка переносилась и съедала лишний ряд у КАЖДОЙ
+ * карточки списка.
+ */
+function metaRow(item) {
+  var box = document.createElement("div");
+  box.className = "my-meta my-line";
+  var main = document.createElement("span");
+  main.className = "my-line-grow";
+  main.textContent = "📂 " + (item.article || "—");
+  var tail = document.createElement("span");
+  tail.textContent = (item.urgency === "Срочно" ? " · 🔴 срочно" : "")
+    + " · " + sourceMark(item);
+  box.appendChild(main);
+  box.appendChild(tail);
+  return box;
+}
+
+/** Строка дат: «📅 до 27.08.2026 · подана 27.08».
+ *
+ * Срок работ по договору отсюда убран совсем, а дата подачи — у просроченных:
+ * там строка идёт полужирной («⚠️ просрочено»), становится шире и на 294 px
+ * уходит на второй ряд. Оба поля целиком показывает окно подробностей —
+ * оно в одном касании по карточке.
+ */
+function datesLine(item) {
+  if (item.overdue) return "⚠️ просрочено · 📅 до " + (item.planned_date || "—");
+  var out = "📅 до " + (item.planned_date || "—");
+  var made = String(item.created_at || "");
+  // «2026-08-27 17:31» → «27.08»: год избыточен, а дд.мм совпадает
+  // по формату с плановой датой рядом.
+  if (/^\d{4}-\d{2}-\d{2}/.test(made)) {
+    out += " · подана " + made.slice(8, 10) + "." + made.slice(5, 7);
+  }
+  return out;
 }

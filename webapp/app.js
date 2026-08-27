@@ -1483,17 +1483,11 @@
       cp.textContent = it.counterparty || "—";
       row.appendChild(cp);
 
-      var meta = document.createElement("div");
-      meta.className = "my-meta";
-      meta.textContent = "📂 " + (it.article || "—") +
-        (it.urgency === "Срочно" ? " · 🔴 срочно" : "") + " · " + sourceMark(it);
-      row.appendChild(meta);
+      row.appendChild(metaRow(it));
 
       var dates = document.createElement("div");
       dates.className = it.overdue ? "my-meta overdue" : "my-meta";
-      dates.textContent = (it.overdue ? "⚠️ просрочено · " : "") + "📅 оплатить до " + (it.planned_date || "—") +
-        (it.work_deadline ? " · 📄 срок работ: " + it.work_deadline : "") +
-        (it.created_at ? " · подана " + it.created_at : "");
+      dates.textContent = datesLine(it);
       row.appendChild(dates);
 
       if (it.comment) {
@@ -2062,17 +2056,11 @@
       who.textContent = "👤 " + (it.sender || "—");
       row.appendChild(who);
 
-      var meta = document.createElement("div");
-      meta.className = "my-meta";
-      meta.textContent = "📂 " + (it.article || "—") +
-        (it.urgency === "Срочно" ? " · 🔴 срочно" : "") + " · " + sourceMark(it);
-      row.appendChild(meta);
+      row.appendChild(metaRow(it));
 
       var dates = document.createElement("div");
       dates.className = it.overdue ? "my-meta overdue" : "my-meta";
-      dates.textContent = (it.overdue ? "⚠️ просрочено · " : "") + "📅 оплатить до " + (it.planned_date || "—") +
-        (it.work_deadline ? " · 📄 срок работ: " + it.work_deadline : "") +
-        (it.created_at ? " · подана " + it.created_at : "");
+      dates.textContent = datesLine(it);
       row.appendChild(dates);
 
       if (it.comment) {
