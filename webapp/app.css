@@ -1115,9 +1115,9 @@
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     overflow-wrap: anywhere;
   }
-  /* Четыре кнопки; мельче прежних (120px, 13.5px) — иначе ряд разъезжался. */
+  /* По ширине надписи: при flex: 1 1 92px одинокая кнопка растягивалась на 294px. */
   .my-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  .my-actions .add-btn { flex: 1 1 92px; padding: 7px 9px; font-size: 12.5px; }
+  .my-actions .add-btn { flex: 0 0 auto; white-space: nowrap; padding: 7px 11px; font-size: 12.5px; }
   .btn-ghost {
     background: var(--bg2);
     color: var(--text);

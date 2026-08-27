@@ -167,7 +167,7 @@ test("на кнопке видно, сколько документов уже �
   await page.waitForTimeout(400);
   const label = await page.evaluate(() => {
     const b = [...document.querySelectorAll("#my-list .my-actions button")]
-      .find((x) => /документы/.test(x.textContent));
+      .find((x) => /Закрывающие/.test(x.textContent));
     return b ? b.textContent.trim() : null;
   });
   assert.match(label || "", /\(2\)/, "счётчик на кнопке не показан");
@@ -196,11 +196,20 @@ test("ряд кнопок заявки помещается и не обреза
         labels: btns.map((b) => b.textContent.trim()),
         clipped: btns.filter((b) => b.scrollWidth > b.clientWidth + 1)
           .map((b) => b.textContent.trim()),
+        widths: btns.map((b) => Math.round(b.getBoundingClientRect().width)),
+        multiline: btns.filter((b) => b.getBoundingClientRect().height > 34)
+          .map((b) => b.textContent.trim()),
       };
     });
     assert.deepEqual(r.clipped, [], `на ${width}px надписи обрезаны`);
-    assert.ok(r.labels.some((x) => /Закрывающие документы/.test(x)),
+    assert.ok(r.labels.some((x) => /Закрывающие/.test(x)),
       `на ${width}px нет кнопки закрывающих`);
+    // Кнопки по ширине надписи: раньше они делились на равные доли, длинный
+    // текст переносился внутри кнопки, а одинокая кнопка на второй строке
+    // растягивалась на всю ширину — 294px при экране в 360.
+    assert.ok(r.widths.every((x) => x < width * 0.6),
+      `на ${width}px кнопка растянулась: ${r.widths.join("/")}`);
+    assert.deepEqual(r.multiline, [], `на ${width}px надпись перенеслась внутри кнопки`);
     assert.ok(!r.labels.some((x) => /Повторить/.test(x)),
       `на ${width}px «Повторить» вернулась`);
     await page.close();
