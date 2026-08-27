@@ -360,7 +360,6 @@ class TestSubmitValidation:
             {"has_invoice": "2"},
             {"comment": "x" * 501},   # комментарий необязателен, но лимит остался
             {"article": ""},
-            {"has_invoice": "1", "requisites": ""},  # файл обязателен, но не приложен
         ],
     )
     async def test_422(self, api, monkeypatch, overrides):
@@ -368,6 +367,69 @@ class TestSubmitValidation:
         _allow(monkeypatch)
         resp = await client.post("/api/invoice", data=_form(**overrides), headers=_auth())
         assert resp.status_code == 422, resp.text
+
+
+class TestInvoiceAndRequisitesAreOptional:
+    """Ни счёт, ни реквизиты не обязательны (с 26.08.2026).
+
+    Раньше требовалось ровно одно из двух, и заявку «оплатить по договору,
+    документы будут позже» подать было нельзя: человек придумывал реквизиты
+    или прикладывал что попало, лишь бы форма пропустила. Пустое поле честнее
+    выдуманного — финансист видит в карточке, что приложить было нечего.
+    """
+
+    async def test_neither_file_nor_requisites(self, api, monkeypatch):
+        client, _ = api
+        _allow(monkeypatch)
+        resp = await client.post(
+            "/api/invoice",
+            data=_form(has_invoice="0", requisites=""),
+            headers=_auth(),
+        )
+        assert resp.status_code == 200, resp.text
+
+    async def test_chose_invoice_but_attached_nothing(self, api, monkeypatch):
+        """Выбрал «со счётом» и не приложил — тоже принимаем."""
+        client, _ = api
+        _allow(monkeypatch)
+        resp = await client.post(
+            "/api/invoice",
+            data=_form(has_invoice="1", requisites=""),
+            headers=_auth(),
+        )
+        assert resp.status_code == 200, resp.text
+
+    async def test_card_does_not_promise_a_file_that_is_absent(self, api, monkeypatch):
+        """has_invoice в модели — ФАКТ, а не выбор в форме."""
+        from openpyxl import load_workbook
+
+        from bot.models import SHEET_HEADERS
+
+        client, bot = api
+        _allow(monkeypatch)
+        await client.post(
+            "/api/invoice", data=_form(has_invoice="1", requisites=""), headers=_auth()
+        )
+        ws = load_workbook(settings.registry_path).active
+        col = SHEET_HEADERS.index("Ссылка на счет") + 1
+        assert (ws.cell(2, col).value or "") == "", "ссылка на несуществующий счёт"
+        sent = " ".join(
+            str(c.kwargs.get("text", "")) + str(c.kwargs.get("caption", ""))
+            for c in list(bot.send_message.await_args_list)
+            + list(bot.send_document.await_args_list)
+        )
+        assert "Счёт — этим файлом" not in sent, "карточка обещает вложение, которого нет"
+
+    async def test_requisites_are_still_validated_when_given(self, api, monkeypatch):
+        """Необязательное — не значит «любое»: лимит длины остался."""
+        client, _ = api
+        _allow(monkeypatch)
+        resp = await client.post(
+            "/api/invoice",
+            data=_form(has_invoice="0", requisites="я" * 1501),
+            headers=_auth(),
+        )
+        assert resp.status_code == 422
 
 
 class TestDedupAndRateLimit:

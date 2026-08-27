@@ -106,6 +106,10 @@ CB_SUBMIT_NO = "SUB_NO"
 # callback_data
 CB_INVOICE_YES = "INV_YES"
 CB_INVOICE_NO = "INV_NO"
+# Ни счёта, ни реквизитов — законный выбор с 26.08.2026: бывает
+# «оплатить по договору, документы будут позже». Пустое поле честнее
+# выдуманных реквизитов, которые раньше вписывали, лишь бы форма прошла.
+CB_INVOICE_NONE = "INV_NONE"
 CB_START = "START_INVOICE"
 CB_HELP = "HELP"
 
@@ -455,7 +459,12 @@ async def _ask_confirmation(
     context.user_data[K_PENDING_WARN] = file_warning
 
     planned = request.planned_date.strftime("%d.%m.%Y") if request.planned_date else "—"
-    source = "📎 файл счёта приложен" if request.has_invoice else "✍️ по реквизитам (без счёта)"
+    if request.has_invoice:
+        source = "📎 файл счёта приложен"
+    elif request.requisites:
+        source = "✍️ по реквизитам (без счёта)"
+    else:
+        source = "⚠️ без счёта и без реквизитов"
     text = (
         "🧾 <b>Проверьте заявку</b>\n\n"
         f"💰 Сумма: <b>{e(f'{request.amount:,.2f}')} {e(request.currency)}</b>\n"
@@ -963,8 +972,9 @@ def _invoice_keyboard() -> InlineKeyboardMarkup:
         [
             [
                 InlineKeyboardButton("📎 Счёт есть", callback_data=CB_INVOICE_YES),
-                InlineKeyboardButton("✍️ Счёта нет", callback_data=CB_INVOICE_NO),
-            ]
+                InlineKeyboardButton("✍️ Реквизиты", callback_data=CB_INVOICE_NO),
+            ],
+            [InlineKeyboardButton("Ни того, ни другого →", callback_data=CB_INVOICE_NONE)],
         ]
     )
 
@@ -1113,6 +1123,13 @@ async def step_invoice_choice(update: Update, context: ContextTypes.DEFAULT_TYPE
             parse_mode=ParseMode.HTML,
         )
         return FILE
+
+    if query.data == CB_INVOICE_NONE:
+        context.user_data[K_HAS_INVOICE] = False
+        await query.edit_message_text("Без счёта и реквизитов")
+        now = _now()
+        request = _build_request(context, update, now)
+        return await _ask_extra_docs(update, context, request, None, None)
 
     if query.data == CB_INVOICE_NO:
         context.user_data[K_HAS_INVOICE] = False
@@ -1300,7 +1317,7 @@ def build_conversation_handler() -> ConversationHandler:
             ],
             URGENCY: [CallbackQueryHandler(step_urgency_choice, pattern=r"^URG:")],
             INVOICE_CHOICE: [
-                CallbackQueryHandler(step_invoice_choice, pattern=r"^INV_(YES|NO)$")
+                CallbackQueryHandler(step_invoice_choice, pattern=r"^INV_(YES|NO|NONE)$")
             ],
             FILE: [
                 MessageHandler(

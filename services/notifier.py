@@ -83,7 +83,10 @@ def _format_card(request: InvoiceRequest, row_number: int) -> str:
             f"<tg-spoiler>{e(_clip(request.requisites, 300))}</tg-spoiler>"
         )
     else:
-        source_part = ""
+        # Ни счёта, ни реквизитов — с 26.08.2026 это законная заявка, но
+        # финансисту платить по ней не по чему, и молчать об этом нельзя:
+        # пустая строка выглядела бы как «карточка обрезалась».
+        source_part = "\n⚠️ <b>Ни счёта, ни реквизитов.</b> Уточните у автора."
     planned = (
         request.planned_date.strftime("%d.%m.%Y") if request.planned_date else "—"
     )

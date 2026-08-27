@@ -1394,9 +1394,13 @@ async def submit_invoice(
             ) from exc
         name = build_extra_filename(extra.filename, invoice.request_id, position)
         invoice.extra_files.append(await storage.save_invoice(blob, name))
-    if with_invoice:
-        if file is None or not file.filename:
-            raise HTTPException(status_code=422, detail="Прикрепите файл счёта.")
+    # Счёт и реквизиты — оба НЕОБЯЗАТЕЛЬНЫ (с 26.08.2026). Раньше требовалось
+    # ровно одно из двух, и заявку «оплатить по договору, документы будут
+    # позже» подать было нельзя: человек придумывал реквизиты или прикладывал
+    # что попало, лишь бы форма пропустила. Что именно приложено, видно
+    # финансисту в карточке — включая случай, когда не приложено ничего.
+    has_file = file is not None and bool(file.filename)
+    if with_invoice and has_file:
         content = await _read_limited(file, MAX_FILE_SIZE_BYTES)
         if len(content) > MAX_FILE_SIZE_BYTES:
             raise HTTPException(status_code=422, detail="Файл больше 20 МБ.")
@@ -1414,13 +1418,17 @@ async def submit_invoice(
         # Ссылка (Google Drive) или путь (локально) — колонка «Ссылка на счет».
         invoice.file_url = await storage.save_invoice(content, invoice.file_name)
         invoice_bytes = content
-    else:
+    elif requisites and requisites.strip():
+        # Реквизиты проверяем, только если их прислали: пустые — не ошибка.
         try:
             invoice.requisites = validate_text_field(
                 requisites, field_name="Реквизиты", max_len=1500
             )
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+    # has_invoice в модели отражает ФАКТ, а не выбор в форме: без файла
+    # карточка не должна обещать финансисту вложение, которого нет.
+    invoice.has_invoice = with_invoice and has_file
 
     # --- Возврат итога в группу (id пришёл из deep-link, проверяется в intake)
     return_chat_id: int | None = None

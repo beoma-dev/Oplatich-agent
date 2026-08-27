@@ -165,3 +165,43 @@ async def test_confirmation_cancel_writes_nothing(tmp_paths):
     assert await h.submit_confirm(_cb("SUB_NO"), ctx) == ConversationHandler.END
     assert ctx.user_data == {}
     assert not settings.registry_path.exists()  # ничего не записано
+
+
+async def test_neither_invoice_nor_requisites(tmp_paths):
+    """Третий вариант выбора: ни счёта, ни реквизитов.
+
+    Раньше диалог требовал одно из двух, и заявку «оплатить по договору,
+    документы будут позже» подать было нельзя — вписывали что попало.
+    """
+    bot = _bot()
+    ctx = _ctx(bot)
+    await _drive_common(ctx, "URG:NORMAL")
+    assert await h.step_comment(_msg("по договору"), ctx) == h.INVOICE_CHOICE
+    assert await h.step_invoice_choice(_cb("INV_NONE"), ctx) == h.EXTRA_DOCS
+    assert await h.extra_docs_done(_cb("EXTRA_DONE"), ctx) == h.CONFIRM_SUBMIT
+    assert await h.submit_confirm(_cb("SUB_YES"), ctx) == ConversationHandler.END
+
+    ws = load_workbook(settings.registry_path).active
+    assert ws.max_row == 2
+    from bot.models import SHEET_HEADERS
+    assert (ws.cell(2, SHEET_HEADERS.index("Ссылка на счет") + 1).value or "") == ""
+    assert (ws.cell(2, SHEET_HEADERS.index("Реквизиты") + 1).value or "") == ""
+
+
+async def test_financier_is_told_there_is_nothing_to_pay_against(tmp_paths):
+    """Пустая заявка законна, но карточка обязана это назвать."""
+    from decimal import Decimal
+
+    from bot.models import InvoiceRequest, Urgency
+    from services.notifier import _format_card
+
+    card = _format_card(
+        InvoiceRequest(
+            telegram_id=1, sender_username="@t", sender_name="Т",
+            amount=Decimal("100"), currency="RUB", counterparty="ООО",
+            comment="", urgency=Urgency.NORMAL, has_invoice=False, requisites="",
+        ),
+        row_number=1,
+    )
+    assert "Ни счёта, ни реквизитов" in card
+    assert "Счёт — этим файлом" not in card

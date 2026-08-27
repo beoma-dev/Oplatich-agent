@@ -359,6 +359,11 @@ test("число незаполненного склоняется по-русс
     el.dispatchEvent(new Event("input", { bubbles: true }));
   }, [id, value]);
 
+  // Счёт и реквизиты с 26.08.2026 необязательны, обязательных полей стало
+  // четыре. Пятое добираем настраиваемой датой — иначе форма «полей» во
+  // множественном числе не проверить, а склонение и есть смысл теста.
+  await page.click('#urgency-seg button[data-value="CUSTOM"]');
+  await page.waitForTimeout(150);
   assert.match(await read(), /5 полей:/, "на пяти ждём «полей»");
   await fill("amount", "1000");
   await page.waitForTimeout(150);
@@ -647,5 +652,36 @@ test("чужой формат в дополнительных документа
   }));
   assert.equal(r.строк, 0);
   assert.match(r.ошибка, /PDF, JPG, PNG или XLSX/);
+  await page.close();
+});
+
+test("счёт и реквизиты необязательны: форма отправляется пустой", async () => {
+  // Раньше требовалось одно из двух, и человек вписывал выдуманные
+  // реквизиты, лишь бы форма пропустила. Пустое поле честнее.
+  const page = await openApp(browser, { skin: "neon", routes: HINTS });
+  const fill = (id, value) => page.evaluate(([i, v]) => {
+    const el = document.getElementById(i);
+    el.value = v;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  }, [id, value]);
+  await fill("amount", "1000");
+  await fill("counterparty", "ООО «Ромашка»");
+  await fill("article-custom", "Аренда");
+  await fill("work-deadline", "текущий месяц");
+  await page.waitForTimeout(200);
+
+  const state = await page.evaluate(() => ({
+    подсказка: document.getElementById("gaps-hint").classList.contains("hidden"),
+    текст: document.getElementById("gaps-hint").textContent,
+  }));
+  assert.equal(state.подсказка, true,
+    `форма всё ещё чего-то требует: ${state.текст}`);
+
+  // И «со счётом» без файла — тоже полная форма.
+  await page.click('#invoice-seg button[data-value="1"]');
+  await page.waitForTimeout(200);
+  assert.ok(await page.evaluate(() =>
+    document.getElementById("gaps-hint").classList.contains("hidden")),
+    "выбран «файл счёта», файла нет — форма не должна этого требовать");
   await page.close();
 });
