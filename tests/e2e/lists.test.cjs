@@ -538,12 +538,68 @@ test("кнопка обновления перезапрашивает спис�
   const after = await page.evaluate(() => window.__gets.filter(
     (u) => u.indexOf("/api/my-requests") !== -1).length);
   assert.equal(after, before + 1, "список не перезапросили");
-  // Значок не должен раздвигать шапку карточки.
-  const fits = await page.evaluate(() => {
+  const look = await page.evaluate(() => {
     const t = document.querySelector("#my-view .card-title");
-    return t.scrollWidth <= t.clientWidth + 1;
+    const b = document.getElementById("my-reload");
+    return {
+      fits: t.scrollWidth <= t.clientWidth + 1,
+      svg: !!b.querySelector("svg"),
+      // Контурный значок в цвет темы, как у шестерёнки: цветной эмодзи
+      // среди прочих иконок выглядел наклейкой.
+      stroke: getComputedStyle(b.querySelector("svg")).stroke,
+      fill: getComputedStyle(b.querySelector("svg")).fill,
+    };
   });
-  assert.ok(fits, "шапка карточки поехала из-за значка обновления");
+  assert.ok(look.fits, "шапка карточки поехала из-за значка обновления");
+  assert.ok(look.svg, "значок обновления снова эмодзи, а не svg");
+  assert.equal(look.fill, "none", "значок залит, а не контурный");
+  assert.notEqual(look.stroke, "none", "у значка нет контура");
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test("ссылка из сводки просрочки включает фильтр «Просрочены»", async () => {
+  // Сводка перечисляет несколько заявок, поэтому ведёт на ВЫБОРКУ.
+  const page = await openApp(browser, { skin: "neon", hash: "?fin=overdue", routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true },
+    "/api/finance/access": { ok: true },
+    "/api/finance/requests": { items: [], total_found: 0, shown: 0 },
+  } });
+  await page.waitForTimeout(600);
+  const r = await page.evaluate(() => ({
+    open: !document.getElementById("fin-view").classList.contains("hidden"),
+    active: [...document.querySelectorAll("#fin-status-seg button.active")]
+      .map((b) => b.dataset.value),
+    // Блок фильтров раскрыт: иначе фильтр стоит, а увидеть его нельзя.
+    shown: !document.getElementById("fin-filters").classList.contains("hidden"),
+    asked: window.__gets.filter((u) => u.indexOf("status=__overdue__") !== -1).length,
+  }));
+  assert.ok(r.open, "панель не открылась");
+  assert.deepEqual(r.active, ["__overdue__"], "фильтр «Просрочены» не выбран");
+  assert.ok(r.shown, "блок фильтров свёрнут — фильтра не видно");
+  assert.equal(r.asked, 1, "выборка запрошена без фильтра просрочки");
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test("ссылка из сводки «к оплате» подставляет окно дат", async () => {
+  const initData = "user=%7B%22id%22%3A1%7D&start_param=fin_due_2026-08-04_2026-08-07"
+    + "&auth_date=1&hash=x";
+  const page = await openApp(browser, { skin: "neon", initData, routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true },
+    "/api/finance/access": { ok: true },
+    "/api/finance/requests": { items: [], total_found: 0, shown: 0 },
+  } });
+  await page.waitForTimeout(600);
+  const r = await page.evaluate(() => ({
+    from: document.getElementById("fin-from").value,
+    to: document.getElementById("fin-to").value,
+    asked: window.__gets.filter((u) =>
+      u.indexOf("date_from=2026-08-04") !== -1 && u.indexOf("date_to=2026-08-07") !== -1).length,
+  }));
+  assert.equal(r.from, "2026-08-04");
+  assert.equal(r.to, "2026-08-07");
+  assert.equal(r.asked, 1, "выборка запрошена без окна дат");
   assert.deepEqual(page.errors, []);
   await page.close();
 });

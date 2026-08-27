@@ -22,7 +22,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from telegram import Bot
+from telegram import Bot, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.error import NetworkError
 
@@ -31,7 +31,7 @@ from bot.validators import ValidationError, parse_amount
 from config import settings
 from services import runtime_settings as rs
 from services import storage, tg_retry
-from services.notifier import resolved_finance_ids
+from services.notifier import open_button, resolved_finance_ids
 from services.runtime_settings import effective_admin_ids
 
 log = logging.getLogger(__name__)
@@ -160,7 +160,27 @@ def build_overdue_message(rows: list[dict[str, str]]) -> str:
     )
 
 
-async def _send(bot: Bot, chat_ids: list[int], text: str) -> tuple[int, bool]:
+def digest_link(bot: Bot, chat_id: int, param: str) -> InlineKeyboardMarkup | None:
+    """Кнопка «Открыть в приложении» под СВОДКОЙ — сразу с нужным фильтром.
+
+    Сводка перечисляет несколько заявок, поэтому ведёт не на одну из них, а
+    на выборку: `overdue` включает в панели фильтр «⚠️ Просрочены»,
+    `due_<с>_<по>` — окно плановых дат. Своей выборки не заводим: у панели
+    ровно эти фильтры уже есть, они видны в полях, и «Сбросить» работает
+    как обычно.
+
+    Список НОМЕРОВ в ссылку не кладём намеренно. Сводка собрана в свой час,
+    а открывают её позже: «просроченные на сейчас» — более честный ответ,
+    чем вчерашний перечень, и он не растёт вместе с числом заявок (в
+    startapp помещается 512 символов, это два десятка номеров).
+    """
+    btn = open_button(bot, param, chat_id)
+    return InlineKeyboardMarkup([[btn]]) if btn else None
+
+
+async def _send(
+    bot: Bot, chat_ids: list[int], text: str, param: str = ""
+) -> tuple[int, bool]:
     """(сколько доставлено, была ли СЕТЕВАЯ потеря).
 
     Сеть и смысл разделены намеренно. «Канал молчит» — повод попробовать
@@ -171,9 +191,11 @@ async def _send(bot: Bot, chat_ids: list[int], text: str) -> tuple[int, bool]:
     delivered, lost = 0, False
     for chat_id in chat_ids:
         try:
+            keyboard = digest_link(bot, chat_id, param) if param else None
             await tg_retry.send_with_retry(
-                lambda cid=chat_id: bot.send_message(
-                    chat_id=cid, text=text, parse_mode=ParseMode.HTML
+                lambda cid=chat_id, kb=keyboard: bot.send_message(
+                    chat_id=cid, text=text, parse_mode=ParseMode.HTML,
+                    reply_markup=kb,
                 ),
                 what=f"Напоминание в чат {chat_id}",
             )
@@ -231,13 +253,19 @@ async def send_to(bot: Bot, user_id: int, rows: list[dict[str, str]],
     # реестра (strict=True), но не защитились на самой отправке.
     _lost = False
     if due and cfg["due_enabled"] and user_id in resolved_finance_ids():
-        ok, lost = await _send(bot, [user_id], build_due_message(due, cfg["days_before"]))
+        # Окно то же, по которому выбраны строки: от сегодня до горизонта.
+        window = f"due_{today:%Y-%m-%d}_{today + timedelta(days=cfg['days_before']):%Y-%m-%d}"
+        ok, lost = await _send(
+            bot, [user_id], build_due_message(due, cfg["days_before"]), window
+        )
         sent_due = len(due) if ok else 0
         _lost = _lost or lost
     wants_overdue = cfg["overdue_enabled"] and rs.reminders_config()["overdue_enabled"]
     if overdue and wants_overdue and user_id in overdue_recipients(
             rs.reminders_config()["overdue_to"]):
-        ok, lost = await _send(bot, [user_id], build_overdue_message(overdue))
+        ok, lost = await _send(
+            bot, [user_id], build_overdue_message(overdue), "overdue"
+        )
         sent_overdue = len(overdue) if ok else 0
         _lost = _lost or lost
     if _lost:

@@ -963,21 +963,39 @@
   /* Фильтры статусов не влезают в один ряд — разрешаем перенос. */
   .seg-wrap { flex-wrap: wrap; }
   .fin-count { color: var(--hint); font-size: 12.5px; margin-top: 8px; }
-  /* Обновить список. Значок без подписи и в шапке карточки, а НЕ в ряду
-     действий заявки: обновляется весь список сразу, ряды же мы только что
-     ужимали до одной строки. Отклик — поворотом на нажатие: список берётся
-     из Google, и ответ бывает не мгновенным. */
+  /* Обновить список. В шапке карточки, а НЕ в ряду действий заявки:
+     обновляется весь список сразу, ряды же мы только что ужимали до одной
+     строки. Контурный SVG в цвет акцента, как у шестерёнки и прочих иконок:
+     цветной эмодзи среди них выглядел наклейкой. Пока идёт запрос —
+     крутится: список берётся из Google, и ответ бывает не мгновенным. */
   .reload-btn {
+    flex: 0 0 auto;
+    width: 24px; height: 24px;
+    padding: 0;
     border: none;
     background: none;
-    color: var(--hint);
-    font-size: 15px;
-    line-height: 1;
-    padding: 2px 4px;
+    color: var(--accent);
+    display: grid;
+    place-items: center;
     cursor: pointer;
-    transition: transform .3s ease, opacity .15s ease;
+    transition: transform .12s ease, opacity .15s ease;
   }
-  .reload-btn:active { transform: rotate(180deg); opacity: .5; }
+  .reload-btn svg {
+    width: 16px; height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .reload-btn:active { transform: scale(.85); }
+  .reload-btn.spinning { opacity: .55; }
+  .reload-btn.spinning svg { animation: reload-spin .8s linear infinite; }
+  @keyframes reload-spin { to { transform: rotate(360deg); } }
+  /* «Уменьшить движение» — крутить нельзя, но отклик всё равно нужен. */
+  @media (prefers-reduced-motion: reduce) {
+    .reload-btn.spinning svg { animation: none; }
+  }
 
   .tap-hint {
     margin-left: auto;

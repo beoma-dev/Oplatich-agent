@@ -64,9 +64,13 @@ OPEN_LABEL = "🔎 Открыть в приложении"
 
 
 def open_button(
-    bot: Bot, request_id: str, chat_id: int
+    bot: Bot, target: str, chat_id: int
 ) -> InlineKeyboardButton | None:
     """Кнопка «Открыть в приложении» для КОНКРЕТНОГО получателя.
+
+    target — на чём открыть панель: номер заявки под карточкой, `overdue`
+    или `due_<с>_<по>` под сводкой напоминаний. Разбирает его приложение
+    (`webapp/list-tools.js`), сервер только передаёт строку.
 
     В личке — web_app: он открывает приложение сразу и не зависит от
     короткого имени Mini App. Прямая ссылка t.me/<бот>/<имя>?startapp=…
@@ -84,9 +88,9 @@ def open_button(
     if chat_id > 0:
         sep = "&" if "?" in url else "?"
         return InlineKeyboardButton(
-            OPEN_LABEL, web_app=WebAppInfo(url=f"{url}{sep}fin={request_id}")
+            OPEN_LABEL, web_app=WebAppInfo(url=f"{url}{sep}fin={target}")
         )
-    link = miniapp_link(bot, request_id)
+    link = miniapp_link(bot, target)
     return InlineKeyboardButton(OPEN_LABEL, url=link) if link else None
 
 

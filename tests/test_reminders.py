@@ -10,6 +10,7 @@ from telegram.error import NetworkError
 
 from config import settings
 from services import reminders, storage
+from services import runtime_settings as rs_mod
 from tests.conftest import make_request
 
 
@@ -473,3 +474,82 @@ class TestLastChannelWarning:
 
             back = await self._save(client, headers, "all")
             assert "ни один получатель" not in back.json()["message"]
+
+
+class TestDigestLink:
+    """Кнопка под сводкой ведёт на ВЫБОРКУ, а не на одну заявку.
+
+    Сводка перечисляет несколько заявок; открывать её по одной — не то, ради
+    чего её читают. Панель умеет ровно эти фильтры, поэтому ссылка включает
+    их, а не заводит свою выборку.
+    """
+
+    def _bot(self):
+        bot = MagicMock()
+        bot.send_message = AsyncMock()
+        bot.username = "oplatych_bot"
+        return bot
+
+    def _webapp(self, monkeypatch):
+        monkeypatch.setattr(settings, "webapp_url", "https://pay.example")
+        monkeypatch.setattr(settings, "miniapp_short_name", "form")
+
+    async def test_overdue_digest_opens_the_overdue_filter(self, tmp_paths, monkeypatch):
+        settings.__dict__.pop("finance_recipients", None)
+        monkeypatch.setattr(settings, "finance_chat_ids_raw", "111")
+        self._webapp(monkeypatch)
+        rs_mod.set_reminders_config(overdue_to="financiers")
+        await storage.append_invoice(make_request(
+            planned_date=date(2026, 8, 1), request_id="INV-20260804-100020-0020"
+        ))
+        bot = self._bot()
+        rows = await storage.recent_requests(limit=50)
+        assert (await reminders.send_to(bot, 111, rows, TODAY, force=True))[1] >= 1
+
+        markup = bot.send_message.await_args_list[-1].kwargs["reply_markup"]
+        assert markup.inline_keyboard[0][0].web_app.url == (
+            "https://pay.example?fin=overdue"
+        )
+
+    async def test_due_digest_opens_the_date_window_it_used(self, tmp_paths, monkeypatch):
+        """Окно то же, по которому отобраны строки, — иначе список разойдётся."""
+        from services import runtime_settings as rs
+
+        settings.__dict__.pop("finance_recipients", None)
+        monkeypatch.setattr(settings, "finance_chat_ids_raw", "111")
+        self._webapp(monkeypatch)
+        rs.set_personal_reminders(111, days_before=3, overdue_enabled=False)
+        await storage.append_invoice(make_request(
+            planned_date=date(2026, 8, 6), request_id="INV-20260804-100021-0021"
+        ))
+        bot = self._bot()
+        rows = await storage.recent_requests(limit=50)
+        assert (await reminders.send_to(bot, 111, rows, TODAY, force=True))[0] >= 1
+
+        markup = bot.send_message.await_args_list[-1].kwargs["reply_markup"]
+        assert markup.inline_keyboard[0][0].web_app.url == (
+            "https://pay.example?fin=due_2026-08-04_2026-08-07"
+        )
+
+    async def test_without_the_app_the_digest_goes_without_a_button(
+        self, tmp_paths, monkeypatch
+    ):
+        settings.__dict__.pop("finance_recipients", None)
+        monkeypatch.setattr(settings, "finance_chat_ids_raw", "111")
+        monkeypatch.setattr(settings, "webapp_url", "")
+        rs_mod.set_reminders_config(overdue_to="financiers")
+        await storage.append_invoice(make_request(
+            planned_date=date(2026, 8, 1), request_id="INV-20260804-100022-0022"
+        ))
+        bot = self._bot()
+        rows = await storage.recent_requests(limit=50)
+        await reminders.send_to(bot, 111, rows, TODAY, force=True)
+        assert bot.send_message.await_args_list[-1].kwargs["reply_markup"] is None
+
+    async def test_group_digest_uses_the_direct_link(self, monkeypatch):
+        """web_app-кнопку в группе Telegram не разрешает — там ссылка."""
+        self._webapp(monkeypatch)
+        markup = reminders.digest_link(self._bot(), -100500, "overdue")
+        assert markup.inline_keyboard[0][0].url == (
+            "https://t.me/oplatych_bot/form?startapp=fin_overdue"
+        )

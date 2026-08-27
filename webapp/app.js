@@ -1583,8 +1583,8 @@
     });
   }
 
-  function loadMy() {
-    if (!insideTelegram) { renderMy([]); return; }
+  function loadMy(done) {
+    if (!insideTelegram) { renderMy([]); if (done) done(); return; }
     fetch("/api/my-requests", { headers: { "X-Telegram-Init-Data": initData } })
       .then(function (r) {
         return r.json().catch(function () { return {}; })
@@ -1596,7 +1596,8 @@
         if (!res.ok) { renderMyProblem(res.d.detail || "Не удалось загрузить список."); return; }
         renderMy((res.d && res.d.items) || []);
       })
-      .catch(function () { renderMyProblem("Сеть недоступна."); });
+      .catch(function () { renderMyProblem("Сеть недоступна."); })
+      .then(function () { if (done) done(); });
   }
 
   function renderMyProblem(text) {
@@ -2114,8 +2115,8 @@
     });
   }
 
-  function loadFinance() {
-    if (!insideTelegram) return;
+  function loadFinance(done) {
+    if (!insideTelegram) { if (done) done(); return; }
     var params = new URLSearchParams();
     if (finFilters.query) params.set("query", finFilters.query);
     if (finFilters.status) params.set("status", finFilters.status);
@@ -2138,7 +2139,8 @@
           renderFinList(d.items || []);
         });
       })
-      .catch(function () { showFinMsg("Сеть недоступна.", true); });
+      .catch(function () { showFinMsg("Сеть недоступна.", true); })
+      .then(function () { if (done) done(); });
   }
 
   // Свой обработчик, не bindSeg: тот помечает форму заявки изменённой
@@ -2406,13 +2408,13 @@
     }
     loadFinance();
   }
-  /** Ссылка из уведомления: startapp=fin_<id>. Своей выборки не заводим —
-   * у панели есть поиск, и номер в нём ищется; заодно видно, ПОЧЕМУ показана
-   * одна заявка, и «Сбросить» возвращает весь список. */
-  function openFinanceAt(requestId) {
-    if (!insideTelegram) return;
-    finFilters = { query: requestId, status: "", urgency: "", from: "", to: "" };
-    $("fin-query").value = requestId;
+  /** Ссылка из уведомления: startapp=fin_<что-то>. Разбор — в list-tools.js;
+   * своей выборки не заводим, у панели уже есть нужные фильтры. */
+  function openFinanceAt(param) {
+    if (!insideTelegram || typeof finLinkFilters !== "function") return;
+    finFilters = finLinkFilters(param, {
+      query: $("fin-query"), from: $("fin-from"), to: $("fin-to"),
+      statusSeg: $("fin-status-seg"), filters: $("fin-filters") });
     openFinance();
   }
 
@@ -2427,8 +2429,8 @@
     }
   }
   $("fin-btn").addEventListener("click", openFinance);
-  $("fin-reload").addEventListener("click", loadFinance);
-  $("my-reload").addEventListener("click", loadMy);
+  $("fin-reload").addEventListener("click", function () { spinReload(this, loadFinance); });
+  $("my-reload").addEventListener("click", function () { spinReload(this, loadMy); });
   $("fin-close").addEventListener("click", closeFinance);
 
   // --- Админ-панель -----------------------------------------------------------------
