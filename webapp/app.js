@@ -2654,6 +2654,7 @@
   if (typeof buildRestorePanel === "function") {
     buildRestorePanel({
       $: $,
+      confirm: askConfirm,
       showMsg: showAdminMsg,
       initData: function () { return initData; },
       haptic: function () {

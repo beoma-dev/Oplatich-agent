@@ -27,7 +27,18 @@ LIB = _read("form-lib.js")
 # Большинству проверок неважно, в каком файле лежит правило или функция, —
 # важно, что они есть и согласованы между собой. Разбор по файлам делают
 # те тесты, где это существенно (порядок правил, состав разметки).
-HTML = "\n".join((MARKUP, CSS, JS, FIELD, LIB))
+#
+# Берём ВСЕ файлы приложения, а не перечисленные пятеро: из app.js за день
+# уехало полдюжины панелей, и проверки перестали их видеть — поле, которым
+# пользуется вынесенный файл, выглядело неиспользуемым. Список пришлось бы
+# дописывать при каждом выносе, и однажды бы забыли.
+HTML = "\n".join(
+    sorted(
+        path.read_text(encoding="utf-8")
+        for path in WEBAPP.iterdir()
+        if path.suffix in {".html", ".css", ".js"}
+    )
+)
 
 
 def _media_blocks(query: str) -> list[str]:
@@ -180,7 +191,11 @@ def test_my_requests_payload_matches_ui():
 
     assert MY_UI_FIELDS <= set(_as_item({}, ""))
     for field in MY_UI_FIELDS:
-        assert f"it.{field}" in HTML, f"поле {field} не используется в Mini App"
+        # it.<поле> в списках, item.<поле> в панелях: туда элемент приходит
+        # аргументом и зовётся полным словом.
+        assert f"it.{field}" in HTML or f"item.{field}" in HTML, (
+            f"поле {field} не используется в Mini App"
+        )
 
 
 def test_tooltip_class_keeps_header_icons_in_place():

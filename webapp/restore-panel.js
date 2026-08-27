@@ -91,12 +91,21 @@ function buildRestorePanel(ctx) {
   applyBtn.addEventListener("click", function () {
     if (!ready) return;
     // Единственная преграда между «нажал» и «переписал боевые данные».
-    if (!window.confirm(
-      "Восстановить данные из этого архива?\n\n"
-      + "Текущие настройки, журнал и файлы будут заменены. "
-      + "Копия прежнего состояния сохранится на сервере."
-    )) return;
+    // Своё окно, а не window.confirm: нативное на десктопе рисуется
+    // в ГЛАВНОМ окне Telegram, то есть на другом экране, — вопрос там
+    // и остался бы незамеченным, а кнопка выглядела бы «залипшей».
     var btn = this;
+    ctx.confirm(
+      "💾 Восстановить данные",
+      "Текущие настройки, журнал и файлы будут заменены содержимым архива. "
+      + "Копия прежнего состояния сохранится на сервере.",
+      "Восстановить",
+      function () { apply(btn); },
+      true
+    );
+  });
+
+  function apply(btn) {
     send("apply", btn).then(function (res) {
       if (!res) return;
       ctx.showMsg(
@@ -108,7 +117,7 @@ function buildRestorePanel(ctx) {
         input.value = "";
       }
     });
-  });
+  }
 
   // Выбрали другой файл — прежний разбор больше не про него.
   input.addEventListener("change", reset);
