@@ -20,7 +20,7 @@ from telegram.constants import ParseMode
 from bot.models import REQUEST_STATUSES, STATUS_WITHDRAWN
 from config import settings
 from services import audit, cards, request_meta, storage, tg_retry
-from services.notifier import build_status_keyboard, open_button
+from services.notifier import build_card_keyboard, open_button
 
 log = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ async def apply_status(
         status_line,
         # Функция, а не готовая клавиатура: кнопка «Открыть в приложении»
         # зависит от чата — в личке web_app, в группе ссылка.
-        keyboard=lambda cid: build_status_keyboard(
+        keyboard=lambda cid: build_card_keyboard(
             request_id, open_button(bot, request_id, cid)
         ),
         fallback=fallback_card,

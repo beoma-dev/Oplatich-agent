@@ -2406,12 +2406,9 @@
     }
     loadFinance();
   }
-  /** Ссылка из уведомления финансисту: startapp=fin_<id>.
-   *
-   * Отдельной выборки не заводим — у панели уже есть поиск, и номер заявки
-   * в нём ищется. Поэтому подставляем его в строку поиска: финансист видит,
-   * ПОЧЕМУ показана одна заявка, и одним «Сбросить» возвращает весь список.
-   */
+  /** Ссылка из уведомления: startapp=fin_<id>. Своей выборки не заводим —
+   * у панели есть поиск, и номер в нём ищется; заодно видно, ПОЧЕМУ показана
+   * одна заявка, и «Сбросить» возвращает весь список. */
   function openFinanceAt(requestId) {
     if (!insideTelegram) return;
     finFilters = { query: requestId, status: "", urgency: "", from: "", to: "" };
@@ -2430,6 +2427,8 @@
     }
   }
   $("fin-btn").addEventListener("click", openFinance);
+  $("fin-reload").addEventListener("click", loadFinance);
+  $("my-reload").addEventListener("click", loadMy);
   $("fin-close").addEventListener("click", closeFinance);
 
   // --- Админ-панель -----------------------------------------------------------------

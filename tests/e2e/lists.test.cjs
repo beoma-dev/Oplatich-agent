@@ -521,3 +521,29 @@ test("кнопка «Акт / УПД» не открывает подробно�
     false, "поверх выбора файла открылись подробности");
   await page.close();
 });
+
+test("кнопка обновления перезапрашивает список", async () => {
+  // Список берётся из Google, и он бывает недоступен. Раньше перезапросить
+  // его можно было только закрыв и открыв экран.
+  const page = await openApp(browser, { skin: "neon", routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true },
+    "/api/my-requests": { items: [] },
+  } });
+  await page.click("#my-btn");
+  await page.waitForTimeout(400);
+  const before = await page.evaluate(() => window.__gets.filter(
+    (u) => u.indexOf("/api/my-requests") !== -1).length);
+  await page.click("#my-reload");
+  await page.waitForTimeout(300);
+  const after = await page.evaluate(() => window.__gets.filter(
+    (u) => u.indexOf("/api/my-requests") !== -1).length);
+  assert.equal(after, before + 1, "список не перезапросили");
+  // Значок не должен раздвигать шапку карточки.
+  const fits = await page.evaluate(() => {
+    const t = document.querySelector("#my-view .card-title");
+    return t.scrollWidth <= t.clientWidth + 1;
+  });
+  assert.ok(fits, "шапка карточки поехала из-за значка обновления");
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});

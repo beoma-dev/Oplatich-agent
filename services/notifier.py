@@ -90,22 +90,29 @@ def open_button(
     return InlineKeyboardButton(OPEN_LABEL, url=link) if link else None
 
 
-def build_status_keyboard(
+def build_card_keyboard(
     request_id: str, open_btn: InlineKeyboardButton | None = None
 ) -> InlineKeyboardMarkup:
-    """Кнопки смены статуса под карточкой финансиста.
+    """Кнопки под карточкой заявки.
 
-    Ссылка на приложение — вторым рядом, а не рядом со статусами: три кнопки
-    статуса образуют один выбор, и четвёртая, ничего не меняющая, читалась бы
-    как часть этого выбора.
+    Под карточкой ОДНА кнопка — «Открыть в приложении»: в панели те же
+    «Оплачено / Отложить / Отклонить» видны сразу, вместе со счётом,
+    реквизитами и историей, а в чате они удваивали высоту каждой карточки
+    и позволяли переставить статус случайным касанием в ленте.
+
+    Но если открыть приложение НЕЧЕМ — не настроен `WEBAPP_URL`, а в группе
+    ещё и короткое имя Mini App, — кнопки статуса остаются: карточка обязана
+    давать способ действовать, иначе статус ставить будет нечем вообще.
+
+    Кнопки на РАНЕЕ разосланных карточках продолжают работать: обработчик
+    `bot/finance_actions.py` никуда не делся, и старые сообщения живут.
     """
-    rows = [[
+    if open_btn is not None:
+        return InlineKeyboardMarkup([[open_btn]])
+    return InlineKeyboardMarkup([[
         InlineKeyboardButton(label, callback_data=f"{CB_STATUS_PREFIX}:{request_id}:{key}")
         for key, (label, _status) in REQUEST_STATUSES.items()
-    ]]
-    if open_btn is not None:
-        rows.append([open_btn])
-    return InlineKeyboardMarkup(rows)
+    ]])
 
 
 def resolved_finance_ids() -> list[int]:
@@ -258,7 +265,7 @@ async def overdue_nudge(
     delivered = 0
     for chat_id in resolved_finance_ids():
         # Клавиатура своя на каждого: в личке кнопка web_app, в группе ссылка.
-        keyboard = build_status_keyboard(
+        keyboard = build_card_keyboard(
             request_id, open_button(bot, request_id, chat_id)
         )
         try:
@@ -359,7 +366,7 @@ async def notify_finance(
 
     for chat_id in chat_ids:
         # Клавиатура своя на каждого: в личке кнопка web_app, в группе ссылка.
-        keyboard = build_status_keyboard(
+        keyboard = build_card_keyboard(
             request.request_id, open_button(bot, request.request_id, chat_id)
         )
         try:

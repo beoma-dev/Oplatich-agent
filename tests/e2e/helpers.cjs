@@ -17,6 +17,7 @@ const PAGE_URL = "file://" + path.resolve(__dirname, "../../webapp/index.html");
 function install(cfg) {
   if (cfg.skin) localStorage.setItem("invoice_skin_v1", cfg.skin);
   window.__posts = [];
+  window.__gets = [];
   window.__params = [];
   window.__opened = null;
   window.Telegram = { WebApp: {
@@ -43,6 +44,7 @@ function install(cfg) {
   window.fetch = (url, opt) => {
     const u = String(url);
     if (opt && opt.method === "POST") window.__posts.push([u, opt.body || null]);
+    else window.__gets.push(u);
     const key = Object.keys(cfg.routes || {}).find((k) => u.indexOf(k) !== -1);
     const body = key ? cfg.routes[key] : { ok: true, items: [] };
     // ok считаем как настоящий fetch — по коду, а не по одному 403. С прежней

@@ -1811,8 +1811,9 @@ class TestOverdueNudge:
         assert [c.kwargs["chat_id"] for c in calls] == [555, 556]
         text = str(calls[0].kwargs["text"])
         assert rid in text and "просрочка" in text
-        # Кнопки статуса под напоминанием: искать карточку месячной
-        # давности, чтобы поставить «Оплачено», человек не должен.
+        # Кнопка под напоминанием одна — «Открыть в приложении»: искать
+        # карточку месячной давности, чтобы поставить «Оплачено», не надо,
+        # а сами статусы теперь ставят в панели.
         assert calls[0].kwargs.get("reply_markup") is not None
 
     async def test_not_overdue_yet_is_refused(self, api, monkeypatch):
@@ -1961,23 +1962,25 @@ class TestMiniappLink:
         self._webapp(monkeypatch)
         assert notifier.miniapp_link(self._bot(None), "INV-1") is None
 
-    def test_keyboard_keeps_the_button_out_of_the_status_row(self):
-        """Три кнопки статуса — один выбор; четвёртая читалась бы как часть его."""
+    def test_card_carries_only_the_open_button(self):
+        """Статусы ставят из панели: там они видны вместе со счётом и историей."""
         from telegram import InlineKeyboardButton
 
         from services import notifier
 
         extra = InlineKeyboardButton("🔎 Открыть", url="https://t.me/x/y?startapp=z")
-        rows = notifier.build_status_keyboard("INV-1", extra).inline_keyboard
-        assert len(rows) == 2
-        assert len(rows[0]) == len(REQUEST_STATUSES)
-        assert rows[1][0] is extra
-        assert all(b.callback_data for b in rows[0])
+        rows = notifier.build_card_keyboard("INV-1", extra).inline_keyboard
+        assert [list(r) for r in rows] == [[extra]]
 
-    def test_no_button_leaves_the_keyboard_as_before(self):
+    def test_without_the_app_the_status_buttons_stay(self):
+        """Иначе статус ставить будет нечем вообще — карточка обязана давать
+        способ действовать."""
         from services import notifier
 
-        assert len(notifier.build_status_keyboard("INV-1").inline_keyboard) == 1
+        rows = notifier.build_card_keyboard("INV-1").inline_keyboard
+        assert len(rows) == 1
+        assert len(rows[0]) == len(REQUEST_STATUSES)
+        assert all(b.callback_data for b in rows[0])
 
     async def test_nudge_carries_the_button(self, api, monkeypatch):
         from services import notifier
@@ -2028,5 +2031,5 @@ class TestMiniappLink:
             c.kwargs["chat_id"]: c.kwargs.get("reply_markup")
             for c in sent if c.kwargs.get("reply_markup") is not None
         }
-        assert by_chat[555].inline_keyboard[1][0].web_app is not None
-        assert by_chat[-100500].inline_keyboard[1][0].url.startswith("https://t.me/")
+        assert by_chat[555].inline_keyboard[0][0].web_app is not None
+        assert by_chat[-100500].inline_keyboard[0][0].url.startswith("https://t.me/")

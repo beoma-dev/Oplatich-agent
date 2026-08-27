@@ -963,6 +963,22 @@
   /* Фильтры статусов не влезают в один ряд — разрешаем перенос. */
   .seg-wrap { flex-wrap: wrap; }
   .fin-count { color: var(--hint); font-size: 12.5px; margin-top: 8px; }
+  /* Обновить список. Значок без подписи и в шапке карточки, а НЕ в ряду
+     действий заявки: обновляется весь список сразу, ряды же мы только что
+     ужимали до одной строки. Отклик — поворотом на нажатие: список берётся
+     из Google, и ответ бывает не мгновенным. */
+  .reload-btn {
+    border: none;
+    background: none;
+    color: var(--hint);
+    font-size: 15px;
+    line-height: 1;
+    padding: 2px 4px;
+    cursor: pointer;
+    transition: transform .3s ease, opacity .15s ease;
+  }
+  .reload-btn:active { transform: rotate(180deg); opacity: .5; }
+
   .tap-hint {
     margin-left: auto;
     font-weight: 400;
