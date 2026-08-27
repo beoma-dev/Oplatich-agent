@@ -224,9 +224,10 @@ class TestChatList:
             {"ID заявки": "INV-20260804-100000-0002", "Статус оплаты": "Оплачена"},
         ]
         markup = my._build_keyboard(rows)
-        first, second = markup.inline_keyboard
-        assert [b.text for b in first] == ["↻ Повторить №1", "🚫 Отозвать №1"]
-        assert [b.text for b in second] == ["↻ Повторить №2"]
+        # «Повторить» убрана 27.08.2026 — у оплаченной заявки кнопок не
+        # остаётся вовсе, и её ряд в клавиатуру не попадает.
+        assert len(markup.inline_keyboard) == 1
+        assert [b.text for b in markup.inline_keyboard[0]] == ["🚫 Отозвать №1"]
 
     def test_list_shows_status_and_reason(self):
         rows = [{
@@ -345,13 +346,23 @@ class TestChatRepeat:
         assert ctx.user_data == {}
         assert "не найдена" in update.callback_query.message.reply_text.call_args.args[0]
 
-    def test_repeat_button_is_webapp_when_enabled(self, monkeypatch):
+    def test_repeat_link_still_works_for_buttons_already_sent(self, monkeypatch):
+        """Кнопки в старых сообщениях должны продолжать работать.
+
+        Саму кнопку из списка убрали 27.08.2026, но разосланные сообщения
+        никуда не делись, и нажатие в них не должно упираться в тишину:
+        ссылка и обработчик оставлены намеренно.
+        """
+        monkeypatch.setattr(settings, "webapp_url", "https://example.org/")
+        assert my.repeat_webapp_url("INV-20260804-100000-0001").endswith(
+            "?repeat=INV-20260804-100000-0001"
+        )
+
+    def test_repeat_button_is_gone_from_the_list(self, monkeypatch):
         monkeypatch.setattr(settings, "webapp_url", "https://example.org/")
         rows = [{"ID заявки": "INV-20260804-100000-0001", "Статус оплаты": "Новая"}]
-        button = my._build_keyboard(rows).inline_keyboard[0][0]
-        assert button.web_app is not None
-        assert button.web_app.url.endswith("?repeat=INV-20260804-100000-0001")
-        assert button.callback_data is None
+        labels = [b.text for row in my._build_keyboard(rows).inline_keyboard for b in row]
+        assert not any("Повторить" in x for x in labels), labels
 
 
 class TestFinanceQueries:

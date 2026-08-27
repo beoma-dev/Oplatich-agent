@@ -173,3 +173,36 @@ test("на кнопке видно, сколько документов уже �
   assert.match(label || "", /\(2\)/, "счётчик на кнопке не показан");
   await page.close();
 });
+
+test("ряд кнопок заявки помещается и не обрезается", async () => {
+  // «Повторить» убрана, «Закрывающие документы» добавлены — надпись длинная,
+  // и с прежними размерами кнопок ряд разъезжался.
+  const item = {
+    id: "INV-20260701-120000-0003", status: "Новая", counterparty: "ООО «Ромашка»",
+    amount: "1000.00", currency: "RUB", article: "Аренда", urgency: "Обычная",
+    planned_date: "05.07.2026", created_at: "2026-07-01 12:00", has_invoice: true,
+    payment_source: "invoice", closing_count: 0, overdue: false,
+  };
+  for (const width of [360, 390, 430]) {
+    const page = await openApp(browser, { skin: "neon", width, routes: {
+      "/api/access": { allowed: true, pending: false, has_admins: true },
+      "/api/my-requests": { items: [item] },
+    } });
+    await page.click("#my-btn");
+    await page.waitForTimeout(350);
+    const r = await page.evaluate(() => {
+      const btns = [...document.querySelectorAll("#my-list .my-actions button")];
+      return {
+        labels: btns.map((b) => b.textContent.trim()),
+        clipped: btns.filter((b) => b.scrollWidth > b.clientWidth + 1)
+          .map((b) => b.textContent.trim()),
+      };
+    });
+    assert.deepEqual(r.clipped, [], `на ${width}px надписи обрезаны`);
+    assert.ok(r.labels.some((x) => /Закрывающие документы/.test(x)),
+      `на ${width}px нет кнопки закрывающих`);
+    assert.ok(!r.labels.some((x) => /Повторить/.test(x)),
+      `на ${width}px «Повторить» вернулась`);
+    await page.close();
+  }
+});

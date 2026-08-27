@@ -1518,17 +1518,6 @@
 
       var actions = document.createElement("div");
       actions.className = "my-actions";
-      var repeat = document.createElement("button");
-      repeat.type = "button";
-      repeat.className = "add-btn btn-ghost";
-      repeat.textContent = "↻ Повторить";
-      repeat.addEventListener("click", function () {
-        applyRepeat(it);
-        closeMy();
-        hideError();
-        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
-      });
-      actions.appendChild(repeat);
       // Закрывающие документы — в closing-panel.js: приходят после оплаты,
       // и кнопка нужна там, где человек находит свой платёж.
       if (typeof closingButton === "function") {

@@ -1,10 +1,12 @@
 """«Мои заявки»: автор видит статусы своих заявок и управляет ими.
 
 Команда /my показывает последние заявки автора со статусом, суммой, плановой
-датой и причиной отказа/отсрочки. Оттуда же — две кнопки на заявку:
-  ↻ Повторить — новая заявка с теми же реквизитами (аренда, хостинг и прочие
-                 регулярные платежи подаются ежемесячно одинаковыми);
-  🚫 Отозвать  — пока заявку не тронули (статус «Новая»).
+датой и причиной отказа/отсрочки. Оттуда же:
+  🚫 Отозвать — пока заявку не тронули (статус «Новая»).
+
+Кнопка «↻ Повторить» убрана 27.08.2026: ряд не вмещал закрывающие документы,
+а повтор дублировал обычную подачу. Обработчик оставлен — в уже разосланных
+сообщениях кнопки есть, и нажатие в них должно работать.
 
 Список приватный: в группе бот его не печатает, а зовёт в личку — иначе суммы
 и контрагенты утекли бы в общий чат.
@@ -14,7 +16,7 @@ from __future__ import annotations
 import html
 import logging
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ChatType, ParseMode
 from telegram.ext import ContextTypes
 
@@ -97,24 +99,21 @@ def _build_keyboard(rows: list[dict[str, str]]) -> InlineKeyboardMarkup:
         request_id = row.get("ID заявки", "")
         if not request_id:
             continue
-        # С включённым Mini App повтор открывает форму с подставленными полями;
-        # без него — пошаговую чат-форму (вход в диалог, см. bot/handlers).
-        if settings.webapp_enabled:
-            repeat = InlineKeyboardButton(
-                f"↻ Повторить №{i}", web_app=WebAppInfo(url=repeat_webapp_url(request_id))
-            )
-        else:
-            repeat = InlineKeyboardButton(
-                f"↻ Повторить №{i}", callback_data=f"{CB_REPEAT}:{request_id}"
-            )
-        buttons = [repeat]
+        # «Повторить» убрана 27.08.2026: ряд кнопок не вмещал закрывающие
+        # документы, а повтор дублировал обычную подачу. Обработчик
+        # (bot/handlers.repeat_start) и ссылка ОСТАВЛЕНЫ: кнопки уже разосланы
+        # в старые сообщения, и нажатие там не должно упираться в тишину.
+        buttons: list[InlineKeyboardButton] = []
         if row.get("Статус оплаты", "") == STATUS_NEW:
             buttons.append(
                 InlineKeyboardButton(
                     f"🚫 Отозвать №{i}", callback_data=f"{CB_WITHDRAW}:{request_id}"
                 )
             )
-        keyboard.append(buttons)
+        # Пустой ряд Telegram рисует пустотой: у оплаченной заявки кнопок
+        # теперь может не быть вовсе, и такой ряд добавлять нельзя.
+        if buttons:
+            keyboard.append(buttons)
     return InlineKeyboardMarkup(keyboard)
 
 
