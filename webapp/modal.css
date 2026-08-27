@@ -1,0 +1,76 @@
+/*
+ * modal.css — своё модальное окно: подтверждения, подробности заявки,
+ * реквизиты, список незаполненного.
+ *
+ * Вынесено из app.css первым куском обещанного разделения по компонентам:
+ * файл упёрся в потолок, а окно — самостоятельная и ни с чем не спорящая
+ * часть (скиновых переопределений у него нет, проверено grep'ом).
+ * Подключается ПОСЛЕ app.css: правила здесь заканчивают каскад, поэтому
+ * дублировать их в app.css нельзя — разъедутся.
+ *
+ * Не tg.showPopup: нативный попап Telegram рисуется в ГЛАВНОМ окне
+ * мессенджера, а Mini App на десктопе живёт в отдельном — подтверждение
+ * уезжало «на другой экран». Своё окно всегда по центру приложения.
+ */
+  #modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: rgba(0, 0, 0, .45);
+    backdrop-filter: blur(2px);
+    padding: 20px;
+    overflow-y: auto;
+  }
+  #modal.shown { display: flex; align-items: center; justify-content: center; }
+  .modal-box {
+    width: 100%;
+    max-width: 380px;
+    background: var(--bg);
+    border-radius: var(--radius);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, .3);
+    padding: 20px;
+    animation: rise .22s cubic-bezier(.22, 1, .36, 1);
+  }
+  .modal-title { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
+  .modal-text { font-size: 14.5px; line-height: 1.5; white-space: pre-line; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+  /* Мельче базовой кнопки: окно узкое, и две кнопки по 13/18 занимали в нём
+     полосу выше самой шапки. */
+  .modal-actions .add-btn { flex: 1; padding: 10px 14px; font-size: 14px; }
+
+  /* Ярлык и значение. Колонка ярлыков ОГРАНИЧЕНА долей: при auto её ширину
+     задавал самый длинный ярлык («Срок исполнения работ»), значению
+     оставалось меньше половины окна, и на узком экране «ПРЕДПРИНИМАТЕЛЬ»
+     ломался посреди слова. Ярлык теперь переносится сам — это дешевле.
+     break-word, а не anywhere: слово рвём, только если оно одно не влезло,
+     а не при первой возможности. */
+  .modal-rows { display: grid; grid-template-columns: minmax(64px, 31%) 1fr; gap: 7px 12px; }
+  .modal-rows dt { color: var(--hint); font-size: 13px; line-height: 1.35; }
+  /* Доля выбрана по замеру: на 320 px «ПРЕДПРИНИМАТЕЛЬ» — самое длинное
+     слово, какое встречается в названии ИП, — просит 145 px, а при 36 %
+     колонке доставалось 144, и слово рвалось. Переносы по слогам ловят
+     остальные случаи: рвать «ПРЕДПРИНИ-МАТЕЛЬ» читаемее, чем посередине. */
+  .modal-rows dd {
+    font-size: 14px;
+    overflow-wrap: break-word;
+    -webkit-hyphens: auto;
+    hyphens: auto;
+  }
+  .modal-req {
+    margin-top: 12px;
+    font-size: 13.5px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    background: var(--bg2);
+    border-radius: 10px;
+    padding: 10px;
+  }
+
+  /* Список незаполненного в модальном окне. */
+  .modal-gaps {
+    margin: 8px 0 0;
+    padding-left: 20px;
+    line-height: 1.6;
+  }
+  .modal-gaps li { margin-bottom: 2px; }

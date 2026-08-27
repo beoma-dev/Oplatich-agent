@@ -1577,8 +1577,7 @@
         actions.appendChild(deleteButton(it, loadMy));
       }
       row.appendChild(actions);
-      // У отозванной удаление уже кнопкой в ряду (это уборка автора,
-      // не админская) — второй раз в окне оно не нужно.
+      // У отозванной удаление уже кнопкой в ряду — в окне не дублируем.
       makeTappable(row, it, it.status === "Отозвана" ? null : loadMy);
       box.appendChild(row);
     });
@@ -1727,7 +1726,9 @@
   function makeTappable(row, item, onDeleted) {
     row.classList.add("tappable");
     row.addEventListener("click", function (ev) {
-      if (ev.target.closest("button")) return;
+      // Не только button: «📄 Акт / УПД» открывает скрытый input вызовом
+      // input.click(), и тот клик всплывал до строки уже от input.
+      if (ev.target.closest("button, input, label, a")) return;
       showRequestDetail(item, onDeleted);
     });
   }
@@ -2107,8 +2108,7 @@
       }
       row.appendChild(actions);
 
-      // Удаление — в подробностях, а не в ряду: у новой заявки кнопок и так
-      // четыре, и на 360px они не помещались. Права проверяет сервер.
+      // Удаление — в подробностях: четвёртой кнопкой ряд не помещался.
       makeTappable(row, it, loadFinance);
       box.appendChild(row);
     });

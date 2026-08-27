@@ -983,19 +983,6 @@
     margin: 0 -10px;
     transition: background .15s ease;
   }
-  .modal-rows { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; }
-  .modal-rows dt { color: var(--hint); font-size: 13px; white-space: nowrap; }
-  .modal-rows dd { font-size: 14px; overflow-wrap: anywhere; }
-  .modal-req {
-    margin-top: 12px;
-    font-size: 13.5px;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    background: var(--bg2);
-    border-radius: 10px;
-    padding: 10px;
-  }
-
   #admin-msg, #my-msg, #fin-msg {
     display: none;
     border-radius: 10px;
@@ -1245,6 +1232,17 @@
   }
 
   /* ---------- Сегменты ---------- */
+  /* Фильтры панели финансиста — СЕТКОЙ, а не переносом по ширине надписи:
+     семь статусов валились рядами 3-2-2 с разной длиной, и блок читался
+     как накиданный. «Все» — во всю строку: это сброс, а не такой же
+     статус, и оставшимся шести сетка 2×3 даёт ровный прямоугольник.
+     Кнопки здесь мельче базовых: их в блоке десяток. */
+  #fin-status-seg { display: grid; grid-template-columns: 1fr 1fr; }
+  #fin-status-seg button:first-child { grid-column: 1 / -1; }
+  #fin-urgency-seg button { flex: 1 1 0; min-width: 0; }
+  #fin-filters .seg button { padding: 8px 6px; font-size: 13.5px; }
+  #fin-filters .add-row .add-btn { padding: 10px 14px; font-size: 14px; }
+
   .seg { display: flex; gap: 6px; flex-wrap: wrap; }
   /* Ряд с РАВНЫМИ долями. Обычный .seg растит кнопки от надписи, и в столбце
      рядов граница гуляет (157|164, 196|125, 141|180) — читается как съехавший
@@ -1435,35 +1433,6 @@
   }
   #error-banner.shaking { display: block; animation: shake .45s ease; }
 
-  /* ---------- Своё модальное окно ----------
-     Не tg.showPopup: нативный попап Telegram рисуется в ГЛАВНОМ окне
-     мессенджера, а Mini App на десктопе живёт в отдельном — подтверждение
-     уезжало «на другой экран». Своё окно всегда по центру приложения. */
-  #modal {
-    display: none;
-    position: fixed;
-    inset: 0;
-    z-index: 100;
-    background: rgba(0, 0, 0, .45);
-    backdrop-filter: blur(2px);
-    padding: 20px;
-    overflow-y: auto;
-  }
-  #modal.shown { display: flex; align-items: center; justify-content: center; }
-  .modal-box {
-    width: 100%;
-    max-width: 380px;
-    background: var(--bg);
-    border-radius: var(--radius);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, .3);
-    padding: 20px;
-    animation: rise .22s cubic-bezier(.22, 1, .36, 1);
-  }
-  .modal-title { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
-  .modal-text { font-size: 14.5px; line-height: 1.5; white-space: pre-line; }
-  .modal-actions { display: flex; gap: 8px; margin-top: 18px; }
-  .modal-actions .add-btn { flex: 1; }
-
   /* ---------- Подсказки у иконок ----------
      Появляются при наведении и с клавиатуры (:focus-visible). На тач-экранах
      hover не срабатывает — там смысл кнопок объясняет экран «Инструкция». */
@@ -1587,14 +1556,6 @@
   }
   #gaps-hint b { font-weight: 600; }
   #gaps-hint .gap-item { color: var(--hint); }
-
-  /* Список незаполненного в модальном окне. */
-  .modal-gaps {
-    margin: 8px 0 0;
-    padding-left: 20px;
-    line-height: 1.6;
-  }
-  .modal-gaps li { margin-bottom: 2px; }
 
   /* ---------- Успех ---------- */
   #success {

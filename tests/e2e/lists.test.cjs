@@ -410,3 +410,114 @@ test("разбор start_param из initData, а не только из адре
   assert.deepEqual(page.errors, []);
   await page.close();
 });
+
+test("подробности: значение шире ярлыка и слова не рвутся", async () => {
+  // Колонка ярлыков раньше росла по самому длинному («Срок исполнения
+  // работ»), и на узком экране название ИП ломалось посреди слова.
+  const page = await openApp(browser, { skin: "light", width: 320, routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true },
+    "/api/my-requests": { items: [{
+      id: "INV-20260827-164013-2415", status: "Новая",
+      counterparty: "ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ НИЦЕВИЧ ТАТЬЯНА ВАЛЕРЬЕВНА",
+      amount: "123.00", currency: "RUB", article: "Закупка товаров",
+      urgency: "Срочно", planned_date: "27.08.2026", created_at: "2026-08-27 16:40",
+      has_invoice: false, payment_source: "none", work_deadline: "123",
+      sender: "@elementaryyy1997 (Pavel Elipashev)", closing_count: 0, overdue: false,
+    }] },
+  } });
+  await page.click("#my-btn");
+  await page.waitForTimeout(400);
+  await page.evaluate(() => document.querySelector("#my-list .my-item .my-id").click());
+  await page.waitForTimeout(300);
+  const r = await page.evaluate(() => {
+    const dts = [...document.querySelectorAll(".modal-rows dt")];
+    const dds = [...document.querySelectorAll(".modal-rows dd")];
+    const probe = document.createElement("span");
+    probe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap";
+    probe.style.font = getComputedStyle(dds[0]).font;
+    document.body.appendChild(probe);
+    // Самое длинное СЛОВО значений против ширины колонки: если слово шире,
+    // браузеру приходится рвать его посередине. По дефису рвать можно —
+    // номер заявки так и переносится, и это читается.
+    const col = dds[0].getBoundingClientRect().width;
+    let widest = 0, word = "";
+    dds.forEach((dd) => dd.textContent.split(/[\s-]+/).forEach((w) => {
+      probe.textContent = w;
+      const width = probe.getBoundingClientRect().width;
+      if (width > widest) { widest = width; word = w; }
+    }));
+    probe.remove();
+    return {
+      label: Math.round(dts[0].getBoundingClientRect().width),
+      value: Math.round(col),
+      widest: Math.ceil(widest), word,
+      buttons: [...document.querySelectorAll("#modal-actions button")]
+        .map((b) => Math.round(b.getBoundingClientRect().height)),
+    };
+  });
+  assert.ok(r.value > r.label, `значение уже ярлыка: ${r.label} против ${r.value}`);
+  assert.ok(r.widest <= r.value,
+    `«${r.word}» (${r.widest}px) не влезает в колонку ${r.value}px — порвётся`);
+  // Кнопки окна мельче базовых: две штуки по 46px занимали полосу выше шапки.
+  assert.ok(r.buttons.every((h) => h <= 40), `кнопки окна крупные: ${r.buttons}`);
+  await page.close();
+});
+
+test("фильтры панели стоят сеткой, а не зигзагом", async () => {
+  const page = await openApp(browser, { skin: "light", width: 360, routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true },
+    "/api/finance/access": { ok: true },
+    "/api/finance/requests": { items: [], total_found: 0, shown: 0 },
+  } });
+  await page.evaluate(() => document.querySelector("#fin-btn").classList.remove("hidden"));
+  await page.click("#fin-btn");
+  await page.waitForTimeout(400);
+  await page.click("#fin-toggle");
+  await page.waitForTimeout(300);
+  const r = await page.evaluate(() => {
+    const st = [...document.querySelectorAll("#fin-status-seg button")];
+    const box = st.map((b) => b.getBoundingClientRect());
+    return {
+      // «Все» во всю строку, остальные — ровно две равные колонки.
+      first: Math.round(box[0].width),
+      rest: [...new Set(box.slice(1).map((b) => Math.round(b.width)))],
+      columns: [...new Set(box.slice(1).map((b) => Math.round(b.left)))].length,
+      clipped: st.filter((b) => b.scrollWidth > b.clientWidth + 1)
+        .map((b) => b.textContent.trim()),
+      urgency: [...new Set([...document.querySelectorAll("#fin-urgency-seg button")]
+        .map((b) => Math.round(b.getBoundingClientRect().width)))],
+    };
+  });
+  assert.equal(r.rest.length, 1, `статусы разной ширины: ${r.rest.join("/")}`);
+  assert.equal(r.columns, 2, `колонок не две: ${r.columns}`);
+  assert.ok(r.first > r.rest[0], "«Все» не во всю строку");
+  assert.deepEqual(r.clipped, [], "надписи фильтров обрезаны");
+  assert.equal(r.urgency.length, 1, `срочность разной ширины: ${r.urgency.join("/")}`);
+  await page.close();
+});
+
+test("кнопка «Акт / УПД» не открывает подробности заодно", async () => {
+  // input.click() из обработчика кнопки всплывал до строки уже от input,
+  // а строка ловила только closest("button") — поверх выбора файла
+  // открывалось окно подробностей.
+  const page = await openApp(browser, { skin: "neon", routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true },
+    "/api/my-requests": { items: [{
+      id: "INV-20260701-120000-0011", status: "Оплачена", counterparty: "ООО «Ромашка»",
+      amount: "1000.00", currency: "RUB", article: "Аренда", urgency: "Обычная",
+      planned_date: "05.07.2026", created_at: "2026-07-01 12:00", has_invoice: true,
+      payment_source: "invoice", closing_count: 0, overdue: false,
+    }] },
+  } });
+  await page.click("#my-btn");
+  await page.waitForTimeout(400);
+  await page.evaluate(() => {
+    [...document.querySelectorAll("#my-list .my-actions button")]
+      .find((b) => /Акт/.test(b.textContent)).click();
+  });
+  await page.waitForTimeout(300);
+  assert.equal(
+    await page.evaluate(() => document.getElementById("modal").classList.contains("shown")),
+    false, "поверх выбора файла открылись подробности");
+  await page.close();
+});
