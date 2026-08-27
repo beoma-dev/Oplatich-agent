@@ -965,7 +965,7 @@
   .fin-count { color: var(--hint); font-size: 12.5px; margin-top: 8px; }
   /* Обновить список. В шапке карточки, а НЕ в ряду действий заявки:
      обновляется весь список сразу, ряды же мы только что ужимали до одной
-     строки. Контурный SVG в цвет акцента, как у шестерёнки и прочих иконок:
+     строки. Свой SVG в цвет акцента, как у шестерёнки и прочих иконок:
      цветной эмодзи среди них выглядел наклейкой. Пока идёт запрос —
      крутится: список берётся из Google, и ответ бывает не мгновенным. */
   .reload-btn {
@@ -980,14 +980,19 @@
     cursor: pointer;
     transition: transform .12s ease, opacity .15s ease;
   }
-  .reload-btn svg {
-    width: 16px; height: 16px;
+  /* Дуга штрихом, наконечник — ЗАЛИТЫЙ клин по касательной. Контурный
+     уголок (как в feather) сводит в одной точке три штриха под разными
+     углами и на 16-18 px читается крючком, а не стрелкой. */
+  /* 20px и клин длиной 5.2: мельче наконечник на этом размере схлопывается
+     в утолщение и значок читается просто буквой «C» (проверено отрисовкой). */
+  .reload-btn svg { width: 20px; height: 20px; }
+  .reload-btn .arc {
     fill: none;
     stroke: currentColor;
     stroke-width: 2;
     stroke-linecap: round;
-    stroke-linejoin: round;
   }
+  .reload-btn .head { fill: currentColor; stroke: none; }
   .reload-btn:active { transform: scale(.85); }
   .reload-btn.spinning { opacity: .55; }
   .reload-btn.spinning svg { animation: reload-spin .8s linear infinite; }

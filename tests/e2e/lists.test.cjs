@@ -544,16 +544,18 @@ test("кнопка обновления перезапрашивает спис�
     return {
       fits: t.scrollWidth <= t.clientWidth + 1,
       svg: !!b.querySelector("svg"),
-      // Контурный значок в цвет темы, как у шестерёнки: цветной эмодзи
-      // среди прочих иконок выглядел наклейкой.
-      stroke: getComputedStyle(b.querySelector("svg")).stroke,
-      fill: getComputedStyle(b.querySelector("svg")).fill,
+      // Значок свой, а не эмодзи: дуга штрихом в цвет темы, наконечник —
+      // залитый клин. Контурный уголок читался крючком.
+      arc: getComputedStyle(b.querySelector(".arc")).stroke,
+      arcFill: getComputedStyle(b.querySelector(".arc")).fill,
+      head: getComputedStyle(b.querySelector(".head")).fill,
     };
   });
   assert.ok(look.fits, "шапка карточки поехала из-за значка обновления");
   assert.ok(look.svg, "значок обновления снова эмодзи, а не svg");
-  assert.equal(look.fill, "none", "значок залит, а не контурный");
-  assert.notEqual(look.stroke, "none", "у значка нет контура");
+  assert.equal(look.arcFill, "none", "дуга залита, а должна быть штрихом");
+  assert.notEqual(look.arc, "none", "у дуги нет обводки");
+  assert.equal(look.head, look.arc, "наконечник другого цвета, чем дуга");
   assert.deepEqual(page.errors, []);
   await page.close();
 });
