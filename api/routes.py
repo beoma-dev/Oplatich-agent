@@ -144,6 +144,8 @@ async def access_state(request: Request) -> dict:
         "env_label": settings.env_label.strip()[:24],
         # Технические работы: плашку видят все, кто открыл форму.
         "maintenance": rs.maintenance_config(),
+        # Живая инструкция: пока обкатывается на стенде.
+        "animated_help": settings.animated_help,
     }
 
 

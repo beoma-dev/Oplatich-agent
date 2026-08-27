@@ -702,3 +702,96 @@ test("строки карточки не переносятся, как бы н�
     }
   }
 });
+
+test("живая инструкция: пять шагов, вперёд, назад и пропуск", async () => {
+  const page = await openApp(browser, { skin: "light", width: 360, height: 820, routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true, animated_help: true },
+  } });
+  await page.click("#help-btn");
+  await page.waitForTimeout(500);
+
+  const start = await page.evaluate(() => {
+    const t = document.getElementById("tour");
+    return t && {
+      bars: t.querySelectorAll(".tour-bars i").length,
+      running: t.querySelectorAll(".tour-bars i.run").length,
+      title: t.querySelector(".tour-cap b").textContent,
+      scene: t.querySelector(".tour-stage").className,
+      prevOff: t.querySelector(".tour-nav").disabled,
+    };
+  });
+  assert.ok(start, "тура нет при включённом флаге");
+  assert.equal(start.bars, 5, "полосок не пять");
+  assert.equal(start.running, 1, "не идёт ни одна полоска");
+  assert.equal(start.scene, "tour-stage s1");
+  assert.ok(start.prevOff, "на первом шаге «назад» активна");
+
+  // Вперёд до конца: сцена и заголовок должны меняться.
+  const titles = [start.title];
+  for (let i = 0; i < 4; i++) {
+    await page.locator("#tour .tour-nav:last-child").click();
+    await page.waitForTimeout(150);
+    titles.push(await page.evaluate(() =>
+      document.querySelector("#tour .tour-cap b").textContent));
+  }
+  assert.equal(new Set(titles).size, 5, `шаги повторяются: ${titles.join(" / ")}`);
+  assert.equal(
+    await page.evaluate(() => document.querySelector("#tour .tour-stage").className),
+    "tour-stage s5");
+  // На последнем шаге «дальше» превращается в «готово» и закрывает тур.
+  await page.locator("#tour .tour-nav:last-child").click();
+  await page.waitForTimeout(150);
+  assert.ok(await page.evaluate(() => document.getElementById("tour").classList.contains("hidden")),
+    "тур не закрылся на последнем шаге");
+
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test("удержание паузит инструкцию, отпускание продолжает", async () => {
+  const page = await openApp(browser, { skin: "light", width: 360, height: 820, routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true, animated_help: true },
+  } });
+  await page.click("#help-btn");
+  await page.waitForTimeout(400);
+  const box = await page.locator("#tour .tour-stage").boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(150);
+  assert.ok(await page.evaluate(() => document.getElementById("tour").classList.contains("paused")),
+    "удержание не поставило паузу");
+  await page.mouse.up();
+  await page.waitForTimeout(150);
+  assert.ok(!await page.evaluate(() => document.getElementById("tour").classList.contains("paused")),
+    "пауза не снялась");
+  await page.close();
+});
+
+test("без флага инструкция остаётся текстовой", async () => {
+  // Флаг обкатки: в бою он выключен, и экран должен быть прежним.
+  const page = await openApp(browser, { skin: "light", width: 360, height: 820, routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true },
+  } });
+  await page.click("#help-btn");
+  await page.waitForTimeout(500);
+  assert.equal(await page.evaluate(() => !!document.getElementById("tour")), false,
+    "тур построился без флага");
+  // Текст на месте — он и есть инструкция, когда анимации нет.
+  assert.ok(await page.evaluate(() =>
+    document.getElementById("help-view").textContent.indexOf("Счёт или реквизиты") !== -1));
+  await page.close();
+});
+
+test("текстовая инструкция остаётся и вместе с живой", async () => {
+  // Тур — быстрый обзор, а справочник ниже никуда не девается.
+  const page = await openApp(browser, { skin: "light", width: 360, height: 820, routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true, animated_help: true },
+  } });
+  await page.click("#help-btn");
+  await page.waitForTimeout(500);
+  const text = await page.evaluate(() => document.getElementById("help-view").textContent);
+  for (const must of ["Акт / УПД", "Напомнить", "Дополнительные документы"]) {
+    assert.ok(text.indexOf(must) !== -1, `в инструкции пропало «${must}»`);
+  }
+  await page.close();
+});

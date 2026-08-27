@@ -2199,6 +2199,7 @@
       .then(function (d) {
         if (!d) return;
         showEnvLabel(d.env_label);
+        if (typeof helpTour === "function") helpTour(d.animated_help);
         showMaintenance(d.maintenance);
         applyAccess(d.allowed, false);
         // Сразу, а не на первом тике опроса: иначе вкладка напоминаний

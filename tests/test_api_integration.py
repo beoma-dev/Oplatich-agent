@@ -1400,6 +1400,8 @@ class TestAccessRequests:
             # Плашка «технические работы» едет тем же ответом: её видят все,
             # кто открыл форму, и ради неё не стоит второго запроса.
             "maintenance": {"enabled": False, "text": rs.MAINTENANCE_DEFAULT},
+            # Флаг обкатки живой инструкции: в бою выключен.
+            "animated_help": False,
         }
         await client.post("/api/access/request", headers=_auth())
         assert (await client.get("/api/access", headers=_auth())).json()["pending"] is True
@@ -2033,3 +2035,20 @@ class TestMiniappLink:
         }
         assert by_chat[555].inline_keyboard[0][0].web_app is not None
         assert by_chat[-100500].inline_keyboard[0][0].url.startswith("https://t.me/")
+
+
+class TestAnimatedHelpFlag:
+    """Флаг обкатки живой инструкции: в бою выключен, на стенде включён."""
+
+    async def test_off_by_default(self, api, monkeypatch):
+        client, _ = api
+        _allow(monkeypatch)
+        resp = await client.get("/api/access", headers=_auth())
+        assert resp.json()["animated_help"] is False
+
+    async def test_on_when_enabled(self, api, monkeypatch):
+        client, _ = api
+        _allow(monkeypatch)
+        monkeypatch.setattr(settings, "animated_help", True)
+        resp = await client.get("/api/access", headers=_auth())
+        assert resp.json()["animated_help"] is True

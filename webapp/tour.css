@@ -1,0 +1,208 @@
+/*
+ * tour.css — живая инструкция (webapp/help-tour.js).
+ *
+ * Всё движение здесь: JS только переключает шаг. Появление элементов сцены
+ * задаётся классом `fx` и переменной `--d` — задержкой; так сценарий сцены
+ * читается прямо в её разметке, а не размазан по коду.
+ *
+ * Подключается ПОСЛЕ app.css: правила заканчивают каскад, дублировать их
+ * в app.css нельзя — разъедутся.
+ */
+  .tour {
+    background: var(--bg);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 14px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .tour.hidden { display: none; }
+
+  /* Полоски прогресса. Активная едет 6.5s — на прочтение подписи хватает,
+     а досматривать пять шагов не утомительно. */
+  .tour-bars { display: flex; gap: 4px; margin-bottom: 12px; }
+  .tour-bars i {
+    flex: 1 1 0;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--bg2);
+    overflow: hidden;
+    position: relative;
+  }
+  .tour-bars i::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--accent);
+    transform-origin: left;
+    transform: scaleX(0);
+  }
+  .tour-bars i.done::after { transform: scaleX(1); }
+  .tour-bars i.run::after { animation: tour-bar 6.5s linear forwards; }
+  @keyframes tour-bar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+  .tour-stage {
+    min-height: 168px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 0 10px;
+  }
+  .tour-cap { min-height: 76px; }
+  .tour-cap b { display: block; font-size: 15px; margin-bottom: 4px; }
+  .tour-cap span { font-size: 13px; color: var(--hint); line-height: 1.45; }
+
+  .tour-foot { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+  .tour-nav {
+    border: none;
+    border-radius: 10px;
+    background: var(--bg2);
+    color: var(--text);
+    font-size: 15px;
+    padding: 8px 14px;
+    cursor: pointer;
+  }
+  .tour-nav:disabled { opacity: .35; }
+  .tour-skip { margin-right: auto; font-size: 12.5px; color: var(--hint); background: none; }
+
+  /* Удержание паузит и полоску, и сцену — одним переключателем, чтобы они
+     не могли разъехаться. */
+  .tour.paused * { animation-play-state: paused !important; }
+
+  /* ---------- Появление элементов сцены ---------- */
+  .tour-stage .fx { opacity: 0; animation: tour-in .45s ease forwards var(--d, 0s); }
+  @keyframes tour-in {
+    from { opacity: 0; transform: translateY(7px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  .t-col { display: flex; flex-direction: column; align-items: center; gap: 7px; width: 100%; }
+  .t-or { font-size: 11.5px; color: var(--hint); }
+
+  .t-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+    padding: 8px 12px;
+    border-radius: 11px;
+    background: var(--bg2);
+    font-size: 12.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .t-chip.t-warn { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, var(--bg)); }
+  .t-ok { color: var(--ok); font-style: normal; }
+
+  /* ---------- Шаг 2: форма ---------- */
+  .t-form { width: 100%; display: flex; flex-direction: column; gap: 9px; }
+  .t-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .t-row span { font-size: 12px; color: var(--hint); }
+  .t-row b { font-size: 13px; display: flex; gap: 5px; align-items: center; }
+  /* Печать по символам: ширина, а не opacity, — иначе текст «проявляется»
+     целиком и не читается как ввод. */
+  .t-type {
+    overflow: hidden;
+    white-space: nowrap;
+    width: 0;
+    animation: tour-type 1.1s steps(13) forwards var(--d, 0s);
+  }
+  @keyframes tour-type { to { width: 6.7em; } }
+  .t-hint { color: var(--ok); }
+  .t-pill {
+    font-style: normal;
+    font-size: 11.5px;
+    padding: 3px 8px;
+    border-radius: 8px;
+    background: var(--bg2);
+    opacity: .5;
+  }
+  .t-pill.t-on { opacity: 1; background: color-mix(in srgb, var(--danger) 14%, var(--bg)); }
+
+  /* ---------- Шаг 3: отправка ---------- */
+  .t-btn {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-radius: 11px;
+    padding: 10px 18px;
+    font-size: 13.5px;
+    font-weight: 600;
+  }
+  .t-press { animation: tour-in .45s ease forwards var(--d), tour-press .5s ease .9s; }
+  @keyframes tour-press { 50% { transform: scale(.93); } }
+  .t-card {
+    text-align: center;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--ok) 12%, var(--bg));
+  }
+  .t-card b { display: block; font-size: 13.5px; }
+  /* Блоком и с переносом: номер заявки длинный и вылезал за скруглённый край. */
+  .t-card span { display: block; font-size: 11px; color: var(--hint); overflow-wrap: anywhere; }
+  .t-reg { font-size: 11.5px; color: var(--hint); }
+
+  /* ---------- Шаг 4: финансист ---------- */
+  .t-bubble {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 12px 12px 12px 4px;
+    background: var(--bg2);
+  }
+  .t-bubble b { display: block; font-size: 13px; }
+  .t-bubble span { font-size: 11.5px; color: var(--hint); }
+  .t-open {
+    display: block;
+    margin-top: 8px;
+    text-align: center;
+    font-style: normal;
+    font-size: 12px;
+    padding: 6px;
+    border-radius: 9px;
+    background: var(--bg);
+    color: var(--accent);
+  }
+  /* Статус переворачивается на месте: два значка в одной ячейке сетки. */
+  .t-swap { display: grid; }
+  .t-swap .t-st {
+    grid-area: 1 / 1;
+    font-style: normal;
+    font-size: 12.5px;
+    padding: 4px 10px;
+    border-radius: 9px;
+    background: var(--bg2);
+  }
+  .t-st-old { animation: tour-out .4s ease 1.4s forwards; }
+  .t-st-new {
+    opacity: 0;
+    color: var(--ok);
+    background: color-mix(in srgb, var(--ok) 14%, var(--bg));
+    animation: tour-in .4s ease 1.6s forwards;
+  }
+  @keyframes tour-out { to { opacity: 0; transform: translateY(-6px); } }
+
+  /* ---------- Шаг 5: мои заявки ---------- */
+  .t-item {
+    width: 100%;
+    padding: 9px 11px;
+    border-radius: 12px;
+    background: var(--bg2);
+  }
+  .t-item b { display: block; font-size: 12.5px; }
+  /* Блоком: строчным span кнопка вставала с ним в один ряд и налезала на дату. */
+  .t-item span { display: block; font-size: 11.5px; color: var(--hint); }
+  .t-late { color: var(--danger); font-weight: 600; }
+  .t-act {
+    display: inline-block;
+    margin-top: 7px;
+    font-style: normal;
+    font-size: 11.5px;
+    padding: 5px 9px;
+    border-radius: 9px;
+    background: var(--accent);
+    color: var(--accent-text);
+  }
+  /* Подсвечиваем по очереди — глаз идёт за тем, о чём говорит подпись. */
+  .t-act-1 { animation: tour-beat 1.6s ease 1s 2; }
+  .t-act-2 { animation: tour-beat 1.6s ease 2.6s 2; }
+  @keyframes tour-beat { 40% { transform: scale(1.07); } }
