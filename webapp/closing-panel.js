@@ -15,7 +15,9 @@ function closingButton(actions, item, ctx) {
 
   var btn = document.createElement("button");
   btn.type = "button";
-  btn.className = "add-btn btn-ghost";
+  // Главное действие карточки — заливкой: в ряду одинаковых
+  // призрачных кнопок глазу не за что зацепиться.
+  btn.className = "add-btn";
   var already = Number(item.closing_count || 0);
   btn.textContent = "📄 Акт / УПД" + (already ? " (" + already + ")" : "");
   btn.title = "Приложить акт, УПД или накладную к этой заявке";

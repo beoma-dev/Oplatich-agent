@@ -1569,13 +1569,15 @@
         });
         actions.appendChild(wd);
       }
-      // Свою заявку автор удаляет только после отзыва; админ — любую
-      // (право проверяет сервер, кнопку показываем по тому же правилу).
-      if (it.status === "Отозвана" || isBotAdmin) {
+      // Свою заявку автор удаляет только после отзыва — это его уборка,
+      // и она остаётся в ряду. Админскую «удалить любую» ряд не тянет:
+      // рядом с «Отозвать» две красные кнопки читались как одно и то же,
+      // а четвёртая ломала строку. Она переехала в подробности заявки.
+      if (it.status === "Отозвана") {
         actions.appendChild(deleteButton(it, loadMy));
       }
       row.appendChild(actions);
-      makeTappable(row, it);
+      makeTappable(row, it, loadMy);
       box.appendChild(row);
     });
   }
@@ -1684,8 +1686,17 @@
   }
 
   /** Карточка заявки целиком — по нажатию на строку списка. */
-  function showRequestDetail(item) {
+  function showRequestDetail(item, onDeleted) {
     var buttons = [{ text: "Закрыть", style: "ghost" }];
+    // Админское «удалить любую» живёт здесь, а не в ряду списка: это
+    // осознанное действие над одной заявкой, которую ты открыл нарочно.
+    if (onDeleted && isBotAdmin && item.status !== "Отозвана") {
+      buttons.unshift({
+        text: "🗑 Удалить",
+        style: "danger",
+        onClick: function () { askDelete(item, onDeleted); }
+      });
+    }
     // Реквизиты — отдельным действием, как спойлер в чате: не мелькают
     // на экране, когда рядом кто-то стоит.
     if (item.requisites) {
@@ -1710,30 +1721,37 @@
   }
 
   /** Делает строку списка кликабельной, не мешая кнопкам внутри неё. */
-  function makeTappable(row, item) {
+  function makeTappable(row, item, onDeleted) {
     row.classList.add("tappable");
     row.addEventListener("click", function (ev) {
       if (ev.target.closest("button")) return;
-      showRequestDetail(item);
+      showRequestDetail(item, onDeleted);
     });
   }
 
-  /** Кнопка «Удалить»: необратимо, поэтому всегда через подтверждение. */
+  /** Удаление: необратимо, поэтому всегда через подтверждение.
+   *
+   * Отдельно от кнопки, потому что зовут его из двух мест: из ряда списка
+   * и из подробностей заявки, куда переехало админское удаление.
+   */
+  function askDelete(item, afterDelete, btn) {
+    var target = btn || document.createElement("button");
+    askConfirm(
+      "🗑 Удалить заявку",
+      "Заявка на «" + (item.counterparty || "") + "» будет удалена из реестра " +
+      "без возможности восстановления. Останется только запись в журнале аудита.",
+      "Удалить",
+      function () { deleteRequest(item, target, afterDelete); },
+      true
+    );
+  }
+
   function deleteButton(item, afterDelete) {
     var btn = document.createElement("button");
     btn.type = "button";
     btn.className = "add-btn btn-danger";
     btn.textContent = "🗑 Удалить";
-    btn.addEventListener("click", function () {
-      askConfirm(
-        "🗑 Удалить заявку",
-        "Заявка на «" + (item.counterparty || "") + "» будет удалена из реестра " +
-        "без возможности восстановления. Останется только запись в журнале аудита.",
-        "Удалить",
-        function () { deleteRequest(item, btn, afterDelete); },
-        true
-      );
-    });
+    btn.addEventListener("click", function () { askDelete(item, afterDelete, btn); });
     return btn;
   }
 
@@ -2380,6 +2398,19 @@
     }
     loadFinance();
   }
+  /** Ссылка из уведомления финансисту: startapp=fin_<id>.
+   *
+   * Отдельной выборки не заводим — у панели уже есть поиск, и номер заявки
+   * в нём ищется. Поэтому подставляем его в строку поиска: финансист видит,
+   * ПОЧЕМУ показана одна заявка, и одним «Сбросить» возвращает весь список.
+   */
+  function openFinanceAt(requestId) {
+    if (!insideTelegram) return;
+    finFilters = { query: requestId, status: "", urgency: "", from: "", to: "" };
+    $("fin-query").value = requestId;
+    openFinance();
+  }
+
   function closeFinance() {
     $("fin-view").classList.add("hidden");
     $("form-view").style.display = "";
@@ -2899,4 +2930,11 @@
   var repeatId = query.get("repeat") ||
     (startParam.indexOf("repeat_") === 0 ? startParam.slice(7) : "");
   if (repeatId) applyRepeatById(repeatId);
+
+  // Ссылка под уведомлением финансисту открывает панель сразу на этой
+  // заявке: startapp=fin_<id>. Права всё равно за сервером — не финансист
+  // получит отказ выборки, а не список чужих заявок.
+  var finId = query.get("fin") ||
+    (startParam.indexOf("fin_") === 0 ? startParam.slice(4) : "");
+  if (finId) openFinanceAt(finId);
 })();

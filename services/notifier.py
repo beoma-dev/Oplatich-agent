@@ -13,6 +13,7 @@ from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 
 from bot.models import REQUEST_STATUSES, InvoiceRequest
+from config import settings
 from services import cards, tg_retry
 from services import runtime_settings as rs
 from services.runtime_settings import effective_finance_recipients
@@ -34,12 +35,47 @@ async def _send_with_retry(send, chat_id: int):
     return await tg_retry.send_with_retry(send, what=f"Финансист {chat_id}")
 
 
-def build_status_keyboard(request_id: str) -> InlineKeyboardMarkup:
-    """Кнопки смены статуса под карточкой финансиста."""
-    return InlineKeyboardMarkup([[
+def miniapp_link(bot: Bot, request_id: str) -> str | None:
+    """Прямая ссылка, открывающая панель финансиста НА ЭТОЙ заявке.
+
+    В сообщении заявка описана коротко: увидеть счёт, реквизиты и историю
+    можно только в приложении, а искать там номер руками — лишний шаг.
+    Приложение ловит `startapp=fin_<id>` и подставляет номер в поиск панели.
+
+    None — если Mini App не зарегистрирован (`MINIAPP_SHORT_NAME` пуст) или
+    бот ещё не знает своего имени: кнопки тогда просто не будет, сообщение
+    уйдёт как раньше.
+    """
+    if not (settings.webapp_enabled and settings.miniapp_short_name):
+        return None
+    try:
+        username = bot.username
+    except (RuntimeError, AttributeError):
+        return None
+    if not isinstance(username, str) or not username:
+        return None
+    return (
+        f"https://t.me/{username}/{settings.miniapp_short_name}"
+        f"?startapp=fin_{request_id}"
+    )
+
+
+def build_status_keyboard(
+    request_id: str, link: str | None = None
+) -> InlineKeyboardMarkup:
+    """Кнопки смены статуса под карточкой финансиста.
+
+    Ссылка на приложение — вторым рядом, а не рядом со статусами: три кнопки
+    статуса образуют один выбор, и четвёртая, ничего не меняющая, читалась бы
+    как часть этого выбора.
+    """
+    rows = [[
         InlineKeyboardButton(label, callback_data=f"{CB_STATUS_PREFIX}:{request_id}:{key}")
         for key, (label, _status) in REQUEST_STATUSES.items()
-    ]])
+    ]]
+    if link:
+        rows.append([InlineKeyboardButton("🔎 Открыть в приложении", url=link)])
+    return InlineKeyboardMarkup(rows)
 
 
 def resolved_finance_ids() -> list[int]:
@@ -139,13 +175,19 @@ async def closing_docs_notify(
         f"🏢 {e(_clip(row.get('Контрагент', '—'), 120))} · "
         f"{e(row.get('Сумма', '—'))} {e(row.get('Валюта', ''))}"
     )
+    link = miniapp_link(bot, request_id)
+    keyboard = (
+        InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔎 Открыть в приложении", url=link)
+        ]]) if link else None
+    )
     delivered = 0
     for chat_id in resolved_finance_ids():
         try:
             await tg_retry.send_with_retry(
                 lambda cid=chat_id: bot.send_message(
                     chat_id=cid, text=text, parse_mode=ParseMode.HTML,
-                    disable_web_page_preview=True,
+                    reply_markup=keyboard, disable_web_page_preview=True,
                 ),
                 what=f"Закрывающие документы для {chat_id}",
             )
@@ -187,7 +229,7 @@ async def overdue_nudge(
         f"<b>{e(row.get('Сумма', '—'))} {e(row.get('Валюта', ''))}</b>\n"
         f"📅 Плановая дата: {e(row.get('Плановая дата оплаты', '—'))}"
     )
-    keyboard = build_status_keyboard(request_id)
+    keyboard = build_status_keyboard(request_id, miniapp_link(bot, request_id))
     delivered = 0
     for chat_id in resolved_finance_ids():
         try:
@@ -277,7 +319,9 @@ async def notify_finance(
     text = _format_card(request, row_number)
     if file_warning:
         text += f"\n{html.escape(file_warning)}"
-    keyboard = build_status_keyboard(request.request_id)
+    keyboard = build_status_keyboard(
+        request.request_id, miniapp_link(bot, request.request_id)
+    )
     # Приоритет вложения: файл счёта (нужен для оплаты); без счёта — PDF
     # заявки (там реквизиты целиком и сумма прописью).
     if invoice_file is not None:

@@ -16,6 +16,7 @@ import api.routes as routes_mod
 import bot.access as access
 import services.runtime_settings as rs
 from api.server import build_api
+from bot.models import REQUEST_STATUSES
 from config import settings
 from tests.test_auth import _signed_init_data
 
@@ -1886,3 +1887,83 @@ class TestOverdueNudge:
         monkeypatch.setattr(notifier, "resolved_finance_ids", lambda: [555])
         resp = await client.post("/api/my/nudge", json={"request_id": rid}, headers=_auth())
         assert resp.status_code == 200, resp.text
+
+
+class TestMiniappLink:
+    """Ссылка «Открыть в приложении» под сообщением финансисту.
+
+    В сообщении заявка описана коротко: счёт, реквизиты и историю видно
+    только в приложении, а искать там номер руками — лишний шаг.
+    """
+
+    def _bot(self, username: str | None = "oplatych_bot"):
+        bot = MagicMock()
+        # MagicMock отдаёт username как объект, а не строку, — это и есть
+        # случай «бот ещё не знает своего имени».
+        bot.username = username if username is not None else MagicMock()
+        return bot
+
+    def test_link_points_at_the_finance_panel_for_this_request(self, monkeypatch):
+        from services import notifier
+
+        monkeypatch.setattr(settings, "webapp_url", "https://pay.example")
+        monkeypatch.setattr(settings, "miniapp_short_name", "form")
+        link = notifier.miniapp_link(self._bot(), "INV-20260101-000000-0001")
+        assert link == (
+            "https://t.me/oplatych_bot/form?startapp=fin_INV-20260101-000000-0001"
+        )
+
+    def test_no_short_name_means_no_button(self, monkeypatch):
+        """Mini App не зарегистрирован — сообщение уходит как раньше."""
+        from services import notifier
+
+        monkeypatch.setattr(settings, "webapp_url", "https://pay.example")
+        monkeypatch.setattr(settings, "miniapp_short_name", "")
+        assert notifier.miniapp_link(self._bot(), "INV-20260101-000000-0001") is None
+
+    def test_unknown_bot_username_means_no_button(self, monkeypatch):
+        from services import notifier
+
+        monkeypatch.setattr(settings, "webapp_url", "https://pay.example")
+        monkeypatch.setattr(settings, "miniapp_short_name", "form")
+        assert notifier.miniapp_link(self._bot(None), "INV-1") is None
+
+    def test_keyboard_keeps_the_link_out_of_the_status_row(self):
+        """Три кнопки статуса — один выбор; четвёртая читалась бы как часть его."""
+        from services import notifier
+
+        markup = notifier.build_status_keyboard("INV-1", "https://t.me/x/y?startapp=z")
+        rows = markup.inline_keyboard
+        assert len(rows) == 2
+        assert len(rows[0]) == len(REQUEST_STATUSES)
+        assert rows[1][0].url == "https://t.me/x/y?startapp=z"
+        assert all(b.callback_data for b in rows[0])
+
+    def test_no_link_leaves_the_keyboard_as_before(self):
+        from services import notifier
+
+        assert len(notifier.build_status_keyboard("INV-1").inline_keyboard) == 1
+
+    async def test_nudge_carries_the_link(self, api, monkeypatch):
+        from services import notifier
+
+        client, bot = api
+        monkeypatch.setattr(settings, "webapp_url", "https://pay.example")
+        monkeypatch.setattr(settings, "miniapp_short_name", "form")
+        bot.username = "oplatych_bot"
+        monkeypatch.setattr(notifier, "resolved_finance_ids", lambda: [555])
+
+        _allow(monkeypatch)
+        resp = await client.post("/api/invoice", data=_form(), headers=_auth())
+        rid = resp.json()["request_id"]
+        await routes_mod.storage.set_request_field(
+            rid, "Плановая дата оплаты", "01.01.2020"
+        )
+        bot.send_message.reset_mock()
+        assert (await client.post(
+            "/api/my/nudge", json={"request_id": rid}, headers=_auth()
+        )).status_code == 200
+
+        markup = bot.send_message.await_args_list[0].kwargs["reply_markup"]
+        urls = [b.url for row in markup.inline_keyboard for b in row if b.url]
+        assert urls == [f"https://t.me/oplatych_bot/form?startapp=fin_{rid}"]

@@ -30,9 +30,12 @@ let browser;
 test.before(async () => { browser = await launch(); });
 test.after(async () => { await browser.close(); });
 
-for (const [name, button, list] of [
-  ["мои заявки", "#my-btn", "#my-list"],
-  ["панель финансиста", "#fin-btn", "#fin-req-list"],
+for (const [name, button, list, deleteInRow] of [
+  // В «Моих заявках» админское удаление переехало в подробности: ряд не
+  // тянул четвёртую кнопку, а рядом с «Отозвать» две красные читались как
+  // одно и то же. В панели финансиста ряд короче — там кнопка осталась.
+  ["мои заявки", "#my-btn", "#my-list", false],
+  ["панель финансиста", "#fin-btn", "#fin-req-list", true],
 ]) {
   test(`${name}: подробности открывает строка, отдельной кнопки нет`, async () => {
     const page = await openApp(browser, { skin: "neon", width: 430, routes: ROUTES });
@@ -51,8 +54,8 @@ for (const [name, button, list] of [
     assert.ok(row.tappable, `${name}: строка не кликабельна`);
     assert.ok(!row.buttons.some((b) => b.includes("Подробнее")),
       `${name}: вернулась кнопка «Подробнее» — она дублирует нажатие по строке`);
-    // Действия в ряду что-то МЕНЯЮТ, поэтому удаление осталось кнопкой.
-    assert.ok(row.buttons.some((b) => b.includes("Удалить")), `${name}: нет удаления`);
+    assert.equal(row.buttons.some((b) => b.includes("Удалить")), deleteInRow,
+      `${name}: удаление в ряду — ${row.buttons.join("/")}`);
 
     await page.locator(list + " .my-item").first().click();
     await page.waitForTimeout(400);
@@ -194,8 +197,10 @@ test("ряд кнопок заявки помещается и не обреза
   ];
   for (const { item, expect } of cases) {
     for (const width of [360, 390, 430]) {
+      // Админом: у него в ряду была ЧЕТВЁРТАЯ кнопка, и именно этот случай
+      // видит владелец бота — а мерили раньше без неё.
       const page = await openApp(browser, { skin: "neon", width, routes: {
-        "/api/access": { allowed: true, pending: false, has_admins: true },
+        "/api/access": { allowed: true, pending: false, has_admins: true, admin: true },
         "/api/my-requests": { items: [item] },
       } });
       await page.click("#my-btn");
@@ -207,8 +212,9 @@ test("ряд кнопок заявки помещается и не обреза
           clipped: btns.filter((b) => b.scrollWidth > b.clientWidth + 1)
             .map((b) => b.textContent.trim()),
           widths: btns.map((b) => Math.round(b.getBoundingClientRect().width)),
-          multiline: btns.filter((b) => b.getBoundingClientRect().height > 34)
+          multiline: btns.filter((b) => b.getBoundingClientRect().height > 32)
             .map((b) => b.textContent.trim()),
+          rows: new Set(btns.map((b) => Math.round(b.getBoundingClientRect().top))).size,
         };
       });
       const where = `${item.status}/${width}px`;
@@ -219,6 +225,12 @@ test("ряд кнопок заявки помещается и не обреза
       assert.ok(r.widths.every((x) => x < width * 0.6),
         `на ${where} кнопка растянулась: ${r.widths.join("/")}`);
       assert.deepEqual(r.multiline, [], `на ${where} надпись перенеслась внутри кнопки`);
+      // Один ряд на любом ходовом экране — ради этого кегль здесь меньше.
+      assert.equal(r.rows, 1, `на ${where} ряд разъехался: ${r.widths.join("/")}`);
+      // Админское «Удалить» из ряда убрано: рядом с «Отозвать» две красные
+      // кнопки читались как одно и то же, а четвёртая ломала строку.
+      assert.ok(!r.labels.some((x) => /Удалить/.test(x)),
+        `на ${where} «Удалить» вернулась в ряд: ${r.labels.join("/")}`);
       assert.ok(!r.labels.some((x) => /Повторить/.test(x)),
         `на ${where} «Повторить» вернулась`);
       await page.close();
@@ -295,3 +307,44 @@ test("напомнить о просрочке может только авто�
   await page.close();
 });
 
+
+test("админское удаление живёт в подробностях заявки", async () => {
+  const page = await openApp(browser, { skin: "neon", routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true, admin: true },
+    "/api/my-requests": { items: [{
+      id: "INV-20260701-120000-0008", status: "Новая", counterparty: "ООО «Ромашка»",
+      amount: "1000.00", currency: "RUB", article: "Аренда", urgency: "Обычная",
+      planned_date: "05.07.2026", created_at: "2026-07-01 12:00", has_invoice: true,
+      payment_source: "invoice", closing_count: 0, overdue: false,
+    }] },
+  } });
+  await page.click("#my-btn");
+  await page.waitForTimeout(400);
+  // Тап по карточке (не по кнопке) открывает подробности.
+  await page.evaluate(() => document.querySelector("#my-list .my-item .my-id").click());
+  await page.waitForTimeout(250);
+  const labels = await page.evaluate(() =>
+    [...document.querySelectorAll("#modal-actions button")].map((b) => b.textContent.trim()));
+  assert.ok(labels.some((x) => /Удалить/.test(x)), `в подробностях нет удаления: ${labels}`);
+  await page.close();
+});
+
+test("ссылка из уведомления открывает панель на нужной заявке", async () => {
+  // Финансисту приходит t.me/<бот>/<имя>?startapp=fin_<id>; приложение
+  // подставляет номер в поиск панели — своей выборки для этого не заводим.
+  const rid = "INV-20260701-120000-0009";
+  const page = await openApp(browser, { skin: "neon", hash: "?fin=" + rid, routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true },
+    "/api/finance/access": { ok: true },
+    "/api/finance/requests": { items: [], total_found: 0, shown: 0 },
+  } });
+  await page.waitForTimeout(500);
+  const state = await page.evaluate(() => ({
+    open: !document.getElementById("fin-view").classList.contains("hidden"),
+    query: document.getElementById("fin-query").value,
+  }));
+  assert.ok(state.open, "панель финансиста не открылась");
+  assert.equal(state.query, rid, "номер заявки не подставлен в поиск");
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});

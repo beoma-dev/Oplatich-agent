@@ -16,7 +16,9 @@ function nudgeButton(actions, item, ctx) {
 
   var btn = document.createElement("button");
   btn.type = "button";
-  btn.className = "add-btn btn-ghost";
+  // Главное действие карточки — заливкой: в ряду одинаковых
+  // призрачных кнопок глазу не за что зацепиться.
+  btn.className = "add-btn";
   btn.textContent = "⏰ Напомнить";
   btn.title = "Сообщить финансистам, что оплата по этой заявке просрочена";
 

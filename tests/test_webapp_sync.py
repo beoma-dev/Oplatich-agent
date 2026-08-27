@@ -211,7 +211,11 @@ def test_request_rows_open_details():
     """Нажатие на карточку заявки открывает подробности — в обоих списках."""
     assert "function showRequestDetail(" in HTML
     assert "function makeTappable(" in HTML
-    assert HTML.count("makeTappable(row, it)") == 2, "не в обоих списках"
+    # В «Моих заявках» третьим аргументом идёт перезагрузка списка: туда
+    # переехало админское удаление, и после него список надо обновить.
+    calls = HTML.count("makeTappable(row, it,") + HTML.count("makeTappable(row, it)")
+    assert calls == 2, "не в обоих списках"
+    assert "makeTappable(row, it, loadMy)" in HTML
     # Реквизиты — отдельным действием, как спойлер в чате.
     assert "function showRequisites(" in HTML
 
@@ -238,7 +242,8 @@ def test_details_open_by_tapping_the_row_only():
     действий, где каждая кнопка что-то МЕНЯЕТ.
     """
     assert "function makeTappable(" in HTML
-    assert HTML.count("makeTappable(row, it)") == 2, "не в обоих списках"
+    calls = HTML.count("makeTappable(row, it,") + HTML.count("makeTappable(row, it)")
+    assert calls == 2, "не в обоих списках"
     assert "detailButton" not in JS, "кнопка «Подробнее» вернулась"
     # Подсказка «нажмите, чтобы открыть» стоит у обоих списков.
     assert MARKUP.count('<span class="tap-hint">нажмите, чтобы открыть</span>') == 2

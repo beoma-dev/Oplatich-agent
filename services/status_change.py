@@ -20,7 +20,7 @@ from telegram.constants import ParseMode
 from bot.models import REQUEST_STATUSES, STATUS_WITHDRAWN
 from config import settings
 from services import audit, cards, request_meta, storage, tg_retry
-from services.notifier import build_status_keyboard
+from services.notifier import build_status_keyboard, miniapp_link
 
 log = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ async def apply_status(
         bot,
         request_id,
         status_line,
-        keyboard=build_status_keyboard(request_id),
+        keyboard=build_status_keyboard(request_id, miniapp_link(bot, request_id)),
         fallback=fallback_card,
     )
 
