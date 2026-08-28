@@ -25,10 +25,12 @@ function buildStaffPanel(ctx) {
   function count(items) {
     var el = $("staff-count");
     el.textContent = items.length ? "Сотрудников: " + items.length : "";
-    // С ненумерованным id человек узнаётся по нику, а ник он может сменить.
-    var noId = items.filter(function (i) { return !i.tg_id; }).length;
-    if (items.length && noId) {
-      el.textContent += " · ещё не подавали заявок: " + noId;
+    // Признак «подавал» считает сервер по аудиту. Раньше здесь стояло
+    // «есть ли числовой id», а он проставляется при подаче — и справочник
+    // уверял, что не подавал никто, включая тех, у кого заявки есть.
+    var idle = items.filter(function (i) { return !i.submitted; }).length;
+    if (items.length && idle) {
+      el.textContent += " · не подавали заявок: " + idle;
     }
   }
 
@@ -99,7 +101,12 @@ function buildStaffPanel(ctx) {
         return r.json().catch(function () { return {}; }).then(function (d) {
           if (!r.ok) { say(d.detail || "Не получилось.", true); return; }
           render(d.items || []);
-          if (d.added !== undefined) {
+          if (d.changed !== undefined) {
+            say(d.changed
+              ? "Обновлено строк реестра: " + d.changed
+                + (d.examples.length ? " (" + d.examples.join(", ") + ")" : "")
+              : "В реестре и так везде ФИО из справочника.");
+          } else if (d.added !== undefined) {
             var tail = d.not_in_sheet && d.not_in_sheet.length
               ? " В таблице нет: " + d.not_in_sheet.join(", ") + " — удалить можно вручную."
               : "";
@@ -129,6 +136,17 @@ function buildStaffPanel(ctx) {
     send("/api/admin/staff", { full_name: name, username: user });
     $("staff-name").value = "";
     $("staff-user").value = "";
+  });
+  $("staff-fix").addEventListener("click", function () {
+    ctx.confirm(
+      "✍️ Обновить ФИО в реестре",
+      "Заявки, поданные до появления справочника, подписаны именем из "
+      + "профиля Telegram. Кому в справочнике задано ФИО — у того оно "
+      + "будет проставлено и в уже записанных строках. Больше ничего "
+      + "в реестре не меняется.",
+      "Обновить",
+      function () { send("/api/admin/staff/backfill"); }
+    );
   });
   $("staff-import").addEventListener("click", function () {
     ctx.confirm(

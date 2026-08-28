@@ -674,7 +674,7 @@ test("справочник сотрудников: список, найм и у�
   const page = await openApp(browser, { skin: "light", width: 360, height: 1200, routes: {
     "/api/access": { allowed: true, pending: false, has_admins: true, admin: true },
     "/api/admin/settings": { ok: true, financiers: [], allowed: [], admins: [] },
-    "/api/admin/staff": { items: [ONE], source: true },
+    "/api/admin/staff": { items: [{ ...ONE, submitted: true }], source: true },
   } });
   await page.waitForTimeout(500);
   await page.click("#admin-btn");
@@ -757,15 +757,19 @@ test("кнопка импорта прячется, если таблица-ис
 });
 
 test("в справочнике видно, кто ещё ни разу не подавал заявок", async () => {
-  // id проставляется при первой заявке: пусто — человек в списке есть,
-  // а ботом не пользовался. Это ровно то, что админ хочет знать.
+  // Признак считает СЕРВЕР по аудиту. Раньше он выводился из «есть ли
+  // числовой id», а тот проставлялся при подаче: сразу после импорта
+  // выходило «не подавал никто», хотя заявки в реестре были.
   const page = await openApp(browser, { skin: "light", width: 360, height: 1200, routes: {
     "/api/access": { allowed: true, pending: false, has_admins: true, admin: true },
     "/api/admin/settings": { ok: true, financiers: [], allowed: [], admins: [] },
     "/api/admin/staff": { source: false, items: [
-      { id: 1, tg_id: 555, username: "petya_p", full_name: "Петров Пётр", role: "" },
-      { id: 2, tg_id: null, username: "masha_m", full_name: "Маша М.", role: "" },
-      { id: 3, tg_id: null, username: "lena_l", full_name: "Лена Л.", role: "" },
+      { id: 1, tg_id: 555, username: "petya_p", full_name: "Петров Пётр",
+        role: "", submitted: true },
+      { id: 2, tg_id: 777, username: "masha_m", full_name: "Маша М.",
+        role: "", submitted: false },
+      { id: 3, tg_id: null, username: "lena_l", full_name: "Лена Л.",
+        role: "", submitted: false },
     ] },
   } });
   await page.waitForTimeout(500);
@@ -775,7 +779,7 @@ test("в справочнике видно, кто ещё ни разу не п�
   await page.waitForTimeout(400);
   assert.equal(
     await page.evaluate(() => document.getElementById("staff-count").textContent),
-    "Сотрудников: 3 · ещё не подавали заявок: 2");
+    "Сотрудников: 3 · не подавали заявок: 2");
   await page.close();
 });
 
@@ -784,7 +788,7 @@ test("справочник не растёт вместе со штатом", as
   // настроек, мимо которой надо пролистать к остальным. Строка в один ряд
   // и своя прокрутка держат карточку на месте.
   const items = Array.from({ length: 22 }, (_, i) => ({
-    id: i + 1, tg_id: i % 3 ? null : 500 + i,
+    id: i + 1, tg_id: i % 3 ? null : 500 + i, submitted: i % 4 === 0,
     username: "employee_" + i, full_name: "Фамилия Имя Отчество " + i, role: "",
   }));
   const page = await openApp(browser, { skin: "light", width: 360, height: 1200, routes: {

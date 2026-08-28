@@ -572,7 +572,7 @@ async def my_nudge(request: Request) -> dict:
             status_code=502, detail="Не удалось доставить напоминание. Попробуйте позже."
         )
     await audit.log_event(
-        audit.REQUEST_SUBMITTED, user["id"], user.get("username"),
+        audit.OVERDUE_NUDGE, user["id"], user.get("username"),
         f"{request_id}: напоминание о просрочке ({days} дн.), получателей {delivered}",
     )
     return {
@@ -652,7 +652,7 @@ async def my_closing_docs(
         raise HTTPException(status_code=500, detail="Не удалось записать в реестр.")
 
     await audit.log_event(
-        audit.REQUEST_SUBMITTED, user["id"], user.get("username"),
+        audit.CLOSING_DOCS, user["id"], user.get("username"),
         f"{request_id}: закрывающих документов +{len(saved)}",
     )
     await closing_docs_notify(
@@ -685,7 +685,7 @@ async def _require_admin(request: Request) -> dict:
 async def admin_staff(request: Request) -> dict:
     """Справочник «ФИО — Telegram» целиком."""
     await _require_admin(request)
-    return {"items": await staff.all_staff(), "source": bool(settings.staff_sheet_id.strip())}
+    return {"items": await staff.listing(), "source": bool(settings.staff_sheet_id.strip())}
 
 
 @router.post("/admin/staff")
@@ -703,7 +703,7 @@ async def admin_staff_add(request: Request) -> dict:
         audit.ADMIN_ROLE, user["id"], user.get("username"),
         f"справочник: {outcome} {body.get('username', '')}",
     )
-    return {"ok": True, "outcome": outcome, "items": await staff.all_staff()}
+    return {"ok": True, "outcome": outcome, "items": await staff.listing()}
 
 
 @router.post("/admin/staff/remove")
@@ -721,7 +721,7 @@ async def admin_staff_remove(request: Request) -> dict:
     await audit.log_event(
         audit.ADMIN_ROLE, user["id"], user.get("username"), f"справочник: удалён #{row_id}",
     )
-    return {"ok": True, "items": await staff.all_staff()}
+    return {"ok": True, "items": await staff.listing()}
 
 
 @router.post("/admin/staff/import")
@@ -736,7 +736,19 @@ async def admin_staff_import(request: Request) -> dict:
         audit.ADMIN_ROLE, user["id"], user.get("username"),
         f"справочник: импорт +{result['added']}, обновлено {result['updated']}",
     )
-    return {"ok": True, **result, "items": await staff.all_staff()}
+    return {"ok": True, **result, "items": await staff.listing()}
+
+
+@router.post("/admin/staff/backfill")
+async def admin_staff_backfill(request: Request) -> dict:
+    """Переписать ФИО в уже занесённых строках реестра по справочнику."""
+    user = await _require_admin(request)
+    result = await staff.backfill_registry()
+    await audit.log_event(
+        audit.ADMIN_ROLE, user["id"], user.get("username"),
+        f"справочник: ФИО в реестре обновлено в {result['changed']} строках",
+    )
+    return {"ok": True, **result, "items": await staff.listing()}
 
 
 @router.get("/admin/analytics")

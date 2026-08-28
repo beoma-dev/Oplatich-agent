@@ -157,3 +157,78 @@ class TestBadIds:
     def test_negative_id_is_not_stored(self, tmp_paths):
         staff.add_sync("Петров Пётр", "@petya_p", -100)
         assert staff.all_sync()[0]["tg_id"] is None
+
+
+class TestWhoSubmitted:
+    """«Не подавали заявок» должно значить именно это.
+
+    Считалось по наличию числового id, а он проставлялся только при подаче
+    ПОСЛЕ появления справочника: сразу после импорта выходило, что не подавал
+    никто — включая тех, у кого заявки в реестре есть.
+    """
+
+    async def test_id_is_linked_from_what_the_bot_already_knows(self, tmp_paths):
+        from services import user_directory
+
+        user_directory.remember(555, "petya_p")
+        staff.add_sync("Петров Пётр", "@petya_p")
+        items = await staff.listing()
+        assert items[0]["tg_id"] == 555
+
+    async def test_submitted_comes_from_the_audit_not_from_the_id(self, tmp_paths):
+        from services import audit, user_directory
+
+        user_directory.remember(555, "petya_p")
+        user_directory.remember(777, "masha_m")
+        staff.add_sync("Петров Пётр", "@petya_p")
+        staff.add_sync("Маша М.", "@masha_m")
+        audit.log_event_sync(audit.REQUEST_SUBMITTED, 555, "@petya_p",
+                             "INV-1 · 100.00 RUB · ООО «Ромашка»")
+        by_name = {i["full_name"]: i["submitted"] for i in await staff.listing()}
+        assert by_name == {"Петров Пётр": True, "Маша М.": False}
+
+    async def test_closing_documents_are_not_a_submission(self, tmp_paths):
+        """Их когда-то писали тем же событием — человек считался подавшим."""
+        from services import audit, user_directory
+
+        user_directory.remember(555, "petya_p")
+        staff.add_sync("Петров Пётр", "@petya_p")
+        audit.log_event_sync(audit.REQUEST_SUBMITTED, 555, "@petya_p",
+                             "INV-1: закрывающих документов +1")
+        assert (await staff.listing())[0]["submitted"] is False
+
+
+class TestBackfill:
+    """Старые строки реестра подписаны именем из профиля Telegram."""
+
+    async def test_rewrites_only_the_name_in_brackets(self, tmp_paths):
+        from datetime import date
+
+        from services import storage
+        from tests.conftest import make_request
+
+        await storage.append_invoice(make_request(
+            request_id="INV-20260825-100000-0001",
+            sender_username="@valentina_stan", sender_name="Valentina",
+            planned_date=date(2026, 9, 1),
+        ))
+        staff.add_sync("Станиславчук Валентина", "@valentina_stan")
+        out = await staff.backfill_registry()
+        assert out["changed"] == 1
+        assert out["examples"] == ["Valentina → Станиславчук Валентина"]
+        row = await storage.get_request("INV-20260825-100000-0001")
+        assert row["Сотрудник по заявке"] == "@valentina_stan (Станиславчук Валентина)"
+
+    async def test_leaves_strangers_and_correct_rows_alone(self, tmp_paths):
+        from datetime import date
+
+        from services import storage
+        from tests.conftest import make_request
+
+        await storage.append_invoice(make_request(
+            request_id="INV-20260825-100000-0002",
+            sender_username="@nobody_here", sender_name="Кто-то",
+            planned_date=date(2026, 9, 1),
+        ))
+        staff.add_sync("Станиславчук Валентина", "@valentina_stan")
+        assert (await staff.backfill_registry())["changed"] == 0

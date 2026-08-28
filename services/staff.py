@@ -348,6 +348,82 @@ def _explain(exc: Exception) -> str:
     return "Не удалось прочитать таблицу справочника."
 
 
+# «@petya (Пётр Иванов)» — так «Сотрудник по заявке» лежит в реестре.
+_SENDER_RE = re.compile(r"^@([A-Za-z0-9_]{5,32})\s*\((.*)\)$")
+
+
+def link_known_sync() -> int:
+    """Проставляет числовые id тем, кого бот уже знает по нику.
+
+    Иначе id появлялся только при СЛЕДУЮЩЕЙ заявке человека, и справочник
+    считал «ещё не подавал» того, кто подавал десять раз до его появления.
+    """
+    from services.user_directory import resolve as resolve_id
+
+    linked = 0
+    for row in all_sync():
+        if row["tg_id"] or not row["username"]:
+            continue
+        found = resolve_id("@" + row["username"])
+        if found and found > 0:
+            try:
+                with _connect() as conn:
+                    conn.execute(
+                        "UPDATE staff SET tg_id = ? WHERE id = ? AND tg_id IS NULL",
+                        (found, row["id"]),
+                    )
+                linked += 1
+            except sqlite3.IntegrityError:
+                log.warning("Справочник: id %s уже занят, #%s не связан", found, row["id"])
+    return linked
+
+
+async def listing() -> list[dict]:
+    """Справочник для панели: у каждого видно, подавал ли он заявки.
+
+    Признак берётся из аудита, а НЕ из «есть ли у записи id»: id заполняется
+    при подаче, и по нему выходило, что не подавал никто, включая тех, у кого
+    заявки в реестре есть.
+    """
+    from services import audit
+
+    await asyncio.to_thread(link_known_sync)
+    items = await asyncio.to_thread(all_sync)
+    submitters = await audit.submitters()
+    for item in items:
+        item["submitted"] = bool(item["tg_id"]) and item["tg_id"] in submitters
+    return items
+
+
+async def backfill_registry(limit: int = 500) -> dict:
+    """Приводит «Сотрудник по заявке» в УЖЕ записанных строках к справочнику.
+
+    Заявки, поданные до появления справочника, подписаны именем из профиля
+    Telegram («@Valentina_Stan (Valentina)»), и в реестре оно так и осталось.
+    Это тот же человек под другим именем, и в отчёте за период он выглядит
+    двумя разными. Меняем только ФИО в скобках и только там, где аккаунт
+    есть в справочнике; ничего не удаляем и не переносим.
+    """
+    from services import storage
+
+    rows = await storage.recent_requests(limit=limit)
+    changed: list[str] = []
+    for row in rows:
+        request_id = str(row.get("ID заявки", "")).strip()
+        match = _SENDER_RE.match(str(row.get("Сотрудник по заявке", "")).strip())
+        if not request_id or not match:
+            continue
+        handle, shown = match.group(1), match.group(2).strip()
+        proper = full_name_sync(0, handle)
+        if not proper or proper == shown:
+            continue
+        await storage.set_request_field(
+            request_id, "Сотрудник по заявке", f"@{handle} ({proper})"
+        )
+        changed.append(f"{shown} → {proper}")
+    return {"changed": len(changed), "examples": sorted(set(changed))[:5]}
+
+
 async def all_staff() -> list[dict]:
     return await asyncio.to_thread(all_sync)
 

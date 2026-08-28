@@ -29,6 +29,8 @@ STATUS_DENIED = "STATUS_DENIED"          # смена статуса не фин
 RATE_LIMITED = "RATE_LIMITED"            # превышен лимит подачи
 GROUP_POST_REJECTED = "GROUP_POST_REJECTED"  # подделанный return_chat
 REQUEST_SUBMITTED = "REQUEST_SUBMITTED"  # заявка записана в реестр
+CLOSING_DOCS = "CLOSING_DOCS"            # к оплаченной заявке приложили акт/УПД
+OVERDUE_NUDGE = "OVERDUE_NUDGE"          # автор напомнил о просрочке
 REQUEST_FAILED = "REQUEST_FAILED"        # заявка не сохранилась
 STATUS_CHANGED = "STATUS_CHANGED"        # финансист сменил статус
 DUPLICATE_CONFIRMED = "DUPLICATE_CONFIRMED"  # дубль отправлен осознанно
@@ -146,6 +148,27 @@ def paid_times_sync() -> dict[str, float]:
 
 async def paid_times() -> dict[str, float]:
     return await asyncio.to_thread(paid_times_sync)
+
+
+def submitters_sync() -> set[int]:
+    """Кто хоть раз ПОДАВАЛ заявку.
+
+    Только настоящие подачи: закрывающие документы и напоминания о просрочке
+    когда-то писались тем же событием REQUEST_SUBMITTED (теперь у них свои),
+    и в старых записях они неотличимы иначе как по форме details — у подачи
+    там «INV-… · сумма · контрагент».
+    """
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT user_id FROM audit "
+            "WHERE event = ? AND details LIKE '% · %' AND user_id IS NOT NULL",
+            (REQUEST_SUBMITTED,),
+        ).fetchall()
+    return {int(r[0]) for r in rows}
+
+
+async def submitters() -> set[int]:
+    return await asyncio.to_thread(submitters_sync)
 
 
 async def recent_events(limit: int = 15) -> list[dict]:
