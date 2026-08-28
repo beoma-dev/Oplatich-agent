@@ -685,6 +685,10 @@ test("справочник сотрудников: список, найм и у�
   const shown = await page.evaluate(() =>
     document.getElementById("staff-list").textContent);
   assert.match(shown, /Микула Татьяна/, `в списке: «${shown}»`);
+  // Общее количество: и само по себе полезно, и проверка после импорта.
+  assert.equal(
+    await page.evaluate(() => document.getElementById("staff-count").textContent),
+    "Сотрудников: 1");
   assert.match(shown, /@tatyana_mikula/, "аккаунт не показан");
   assert.match(shown, /id 555/, "id не показан");
 
@@ -744,5 +748,31 @@ test("кнопка импорта прячется, если таблица-ис
     "кнопка импорта показана без источника");
   assert.match(await page.evaluate(() => document.getElementById("staff-list").textContent),
     /Справочник пуст/);
+  // На пустом справочнике «Сотрудников: 0» рядом с «Справочник пуст» — лишнее.
+  assert.equal(
+    await page.evaluate(() => document.getElementById("staff-count").textContent), "");
+  await page.close();
+});
+
+test("в справочнике видно, кто ещё ни разу не подавал заявок", async () => {
+  // id проставляется при первой заявке: пусто — человек в списке есть,
+  // а ботом не пользовался. Это ровно то, что админ хочет знать.
+  const page = await openApp(browser, { skin: "light", width: 360, height: 1200, routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true, admin: true },
+    "/api/admin/settings": { ok: true, financiers: [], allowed: [], admins: [] },
+    "/api/admin/staff": { source: false, items: [
+      { id: 1, tg_id: 555, username: "petya_p", full_name: "Петров Пётр", role: "" },
+      { id: 2, tg_id: null, username: "masha_m", full_name: "Маша М.", role: "" },
+      { id: 3, tg_id: null, username: "lena_l", full_name: "Лена Л.", role: "" },
+    ] },
+  } });
+  await page.waitForTimeout(500);
+  await page.click("#admin-btn");
+  await page.waitForTimeout(300);
+  await page.evaluate(() => document.querySelector('[data-pane="access"]').click());
+  await page.waitForTimeout(400);
+  assert.equal(
+    await page.evaluate(() => document.getElementById("staff-count").textContent),
+    "Сотрудников: 3 · ещё не подавали заявок: 2");
   await page.close();
 });

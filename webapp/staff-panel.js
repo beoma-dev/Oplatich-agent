@@ -20,7 +20,20 @@ function buildStaffPanel(ctx) {
     note.classList.toggle("staff-err", !!isErr);
   }
 
+  /** «Сотрудников: 22» — сколько всего в справочнике. Число полезно само
+   *  по себе (столько же людей в компании?) и как проверка после импорта. */
+  function count(items) {
+    var el = $("staff-count");
+    el.textContent = items.length ? "Сотрудников: " + items.length : "";
+    // С ненумерованным id человек узнаётся по нику, а ник он может сменить.
+    var noId = items.filter(function (i) { return !i.tg_id; }).length;
+    if (items.length && noId) {
+      el.textContent += " · ещё не подавали заявок: " + noId;
+    }
+  }
+
   function render(items) {
+    count(items);
     box.innerHTML = "";
     if (!items.length) {
       var empty = document.createElement("div");
