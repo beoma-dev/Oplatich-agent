@@ -1647,7 +1647,7 @@
 
   // --- Подробности заявки -------------------------------------------------------------
   // STATUS_CLASS/STATUS_ICON объявлены выше, в блоке «Мои заявки».
-  // Права админа: определяются в tryAdmin(), решают, показывать ли «Удалить»
+  // Права админа: приходят в /api/access, решают, показывать ли «Удалить»
   // для чужих и необработанных заявок. Авторитет всё равно за сервером.
   var isBotAdmin = false;
   function detailRows(item) {
@@ -1845,7 +1845,7 @@
   // Порядок справа налево. Панель финансиста и шестерёнка появляются не у
   // всех, поэтому места пересчитываем: иначе от скрытой кнопки оставалась
   // дыра, а от лишнего padding заголовок переносился на вторую строку.
-  var HEADER_ICONS = ["help-btn", "my-btn", "fin-btn", "admin-btn"];
+  var HEADER_ICONS = ["help-btn", "my-btn", "stats-btn", "fin-btn", "admin-btn"];
 
   /** Возврат на форму: если пересчёт шапки откладывался (форма была скрыта),
    *  выполняем его теперь, когда размеры снова настоящие. */
@@ -2286,6 +2286,7 @@
       el.classList.toggle("hidden", !isBotAdmin);
     });
     applyRecipientTab(isFinancier || isBotAdmin);
+    if (statsPanel) statsPanel.setAdmin(isBotAdmin);
     if (isBotAdmin) {
       loadAdminSettings();
       loadUsers();
@@ -2321,8 +2322,9 @@
    */
   function refreshOnReturn() {
     if (!insideTelegram || document.hidden) return;
+    // Права админа приезжают тем же /api/access, отдельной пробы нет:
+    // она била в /admin/settings и писала КАЖДОМУ не-админу отказ в аудит.
     if (canSubmit !== null) pollAccess();
-    tryAdmin();
     if (!isBotAdmin || $("admin-view").classList.contains("hidden")) return;
     // Не затираем то, что человек прямо сейчас правит: перерисовка вернула
     // бы в поля значения с сервера.
@@ -2419,13 +2421,6 @@
   $("fin-close").addEventListener("click", closeFinance);
 
   // --- Админ-панель -----------------------------------------------------------------
-  function tryAdmin() {
-    if (!insideTelegram) return;
-    fetch("/api/admin/settings", { headers: { "X-Telegram-Init-Data": initData } })
-      .then(function (r) { applyAdmin(r.ok); })
-      .catch(function () { /* не админ или сеть — остаётся «Оформление» */ });
-  }
-
   function showAdminMsg(text, isErr) {
     var m = $("admin-msg");
     m.textContent = (isErr ? "⚠️ " : "✓ ") + text;
@@ -2640,6 +2635,13 @@
 
   // Здоровье бота: состояние связи, уведомления о сбоях и журнал. Живёт в
   // своём файле — панель самодостаточна, а app.js и без неё на пределе.
+  // Аналитика: свой экран, показывается только админу (см. applyAdmin).
+  var statsPanel = typeof buildStatsPanel === "function" ? buildStatsPanel({
+    $: $, layout: layoutHeaderIcons, refreshMain: refreshMainButton,
+    tg: function () { return tg; }, inside: function () { return insideTelegram; },
+    initData: function () { return initData; }
+  }) : null;
+
   if (typeof buildRestorePanel === "function") {
     buildRestorePanel({
       $: $,
@@ -2908,7 +2910,6 @@
   restoreDraft();
   layoutHeaderIcons();
   playMark();
-  tryAdmin();
   tryFinance();
   refreshMainButton();
 

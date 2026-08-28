@@ -19,6 +19,7 @@
 <!-- ПОСЛЕ app.css: правила окна заканчивают каскад. -->
 <link rel="stylesheet" href="modal.css">
 <link rel="stylesheet" href="tour.css">
+<link rel="stylesheet" href="stats.css">
 </head>
 <body>
 
@@ -273,6 +274,8 @@
     <div class="gears" id="header-icons">
       <button type="button" id="admin-btn" class="gear tip" aria-label="Настройки"
               data-tip="Настройки: оформление и всё остальное"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2.4"/><circle cx="8" cy="17" r="2.4"/></svg></button>
+      <button type="button" id="stats-btn" class="gear tip hidden" aria-label="Аналитика"
+              data-tip="Аналитика: кто пользуется и где застревает"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16"/><path d="M7 16V9.5M12 16V5M17 16v-4"/></svg></button>
       <button type="button" id="fin-btn" class="gear tip hidden" aria-label="Все заявки"
               data-tip="Все заявки: фильтры и итоги"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19.2V11M12 19.2V4.8M19 19.2v-6.4"/></svg></button>
       <button type="button" id="my-btn" class="gear tip" aria-label="Мои заявки"
@@ -917,6 +920,31 @@
           style="width:100%; padding:14px; margin-top:4px">← К форме заявки</button>
 </div>
 
+<div id="stats-view" class="hidden">
+  <header>
+    <h1>📈 Аналитика</h1>
+    <p>Кто пользуется и где застревает</p>
+  </header>
+
+  <div class="card">
+    <div class="card-title">🗓 Период
+      <button type="button" class="reload-btn" id="stats-reload"
+              aria-label="Пересчитать" title="Пересчитать">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path class="arc" d="M18.71 16.36a8 8 0 1 1-1.05-10.02"/><path class="head" d="M21.33 10.02 14.97 9.03 20.34 3.66Z"/></svg></button></div>
+    <div class="seg seg-even" id="stats-days">
+      <button type="button" data-value="7">7 дней</button>
+      <button type="button" data-value="30" class="active">30 дней</button>
+      <button type="button" data-value="90">90 дней</button>
+    </div>
+  </div>
+
+  <div id="stats-msg"></div>
+  <div id="stats-body"></div>
+
+  <button type="button" class="add-btn" id="stats-close"
+          style="width:100%; padding:14px; margin-top:4px">← К форме заявки</button>
+</div>
+
 <div id="my-view" class="hidden">
   <header>
     <h1>📋 Мои заявки</h1>
@@ -963,6 +991,7 @@
 <script src="nudge-panel.js"></script>
 <script src="list-tools.js"></script>
 <script src="help-tour.js"></script>
+<script src="stats-panel.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

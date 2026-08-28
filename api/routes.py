@@ -43,6 +43,7 @@ from bot.validators import (
 from config import settings
 from services import (
     alerts,
+    analytics,
     audit,
     backup,
     dedup,
@@ -677,6 +678,19 @@ async def _require_admin(request: Request) -> dict:
         )
         raise HTTPException(status_code=403, detail="Только для администраторов бота.")
     return user
+
+
+@router.get("/admin/analytics")
+async def admin_analytics(request: Request, days: int = 30) -> dict:
+    """Сводка по заявкам — ТОЛЬКО админу.
+
+    На одном экране суммы, контрагенты и загрузка всей компании, поэтому
+    доступ тот же, что у админ-панели, и отказ так же пишется в аудит.
+    Данные читаются из реестра; в Google-режиме это один запрос к таблице,
+    а не запрос на метрику.
+    """
+    await _require_admin(request)
+    return await analytics.summary(days=max(1, min(days, 365)))
 
 
 @router.get("/admin/settings")

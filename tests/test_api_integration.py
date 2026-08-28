@@ -2052,3 +2052,41 @@ class TestAnimatedHelpFlag:
         monkeypatch.setattr(settings, "animated_help", True)
         resp = await client.get("/api/access", headers=_auth())
         assert resp.json()["animated_help"] is True
+
+
+class TestAnalyticsRoute:
+    """Сводка админа: чужим не показываем, отказ — в аудит."""
+
+    async def test_admin_gets_the_summary(self, api, monkeypatch):
+        client, _ = api
+        _allow(monkeypatch)
+        _admins(monkeypatch, "42")
+        resp = await client.post("/api/invoice", data=_form(), headers=_auth())
+        assert resp.status_code == 200
+
+        out = (await client.get("/api/admin/analytics", headers=_auth())).json()
+        assert out["flow"]["total_count"] == 1
+        assert out["people"]["authors_ever"] == 1
+        assert out["docs"]["paid_total"] == 0
+
+    async def test_outsider_is_refused_and_logged(self, api, monkeypatch):
+        from services import audit
+
+        client, _ = api
+        _allow(monkeypatch, "42,77")
+        _admins(monkeypatch, "42")
+        resp = await client.get("/api/admin/analytics", headers=_auth(77))
+        assert resp.status_code == 403
+        events = [e["event"] for e in await audit.recent_events(limit=5)]
+        assert audit.ADMIN_DENIED in events
+
+    async def test_period_is_clamped(self, api, monkeypatch):
+        """days из адресной строки — чужой ввод: без границ он уедет в вечность."""
+        client, _ = api
+        _allow(monkeypatch)
+        _admins(monkeypatch, "42")
+        for asked, got in ((0, 1), (5000, 365), (30, 30)):
+            out = (await client.get(
+                f"/api/admin/analytics?days={asked}", headers=_auth()
+            )).json()
+            assert out["days"] == got

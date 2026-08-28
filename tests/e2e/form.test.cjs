@@ -44,7 +44,7 @@ test("шапка держится в одну строку при всех ик�
   for (const width of [360, 390, 440, 520]) {
     const page = await openApp(browser, { skin: "neon", width, routes: HINTS });
     await page.evaluate(() => {
-      ["fin-btn", "admin-btn"].forEach((id) =>
+      ["stats-btn", "fin-btn", "admin-btn"].forEach((id) =>
         document.getElementById(id).classList.remove("hidden"));
       window.dispatchEvent(new Event("resize"));
     });

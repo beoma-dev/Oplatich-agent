@@ -17,6 +17,7 @@ import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from bot.models import REQUEST_STATUSES
 from config import settings
 
 log = logging.getLogger(__name__)
@@ -112,6 +113,39 @@ def recent_events_sync(limit: int = 15) -> list[dict]:
         }
         for ts, event, user_id, username, details in rows
     ]
+
+
+def paid_times_sync() -> dict[str, float]:
+    """{ID заявки: когда её отметили оплаченной} — для «подача → оплата».
+
+    Единственное место, где это время вообще есть: в реестре хранится статус,
+    но не момент его смены. Берём ПЕРВУЮ отметку по каждой заявке: статус
+    можно переставить и обратно, а нас интересует, когда деньги ушли.
+
+    Формат details задаётся services.status_change: «INV-… → Оплачена» плюс
+    необязательное « · причина: …». Разбор держится на этой строке — меняете
+    её, поправьте и здесь (стережёт tests/test_analytics.py).
+    """
+    paid = REQUEST_STATUSES["PAID"][1]
+    out: dict[str, float] = {}
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT ts, details FROM audit WHERE event = ? ORDER BY id",
+            (STATUS_CHANGED,),
+        ).fetchall()
+    for ts, details in rows:
+        head = str(details or "").split(" · ")[0]
+        if " → " not in head:
+            continue
+        request_id, _, status = head.partition(" → ")
+        if status.strip() != paid:
+            continue
+        out.setdefault(request_id.strip(), float(ts))
+    return out
+
+
+async def paid_times() -> dict[str, float]:
+    return await asyncio.to_thread(paid_times_sync)
 
 
 async def recent_events(limit: int = 15) -> list[dict]:
