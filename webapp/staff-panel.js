@@ -46,15 +46,21 @@ function buildStaffPanel(ctx) {
       var row = document.createElement("div");
       row.className = "row-item";
       row.style.animationDelay = (i * 0.02) + "s";
+      // Имя и аккаунт В ОДНУ строку: со списком в два десятка человек
+      // двухэтажные строки растягивали карточку на полтора экрана.
+      // Числовой id ушёл в подсказку — админу он нужен редко, а место
+      // занимал у каждого. Сколько человек ещё не подавали заявок,
+      // сказано числом над списком.
       var who = document.createElement("div");
       who.className = "who";
       var main = document.createElement("div");
+      main.className = "staff-name";
       main.textContent = it.full_name;
       who.appendChild(main);
       var sub = document.createElement("div");
       sub.className = "sub";
-      sub.textContent = (it.username ? "@" + it.username : "без аккаунта")
-        + (it.tg_id ? " · id " + it.tg_id : "");
+      sub.textContent = it.username ? "@" + it.username : "без аккаунта";
+      if (it.tg_id) sub.title = "id " + it.tg_id;
       who.appendChild(sub);
       row.appendChild(who);
 

@@ -690,7 +690,9 @@ test("справочник сотрудников: список, найм и у�
     await page.evaluate(() => document.getElementById("staff-count").textContent),
     "Сотрудников: 1");
   assert.match(shown, /@tatyana_mikula/, "аккаунт не показан");
-  assert.match(shown, /id 555/, "id не показан");
+  assert.equal(
+    await page.evaluate(() => document.querySelector("#staff-list .sub").title),
+    "id 555", "id пропал даже из подсказки");
 
   // Найм: без одного из полей не отправляем.
   await page.fill("#staff-name", "Петров Пётр");
@@ -774,5 +776,50 @@ test("в справочнике видно, кто ещё ни разу не п�
   assert.equal(
     await page.evaluate(() => document.getElementById("staff-count").textContent),
     "Сотрудников: 3 · ещё не подавали заявок: 2");
+  await page.close();
+});
+
+test("справочник не растёт вместе со штатом", async () => {
+  // Двадцать два человека двухэтажными строками — полтора экрана в карточке
+  // настроек, мимо которой надо пролистать к остальным. Строка в один ряд
+  // и своя прокрутка держат карточку на месте.
+  const items = Array.from({ length: 22 }, (_, i) => ({
+    id: i + 1, tg_id: i % 3 ? null : 500 + i,
+    username: "employee_" + i, full_name: "Фамилия Имя Отчество " + i, role: "",
+  }));
+  const page = await openApp(browser, { skin: "light", width: 360, height: 1200, routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true, admin: true },
+    "/api/admin/settings": { ok: true, financiers: [], allowed: [], admins: [] },
+    "/api/admin/staff": { items, source: true },
+  } });
+  await page.waitForTimeout(500);
+  await page.click("#admin-btn");
+  await page.waitForTimeout(300);
+  await page.evaluate(() => document.querySelector('[data-pane="access"]').click());
+  await page.waitForTimeout(400);
+
+  const r = await page.evaluate(() => {
+    const list = document.getElementById("staff-list");
+    const rows = [...list.querySelectorAll(".row-item")];
+    const line = parseFloat(getComputedStyle(rows[0]).lineHeight) || 18;
+    return {
+      card: Math.round(document.querySelector("#pane-access .card").getBoundingClientRect().height),
+      row: Math.round(rows[0].getBoundingClientRect().height),
+      rows: rows.length,
+      scrolls: list.scrollHeight > list.clientHeight,
+      // Имя и аккаунт в один ряд — высота строки меньше двух строк текста.
+      oneLine: rows.every((x) => x.getBoundingClientRect().height < line * 2.2),
+      clipped: rows.filter((x) => {
+        const n = x.querySelector(".staff-name");
+        return n.scrollWidth > n.clientWidth + 1 && !getComputedStyle(n).textOverflow;
+      }).length,
+    };
+  });
+  assert.equal(r.rows, 22, "список показан не целиком");
+  assert.ok(r.scrolls, "список не прокручивается — карточка растянулась");
+  assert.ok(r.card < 700, `карточка на ${r.card}px — справочник снова во весь экран`);
+  assert.ok(r.oneLine, `строка ${r.row}px — имя и аккаунт снова в два этажа`);
+  assert.equal(r.clipped, 0, "длинное имя обрезано без многоточия");
+  assert.deepEqual(page.errors, []);
   await page.close();
 });
