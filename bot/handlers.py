@@ -45,7 +45,7 @@ from bot.validators import (
     validate_text_field,
 )
 from config import settings
-from services import audit, dedup, invoice_check, storage
+from services import audit, dedup, invoice_check, staff, storage
 from services import runtime_settings as rs
 from services.intake import finalize_submission
 from services.local_storage import build_extra_filename, build_invoice_filename
@@ -265,7 +265,7 @@ def _build_request(context: ContextTypes.DEFAULT_TYPE, update: Update, now: date
         telegram_id=user.id,
         sender_username=f"@{user.username}" if user.username else "—",
         # Подтверждённое ФИО из справочника СБ, а не переименовываемый профиль.
-        sender_name=settings.employee_name_for(user.id) or user.full_name,
+        sender_name=staff.resolve(user.id, user.username, user.full_name),
         amount=context.user_data[K_AMOUNT],
         currency=context.user_data[K_CURRENCY],
         counterparty=context.user_data[K_COUNTERPARTY],

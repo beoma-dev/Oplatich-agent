@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     # Справочник СБ «user_id:ФИО» через запятую: в реестр попадает
     # подтверждённое ФИО, а не имя из Telegram-профиля (его можно сменить).
     employee_names_raw: str = Field("", alias="EMPLOYEE_NAMES")
+    # Google-таблица со списком «ФИО — Telegram»: ТОЛЬКО источник для импорта
+    # по кнопке в админ-панели. Справочник живёт в нашей БД, и при подаче
+    # заявки бот в Google не ходит. Пусто — импорт недоступен, список ведётся
+    # руками.
+    staff_sheet_id: str = Field("", alias="STAFF_SHEET_ID")
+    staff_sheet_range: str = Field("A1:Z500", alias="STAFF_SHEET_RANGE")
 
     # ---- Хранилище ----
     # Бэкенд реестра и файлов счетов: "local" (CSV + каталог) или "google"

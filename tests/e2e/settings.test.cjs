@@ -665,3 +665,84 @@ test("получателю видно, что он получает только
   assert.match(after, /в реестре и в панели/, "не сказано, где заявки всё же будут");
   await page.close();
 });
+
+test("справочник сотрудников: список, найм и увольнение", async () => {
+  // ФИО в реестре берётся отсюда, поэтому список правится в панели, а не
+  // на сервере: наняли — добавил, уволили — убрал.
+  const ONE = { id: 1, tg_id: 555, username: "tatyana_mikula",
+                full_name: "Микула Татьяна", role: "" };
+  const page = await openApp(browser, { skin: "light", width: 360, height: 1200, routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true, admin: true },
+    "/api/admin/settings": { ok: true, financiers: [], allowed: [], admins: [] },
+    "/api/admin/staff": { items: [ONE], source: true },
+  } });
+  await page.waitForTimeout(500);
+  await page.click("#admin-btn");
+  await page.waitForTimeout(300);
+  await page.evaluate(() => document.querySelector('[data-pane="access"]').click());
+  await page.waitForTimeout(400);
+
+  const shown = await page.evaluate(() =>
+    document.getElementById("staff-list").textContent);
+  assert.match(shown, /Микула Татьяна/, `в списке: «${shown}»`);
+  assert.match(shown, /@tatyana_mikula/, "аккаунт не показан");
+  assert.match(shown, /id 555/, "id не показан");
+
+  // Найм: без одного из полей не отправляем.
+  await page.fill("#staff-name", "Петров Пётр");
+  await page.click("#staff-add");
+  await page.waitForTimeout(200);
+  assert.equal(
+    await page.evaluate(() =>
+      window.__posts.filter((p) => p[0].indexOf("/api/admin/staff") !== -1).length),
+    0, "запрос ушёл без аккаунта");
+  assert.match(await page.evaluate(() => document.getElementById("staff-note").textContent),
+    /Нужны и ФИО, и аккаунт/);
+
+  await page.fill("#staff-user", "https://t.me/petya_p");
+  await page.click("#staff-add");
+  await page.waitForTimeout(300);
+  const posted = await page.evaluate(() =>
+    window.__posts.filter((p) => p[0].indexOf("/api/admin/staff") !== -1).pop());
+  assert.ok(posted, "найм не отправлен");
+  assert.match(String(posted[1]), /Петров Пётр/);
+  assert.match(String(posted[1]), /t\.me\/petya_p/, "аккаунт не отправлен как есть");
+
+  // Увольнение — только через подтверждение: это правка справочника,
+  // по которому подписываются все будущие заявки.
+  await page.evaluate(() => document.querySelector("#staff-list .row-del").click());
+  await page.waitForTimeout(200);
+  assert.equal(
+    await page.evaluate(() =>
+      window.__posts.filter((p) => p[0].indexOf("/staff/remove") !== -1).length),
+    0, "удаление ушло без подтверждения");
+  await page.evaluate(() => {
+    [...document.querySelectorAll("#modal-actions button")]
+      .find((b) => /Убрать/.test(b.textContent)).click();
+  });
+  await page.waitForTimeout(300);
+  assert.ok(await page.evaluate(() =>
+    window.__posts.filter((p) => p[0].indexOf("/staff/remove") !== -1).length === 1),
+    "удаление не отправлено");
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test("кнопка импорта прячется, если таблица-источник не задана", async () => {
+  const page = await openApp(browser, { skin: "light", width: 360, height: 1200, routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true, admin: true },
+    "/api/admin/settings": { ok: true, financiers: [], allowed: [], admins: [] },
+    "/api/admin/staff": { items: [], source: false },
+  } });
+  await page.waitForTimeout(500);
+  await page.click("#admin-btn");
+  await page.waitForTimeout(300);
+  await page.evaluate(() => document.querySelector('[data-pane="access"]').click());
+  await page.waitForTimeout(400);
+  assert.ok(await page.evaluate(() =>
+    document.getElementById("staff-import").classList.contains("hidden")),
+    "кнопка импорта показана без источника");
+  assert.match(await page.evaluate(() => document.getElementById("staff-list").textContent),
+    /Справочник пуст/);
+  await page.close();
+});

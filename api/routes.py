@@ -53,6 +53,7 @@ from services import (
     registry_check,
     request_meta,
     restore,
+    staff,
     storage,
 )
 from services import health as health_pulse
@@ -678,6 +679,64 @@ async def _require_admin(request: Request) -> dict:
         )
         raise HTTPException(status_code=403, detail="Только для администраторов бота.")
     return user
+
+
+@router.get("/admin/staff")
+async def admin_staff(request: Request) -> dict:
+    """Справочник «ФИО — Telegram» целиком."""
+    await _require_admin(request)
+    return {"items": await staff.all_staff(), "source": bool(settings.staff_sheet_id.strip())}
+
+
+@router.post("/admin/staff")
+async def admin_staff_add(request: Request) -> dict:
+    """Найм или правка: {"full_name": "…", "username": "@petya"}."""
+    user = await _require_admin(request)
+    body = await request.json()
+    try:
+        outcome = await staff.add(
+            str(body.get("full_name", "")), str(body.get("username", "")),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await audit.log_event(
+        audit.ADMIN_ROLE, user["id"], user.get("username"),
+        f"справочник: {outcome} {body.get('username', '')}",
+    )
+    return {"ok": True, "outcome": outcome, "items": await staff.all_staff()}
+
+
+@router.post("/admin/staff/remove")
+async def admin_staff_remove(request: Request) -> dict:
+    """Увольнение: {"id": 12}. Заявки, уже поданные этим человеком, не
+    трогаем — в реестре остаётся то ФИО, под которым он их подавал."""
+    user = await _require_admin(request)
+    body = await request.json()
+    try:
+        row_id = int(body.get("id", 0))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="Некорректная запись.") from exc
+    if not await staff.remove(row_id):
+        raise HTTPException(status_code=404, detail="Такой записи уже нет.")
+    await audit.log_event(
+        audit.ADMIN_ROLE, user["id"], user.get("username"), f"справочник: удалён #{row_id}",
+    )
+    return {"ok": True, "items": await staff.all_staff()}
+
+
+@router.post("/admin/staff/import")
+async def admin_staff_import(request: Request) -> dict:
+    """Влить список из Google-таблицы. Ничего не удаляет — только добавляет
+    и обновляет; кого в таблице нет, показываем списком."""
+    user = await _require_admin(request)
+    result = await staff.import_from_sheet()
+    if result.get("error"):
+        raise HTTPException(status_code=502, detail=result["error"])
+    await audit.log_event(
+        audit.ADMIN_ROLE, user["id"], user.get("username"),
+        f"справочник: импорт +{result['added']}, обновлено {result['updated']}",
+    )
+    return {"ok": True, **result, "items": await staff.all_staff()}
 
 
 @router.get("/admin/analytics")
@@ -1496,10 +1555,12 @@ async def submit_invoice(
     with_invoice = has_invoice == "1"
     now = datetime.now(ZoneInfo(settings.timezone))
     username = user.get("username")
-    # Подтверждённое ФИО из справочника СБ, а не переименовываемый профиль.
-    full_name = settings.employee_name_for(user["id"]) or " ".join(
-        p for p in (user.get("first_name"), user.get("last_name")) if p
-    ) or "—"
+    # Подтверждённое ФИО из справочника, а не переименовываемый профиль:
+    # справочник → запись из .env → имя из Telegram (см. services/staff).
+    full_name = staff.resolve(
+        user["id"], username,
+        " ".join(p for p in (user.get("first_name"), user.get("last_name")) if p) or "—",
+    )
 
     invoice = InvoiceRequest(
         telegram_id=user["id"],

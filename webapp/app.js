@@ -2287,6 +2287,7 @@
     });
     applyRecipientTab(isFinancier || isBotAdmin);
     if (statsPanel) statsPanel.setAdmin(isBotAdmin);
+    if (isBotAdmin && staffPanel) staffPanel.reload();
     if (isBotAdmin) {
       loadAdminSettings();
       loadUsers();
@@ -2635,6 +2636,10 @@
 
   // Здоровье бота: состояние связи, уведомления о сбоях и журнал. Живёт в
   // своём файле — панель самодостаточна, а app.js и без неё на пределе.
+  var staffPanel = typeof buildStaffPanel === "function" ? buildStaffPanel({
+    $: $, confirm: askConfirm, initData: function () { return initData; }
+  }) : null;
+
   // Аналитика: свой экран, показывается только админу (см. applyAdmin).
   var statsPanel = typeof buildStatsPanel === "function" ? buildStatsPanel({
     $: $, layout: layoutHeaderIcons, refreshMain: refreshMainButton,

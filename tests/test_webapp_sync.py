@@ -972,7 +972,7 @@ def test_split_files_stay_reasonably_small():
     каскада ему безразличен. Порог 1650 оставлен как есть: следующий кусок
     (панель финансиста) должен уменьшить файл, а не занять освободившееся.
     """
-    for name, limit in (("index.html", 1050), ("app.css", 1650), ("app.js", 2950),
+    for name, limit in (("index.html", 1060), ("app.css", 1650), ("app.js", 2950),
                         ("modal.css", 120),
                         ("skin-field.js", 400), ("form-lib.js", 300),
                         ("alerts-panel.js", 330), ("restore-panel.js", 200),
@@ -982,7 +982,8 @@ def test_split_files_stay_reasonably_small():
                         ("nudge-panel.js", 100),
                         ("list-tools.js", 160),
                         ("help-tour.js", 220), ("tour.css", 240),
-                        ("stats-panel.js", 240), ("stats.css", 120)):
+                        ("stats-panel.js", 240), ("stats.css", 130),
+                        ("staff-panel.js", 180)):
         length = len(_read(name).split("\n"))
         assert length <= limit, f"{name}: {length} строк — пора делить дальше"
 

@@ -631,6 +631,22 @@
 
   <div class="pane hidden" id="pane-access" role="tabpanel" aria-labelledby="tab-access">
     <div class="card">
+      <div class="card-title">🪪 Справочник сотрудников <button type="button" class="help-q" data-help-title="Справочник сотрудников" data-help="ФИО, которое попадёт в реестр вместо имени из профиля Telegram: профиль человек меняет когда захочет, и в отчёте вместо «Микула Татьяна» оказывается «Танечка».&#10;&#10;Список живёт в базе бота — здесь его и правят: наняли, уволили, поправили опечатку. Кого в справочнике нет, тот подаёт заявки под именем из своего профиля: справочник ничего не запрещает, он только подставляет.&#10;&#10;«Импорт» вливает список из Google-таблицы: новых добавит, знакомым обновит ФИО, не удалит никого. Кого в таблице не оказалось — покажет списком.">?</button></div>
+      <div id="staff-list"></div>
+      <div id="staff-note"></div>
+      <div class="add-row">
+        <input type="text" id="staff-name" placeholder="Фамилия Имя" autocomplete="off">
+      </div>
+      <div class="add-row">
+        <input type="text" id="staff-user" placeholder="@username или t.me/username" autocomplete="off">
+        <button type="button" class="add-btn" id="staff-add">＋</button>
+      </div>
+      <div class="add-row">
+        <button type="button" class="add-btn btn-ghost hidden" id="staff-import"
+                style="width:100%">📥 Импорт из таблицы</button>
+      </div>
+    </div>
+    <div class="card">
       <div class="card-title">💼 Финансисты <button type="button" class="help-q" data-help-title="Финансисты" data-help="Получают карточку каждой заявки с файлом счёта и кнопкой «Открыть в приложении» — статус (Оплачено/Отложено/Отклонено) ставится в панели 📊. @username сработает после того, как человек хотя бы раз написал боту.">?</button></div>
       <div id="fin-list"></div>
       <div class="add-row">
@@ -992,6 +1008,7 @@
 <script src="list-tools.js"></script>
 <script src="help-tour.js"></script>
 <script src="stats-panel.js"></script>
+<script src="staff-panel.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
