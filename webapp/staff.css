@@ -29,6 +29,21 @@
     gap: 7px;
     min-width: 0;
   }
+  /* Кто подавал заявки: залитая точка — да, пустая — ещё нет. Значение
+     объяснено в подсказке карточки и в title самой точки. */
+  #staff-list .staff-dot {
+    flex: 0 0 auto;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    border: 1.5px solid var(--hint);
+    opacity: .45;
+  }
+  #staff-list .staff-dot.on {
+    background: var(--ok);
+    border-color: var(--ok);
+    opacity: 1;
+  }
+
   #staff-list .staff-name {
     flex: 0 1 auto;
     min-width: 0;

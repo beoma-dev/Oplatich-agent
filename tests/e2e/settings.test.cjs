@@ -780,6 +780,13 @@ test("в справочнике видно, кто ещё ни разу не п�
   assert.equal(
     await page.evaluate(() => document.getElementById("staff-count").textContent),
     "Сотрудников: 3 · не подавали заявок: 2");
+  // И видно, КТО именно: залитая точка — подавал, пустая — ещё нет.
+  const dots = await page.evaluate(() =>
+    [...document.querySelectorAll("#staff-list .staff-dot")]
+      .map((d) => ({ on: d.classList.contains("on"), title: d.title })));
+  assert.deepEqual(dots.map((d) => d.on), [true, false, false]);
+  assert.deepEqual(dots.map((d) => d.title),
+    ["подавал заявки", "ещё не подавал заявок", "ещё не подавал заявок"]);
   await page.close();
 });
 

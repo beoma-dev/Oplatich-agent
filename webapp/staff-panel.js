@@ -55,6 +55,12 @@ function buildStaffPanel(ctx) {
       // сказано числом над списком.
       var who = document.createElement("div");
       who.className = "who";
+      // Точка вместо слова: 22 подписи «не подавал» превратили бы список
+      // в стену текста, а точка читается сразу и не занимает ширины.
+      var dot = document.createElement("i");
+      dot.className = "staff-dot" + (it.submitted ? " on" : "");
+      dot.title = it.submitted ? "подавал заявки" : "ещё не подавал заявок";
+      who.appendChild(dot);
       var main = document.createElement("div");
       main.className = "staff-name";
       main.textContent = it.full_name;

@@ -2090,3 +2090,41 @@ class TestAnalyticsRoute:
                 f"/api/admin/analytics?days={asked}", headers=_auth()
             )).json()
             assert out["days"] == got
+
+
+class TestAssetVersioning:
+    """Адрес файла меняется вместе с его содержимым.
+
+    Без этого WebView Telegram неделями показывал старый JS: заголовок
+    no-cache обязывает переспросить сервер, но страницу WebView держит
+    живой, и человек после деплоя видел прежний экран.
+    """
+
+    def test_local_assets_get_a_version_and_the_cdn_one_does_not(self):
+        from api.server import asset_version, index_html
+
+        page = index_html(asset_version())
+        assert 'src="app.js?v=' in page
+        assert 'href="app.css?v=' in page
+        # Ссылка на telegram.org — чужая, версию туда дописывать нельзя.
+        assert 'src="https://telegram.org/js/telegram-web-app.js"' in page
+        assert "telegram-web-app.js?v=" not in page
+
+    def test_version_follows_the_content(self, tmp_path, monkeypatch):
+        import api.server as server_mod
+
+        room = tmp_path / "webapp"
+        room.mkdir()
+        (room / "index.html").write_text('<script src="a.js"></script>', encoding="utf-8")
+        (room / "a.js").write_text("var a = 1;", encoding="utf-8")
+        monkeypatch.setattr(server_mod, "WEBAPP_DIR", room)
+
+        first = server_mod.asset_version()
+        assert server_mod.asset_version() == first, "версия скачет без правок"
+        (room / "a.js").write_text("var a = 2;", encoding="utf-8")
+        assert server_mod.asset_version() != first, "правку файла версия не заметила"
+
+    async def test_page_is_served_with_versions(self, api):
+        client, _ = api
+        page = (await client.get("/")).text
+        assert "?v=" in page and 'src="app.js?v=' in page
