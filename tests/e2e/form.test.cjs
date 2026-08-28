@@ -481,7 +481,7 @@ test("подписи экранов умещаются в одну строку"
 test("панель кнопок не налезает на строку с героем", async () => {
   // Отступ переехал с шапки на .brand — проверяем, что он там и работает.
   const page = await openApp(browser, { skin: "tg", width: 320, routes: HINTS });
-  await page.evaluate(() => ["fin-btn", "admin-btn"].forEach((id) =>
+  await page.evaluate(() => ["stats-btn", "fin-btn", "admin-btn"].forEach((id) =>
     document.getElementById(id).classList.remove("hidden")));
   await page.evaluate(() => window.dispatchEvent(new Event("resize")));
   await page.waitForTimeout(350);
