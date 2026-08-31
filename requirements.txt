@@ -7,13 +7,13 @@
 python-telegram-bot==21.9
 
 # Конфигурация и валидация
-pydantic==2.9.2
-pydantic-settings==2.6.1
-python-dotenv==1.2.2
+pydantic==2.13.5
+pydantic-settings==2.15.0
+python-dotenv==1.2.3
 
 # HTTP API для Mini App (форма заявки в Telegram)
 fastapi==0.141.1
-uvicorn[standard]==0.34.0
+uvicorn[standard]==0.52.4
 python-multipart==0.0.32
 
 # Базы часовых поясов для zoneinfo (нужно в slim-контейнерах)
@@ -24,18 +24,18 @@ socksio==1.0.0
 
 # PDF-документ заявки (шрифты DejaVu вендорены в assets/fonts)
 reportlab==4.2.5
-num2words==0.5.13
+num2words==0.5.14
 
 # Автопроверка «похож ли файл на счёт»: текст PDF + OCR (tesseract в Docker)
-pypdf==6.16.1
+pypdf==6.16.2
 pytesseract==0.3.13
 pdf2image==1.17.0
 Pillow==12.3.0
 
 # Google Sheets + Google Drive (STORAGE_BACKEND=google)
-google-api-python-client==2.154.0
-google-auth==2.36.0
-google-auth-oauthlib==1.2.1
+google-api-python-client==2.199.0
+google-auth==2.57.0
+google-auth-oauthlib==1.4.1
 
 # xlsx-зеркало реестра (REGISTRY_XLSX_FILE, шаблон «Реестр.xlsx» из ТЗ)
 openpyxl==3.1.5
