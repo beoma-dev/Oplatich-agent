@@ -10,7 +10,8 @@ SQLite с живым xlsx-зеркалом), файл счёта — в Google D
 Краткое описание архитектуры и стоимость реализации — в
 [ARCHITECTURE.md](ARCHITECTURE.md), подробные решения и их причины — в
 [CONTEXT.md](CONTEXT.md). Деплой на сервер с HTTPS — в [DEPLOY.md](DEPLOY.md).
-Модель угроз — в [SECURITY.md](SECURITY.md). План развития — в
+Модель угроз — в [SECURITY.md](SECURITY.md). Что делать, если бот молчит
+или пришла ошибка, — в [RUNBOOK.md](RUNBOOK.md). План развития — в
 [ROADMAP.md](ROADMAP.md).
 
 ## Возможности
