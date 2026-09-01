@@ -56,15 +56,18 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # Та же, что у разработчика на сервере: расхождение версий уже
+          # ломало сборку — у node --test менялось, что он принимает.
+          node-version: "22"
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
       - name: Unit (node --test)
-        # Каталогом, а не глобом в кавычках: Node 20 сам глоб не разворачивает
-        # и падает с «Could not find».
+        # Глоб в package.json стоит БЕЗ кавычек — его разворачивает оболочка,
+        # и это единственный вариант, работающий и на 20, и на 22 (замерено):
+        # каталог принимает только 20, глоб в кавычках — только 22.
         run: npm test
 
       - name: Install Chromium

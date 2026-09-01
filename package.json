@@ -5,8 +5,8 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "node --test \"tests/js/**/*.cjs\"",
-    "test:e2e": "node --test --test-concurrency=1 \"tests/e2e/**/*.test.cjs\"",
+    "test": "node --test tests/js/*.cjs",
+    "test:e2e": "node --test --test-concurrency=1 tests/e2e/*.test.cjs",
     "brand": "node scripts/render_brand.mjs"
   },
   "devDependencies": {
