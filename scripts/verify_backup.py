@@ -49,7 +49,12 @@ def _latest_backup() -> Path | None:
 
 def _check_registry(root: Path) -> list[str]:
     """ID заявок из реестра. Пустой список — либо пусто, либо не прочиталось."""
-    path = root / "storage" / "registry.xlsx"
+    # Имя файла берём из настроек, а не из константы: на google-бэкенде
+    # зеркало называется как задано в REGISTRY_XLSX_FILE, и проверка,
+    # прибитая к «registry.xlsx», молча читала СТАРЫЙ файл, оставшийся от
+    # локального режима, и рапортовала «2 заявки» при восьми в реестре.
+    configured = settings.registry_xlsx_path or settings.registry_path
+    path = root / "storage" / configured.name
     if not path.exists():
         # На google-бэкенде реестр живёт в таблице, а xlsx-зеркало включается
         # отдельно (REGISTRY_XLSX_FILE). Его отсутствие — норма, а не провал:
@@ -90,10 +95,17 @@ def _check_database(root: Path, registry_ids: list[str]) -> None:
             "integrity_check пройден",
         )
         db_ids = {r[0] for r in conn.execute("SELECT request_id FROM requests")}
-        _say(
-            db_ids == set(registry_ids),
-            f"реестр и база сходятся: {len(db_ids)} против {len(registry_ids)}",
-        )
+        if settings.storage_is_google:
+            # Источник правды — Google-таблица, SQLite-реестр там не ведётся.
+            # Сверять его с зеркалом бессмысленно: расхождение будет всегда,
+            # а проверка, которая всегда красная, перестаёт читаться.
+            print(f"  · SQLite-реестр не ведётся на google-бэкенде "
+                  f"({len(db_ids)} стар. строк) — сверять не с чем")
+        else:
+            _say(
+                db_ids == set(registry_ids),
+                f"реестр и база сходятся: {len(db_ids)} против {len(registry_ids)}",
+            )
     except Exception as exc:  # noqa: BLE001
         _say(False, f"база НЕ открывается: {exc}")
 
@@ -118,16 +130,24 @@ def _check_files(root: Path, registry_ids: list[str]) -> None:
     storage = root / "storage"
     pdfs = {p.stem for p in storage.glob("INV-*.pdf")}
     missing = [i for i in registry_ids if i not in pdfs]
-    _say(
-        not missing,
-        f"PDF заявок: {len(pdfs)} файлов"
-        + (f"; НЕТ для {', '.join(missing[:3])}" if missing else ""),
-    )
+    if settings.storage_is_google:
+        # PDF и счета уходят в Google Drive, локально их нет — и в архиве
+        # тоже. Молчать об этом нельзя: человек, читающий отчёт, должен
+        # знать, что документы бэкапом НЕ покрыты.
+        print(f"  · PDF в архиве: {len(pdfs)} (документы живут в Google Drive "
+              f"и в этот архив не попадают)")
+    else:
+        _say(
+            not missing,
+            f"PDF заявок: {len(pdfs)} файлов"
+            + (f"; НЕТ для {', '.join(missing[:3])}" if missing else ""),
+        )
     # Сам xlsx-реестр лежит в том же каталоге и файлом счёта не является.
     # Раньше он вычитался всегда, и без него счётчик уходил в минус.
     others = [
         p for p in storage.iterdir()
-        if p.is_file() and not p.name.startswith("INV-") and p.name != "registry.xlsx"
+        if p.is_file() and not p.name.startswith("INV-")
+        and not p.name.endswith(".xlsx")
     ]
     _say(True, f"файлов счетов от пользователей: {len(others)}")
 
