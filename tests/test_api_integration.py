@@ -1455,6 +1455,71 @@ class TestUsersRoster:
         assert resp.status_code == 403
 
 
+class TestGoogleFailures:
+    """Отказ Google наружу — понятным 503, а не голым «500».
+
+    «Мои заявки» умели это и раньше (storage.RegistryUnavailable), а вот смена
+    статуса и админ-панель ходят в реестр напрямую: 03.09.2026 нагрузочный
+    прогон выбрал квоту чтения, и пять смен статуса из шести вернули
+    «Internal Server Error». Обработчик один на все ручки — проверяем на той,
+    что тогда и падала.
+    """
+
+    @staticmethod
+    def _http_error(status: int, body: bytes):
+        from googleapiclient.errors import HttpError
+
+        class _Resp(dict):
+            """Минимальный httplib2.Response: googleapiclient смотрит .status."""
+
+            def __init__(self, code: int):
+                super().__init__(status=code)
+                self.status = code
+                self.reason = "err"
+
+        return HttpError(_Resp(status), body)
+
+    def _raising(self, monkeypatch, err):
+        async def boom(*a, **kw):
+            raise err
+
+        monkeypatch.setattr(routes_mod.storage, "get_request", boom)
+
+    async def _change_status(self, client):
+        return await client.post(
+            "/api/finance/status",
+            json={"request_id": "INV-20260903-120000-0001", "key": "PAID"},
+            headers=_auth(),
+        )
+
+    async def test_quota_becomes_a_wait_message(self, api, monkeypatch):
+        """429 от Sheets — это «подождите минуту», а не поломка.
+
+        Лимит чтения — 60 в минуту НА ПРОЕКТ: упереться может один человек,
+        а отказ увидят остальные, и приложению надо что-то им показать.
+        """
+        client, _ = api
+        _allow(monkeypatch)
+        _admins(monkeypatch, "42")
+        self._raising(monkeypatch, self._http_error(
+            429, b'{"error": {"message": "Quota exceeded", "status": "RESOURCE_EXHAUSTED"}}'))
+        resp = await self._change_status(client)
+        assert resp.status_code == 503
+        assert resp.headers.get("Retry-After") == "60"
+        assert "лимит" in resp.json()["detail"].lower()
+
+    async def test_other_google_errors_say_registry_is_down(self, api, monkeypatch):
+        """Прочий отказ Google — «реестр недоступен», тоже 503, а не 500."""
+        client, _ = api
+        _allow(monkeypatch)
+        _admins(monkeypatch, "42")
+        self._raising(monkeypatch, self._http_error(
+            500, b'{"error": {"message": "backend error"}}'))
+        resp = await self._change_status(client)
+        assert resp.status_code == 503
+        assert "реестр" in resp.json()["detail"].lower()
+
+
 class TestAccessRequests:
     """Запрос доступа сотрудником и решение админа."""
 

@@ -64,6 +64,12 @@
        или наоборот. Текст приходит из /api/access. -->
   <div id="env-banner" class="env-banner hidden"></div>
   <div id="maint-banner" class="env-banner hidden"></div>
+  <!-- Перегрузка: лимит обращений к Google общий на всех, и упереться в него
+       может не тот, кто сейчас смотрит на экран. Ставит и снимает
+       busy-banner.js, перехватывая ответы сервера. Класс общий с плашкой
+       работ: третий тон ради одного сообщения палитре ни к чему, а место
+       и вид у всех трёх плашек одинаковые. -->
+  <div id="busy-banner" class="env-banner hidden"></div>
   <header>
     <h1 class="brand">
       <!-- Имя убрано из вида, но остаётся заголовком экрана для скринридера. -->
@@ -1018,6 +1024,7 @@
 <script src="closing-panel.js"></script>
 <script src="nudge-panel.js"></script>
 <script src="list-tools.js"></script>
+<script src="busy-banner.js"></script>
 <script src="help-tour.js"></script>
 <script src="stats-panel.js"></script>
 <script src="staff-panel.js"></script>

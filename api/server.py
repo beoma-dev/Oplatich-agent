@@ -7,15 +7,18 @@ Bot-инстанс через app.state — так API шлёт подтверж
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from telegram import Bot
 
 from api.routes import router
+
+log = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parent.parent / "webapp"
 
@@ -81,6 +84,7 @@ def build_api(bot: Bot) -> FastAPI:
         return response
 
     app.include_router(router, prefix="/api")
+    _handle_google_failures(app)
 
     # Страницу отдаём сами, чтобы подставить версию в адреса файлов.
     # Считаем один раз: в контейнере статика не меняется между запусками.
@@ -95,3 +99,48 @@ def build_api(bot: Bot) -> FastAPI:
     # приоритет. Запрос вида app.js?v=abc123 отдаётся тем же файлом.
     app.mount("/", StaticFiles(directory=WEBAPP_DIR, html=True), name="webapp")
     return app
+
+
+def _handle_google_failures(app: FastAPI) -> None:
+    """Отказ Google превращаем в честный 503, а не в голый «500».
+
+    Квота Sheets — 60 чтений в минуту на проект, и упереться в неё реально:
+    смена статуса читает весь реестр дважды, открытие админ-панели тратит
+    несколько чтений. Google отвечает 429, googleapiclient поднимает HttpError,
+    и до 03.09.2026 наружу уходило «Internal Server Error» — человек видел
+    поломку там, где надо просто подождать минуту.
+
+    Обработчик один на все ручки: перечислять их по одной значит однажды
+    забыть новую. Ставится он и на local-бэкенде, где Google не при делах:
+    ветка «только для google» означала бы, что в тестах (там всегда local)
+    он не выполняется ни разу. Импорт внутри — модуль нужен только здесь.
+    """
+    from googleapiclient.errors import HttpError
+
+    @app.exception_handler(HttpError)
+    async def google_unavailable(request, exc: HttpError) -> JSONResponse:
+        status = getattr(getattr(exc, "resp", None), "status", 0)
+        # 403 у Google — это и «нет прав», и «слишком часто»; различает reason.
+        text = str(exc)
+        throttled = status == 429 or (
+            status == 403 and ("ateLimit" in text or "uotaExceeded" in text)
+        )
+        if throttled:
+            detail = (
+                "Превышен лимит обращений к Google-таблице. "
+                "Подождите минуту и повторите."
+            )
+            log.warning("Google throttling: %s", text[:200])
+        else:
+            detail = (
+                "Реестр сейчас недоступен — Google не ответил. "
+                "Попробуйте через минуту."
+            )
+            log.exception("Google вернул ошибку", exc_info=exc)
+        # 503, а не 429: лимит общий на проект, и человек в нём не виноват.
+        # Retry-After — не украшение: по нему клиент знает, сколько ждать.
+        return JSONResponse(
+            {"detail": detail, "retry_after": 60},
+            status_code=503,
+            headers={"Retry-After": "60"},
+        )

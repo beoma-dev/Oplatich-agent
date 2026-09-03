@@ -180,6 +180,60 @@ test("кнопка панели финансиста уходит вместе �
   await page.close();
 });
 
+test("перегрузка: плашка приходит на 503 и уходит сама", async () => {
+  // Лимит Google — 60 чтений в минуту НА ПРОЕКТ, общий на всех: упереться
+  // может один, а отказ увидят остальные. Раньше 429 от Google уходил наружу
+  // голым «Internal Server Error», и человек видел поломку там, где надо
+  // подождать. Полоса ставится перехватом fetch — проверяем именно её.
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page.route("**/telegram-web-app.js", (r) => r.abort());
+  await page.addInitScript(() => {
+    window.__busy = false;
+    window.Telegram = { WebApp: {
+      initData: "signed", initDataUnsafe: {}, themeParams: {}, colorScheme: "light",
+      ready() {}, expand() {}, close() {}, openLink() {},
+      MainButton: { isVisible: false, show() {}, hide() {}, setText() {},
+        showProgress() {}, hideProgress() {}, onClick() {}, offClick() {},
+        setParams() {}, enable() {}, disable() {} },
+      BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} },
+      HapticFeedback: { selectionChanged() {}, impactOccurred() {}, notificationOccurred() {} },
+      onEvent() {}, offEvent() {},
+    } };
+    window.fetch = (u) => {
+      if (window.__busy) {
+        return Promise.resolve({ ok: false, status: 503,
+          headers: { get: () => "6" },      // Retry-After
+          json: () => Promise.resolve({ detail: "Превышен лимит обращений." }) });
+      }
+      return Promise.resolve({ ok: true, status: 200, headers: { get: () => null },
+        json: () => Promise.resolve({ allowed: true, pending: false,
+          has_admins: true, admin: false, requests: false, items: [] }) });
+    };
+  });
+  await page.goto(PAGE_URL, { waitUntil: "load" });
+  await page.waitForTimeout(600);
+
+  const banner = () => page.evaluate(() => {
+    const b = document.getElementById("busy-banner");
+    return { shown: !b.classList.contains("hidden"), text: b.textContent };
+  });
+  assert.equal((await banner()).shown, false, "полоса висит без повода");
+
+  // Сервер захлебнулся: следующий же опрос доступа приносит 503.
+  await page.evaluate(() => { window.__busy = true; });
+  await page.waitForTimeout(7000);
+  const busy = await banner();
+  assert.equal(busy.shown, true, "перегрузку человеку не показали");
+  assert.match(busy.text, /перегружен/i, `неожиданный текст: ${busy.text}`);
+  assert.match(busy.text, /\d+ с/, "нет отсчёта — непонятно, сколько ждать");
+
+  // Отпустило — полоса уходит на первом же успешном ответе, не досиживая.
+  await page.evaluate(() => { window.__busy = false; });
+  await page.waitForTimeout(7000);
+  assert.equal((await banner()).shown, false, "полоса осталась после починки");
+  await page.close();
+});
+
 test("админ не из финансистов: шапка не мигает на первом опросе", async () => {
   // 03.09.2026: на вопрос «показывать ли панель заявок» отвечали ДВЕ ручки, и
   // для админа, который финансистом не числится, они расходились. /finance/access

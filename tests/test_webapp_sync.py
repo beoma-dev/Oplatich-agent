@@ -986,7 +986,7 @@ def test_split_files_stay_reasonably_small():
                         ("maint-panel.js", 150),
                         ("closing-panel.js", 150),
                         ("nudge-panel.js", 100),
-                        ("list-tools.js", 200),
+                        ("list-tools.js", 200), ("busy-banner.js", 80),
                         ("help-tour.js", 220), ("tour.css", 240),
                         ("stats-panel.js", 240), ("stats.css", 130),
                         ("staff-panel.js", 180),
