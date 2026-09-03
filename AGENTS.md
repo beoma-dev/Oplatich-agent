@@ -202,8 +202,8 @@ TELEGRAM_BOT_TOKEN=dummy:token python -c "import main, api.server, bot.handlers,
   Новые маршруты, принимающие данные пользователя, обязаны проверять подпись
   так же. Маршруты «своих» данных (`/api/my-requests`, `/api/my/withdraw`)
   берут автора ТОЛЬКО из проверенного initData — никогда из тела запроса.
-  `/api/finance/*` показывает чужие заявки — доступ строго через
-  `is_financier()` или `is_bot_admin()`, отказ пишется в аудит.
+  `/api/finance/*` показывает чужие заявки — доступ через
+  `_may_see_requests()` (финансист ИЛИ админ) или `is_bot_admin()`, отказ пишется в аудит.
 - **Состав финансистов, whitelist и админов — только через
   `services/runtime_settings.py`**: `effective_*_ids()` = запись из `.env`
   плюс добавленные из панели, минус отозванные (`*_off`). Читать

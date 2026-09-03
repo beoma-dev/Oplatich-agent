@@ -813,16 +813,47 @@ class TestFinancePanel:
             "ok": True
         }
 
-    async def test_admin_without_finance_role_has_no_panel(self, api, monkeypatch):
-        """Убрал себя из финансистов — панель пропадает, даже у админа."""
+    async def test_admin_sees_the_panel_without_being_a_financier(self, api, monkeypatch):
+        """Список получателей карточек и право видеть заявки — разные вещи.
+
+        Раньше владелец бота, убравший себя из рассылки, заодно терял панель:
+        уведомления и доступ решались одним списком. Админ и так видит
+        аналитику, аудит и реестр целиком — прятать от него заявки нечем.
+        """
         client, _ = api
         _allow(monkeypatch)
         self._financiers(monkeypatch, "999")
         _admins(monkeypatch, "42")
-        assert (await client.get("/api/finance/requests", headers=_auth(42))).status_code == 403
+        assert (await client.get("/api/finance/requests", headers=_auth(42))).status_code == 200
         assert (await client.get("/api/finance/access", headers=_auth(42))).json() == {
+            "ok": True
+        }
+
+    async def test_outsider_still_has_no_panel(self, api, monkeypatch):
+        """Ни финансист, ни админ — панели нет, отказ пишется в аудит."""
+        from services import audit
+
+        client, _ = api
+        _allow(monkeypatch, "42,77")
+        self._financiers(monkeypatch, "999")
+        _admins(monkeypatch, "42")
+        assert (await client.get("/api/finance/requests", headers=_auth(77))).status_code == 403
+        assert (await client.get("/api/finance/access", headers=_auth(77))).json() == {
             "ok": False
         }
+        assert audit.FINANCE_DENIED in [e["event"] for e in await audit.recent_events(5)]
+
+    async def test_admin_may_change_status(self, api, monkeypatch):
+        """Кто видит панель, тот и меняет статус: удалять заявку админ и так может."""
+        client, _ = api
+        _allow(monkeypatch)
+        self._financiers(monkeypatch, "999")
+        _admins(monkeypatch, "42")
+        resp = await client.post("/api/invoice", data=_form(), headers=_auth())
+        rid = resp.json()["request_id"]
+        out = await client.post("/api/finance/status", headers=_auth(42),
+                                json={"request_id": rid, "key": "PAID"})
+        assert out.status_code == 200, out.text
 
     async def test_shows_requests_of_all_authors(self, api, monkeypatch):
         client, _ = api

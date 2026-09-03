@@ -360,6 +360,17 @@ def _matches(
     return True
 
 
+async def _may_see_requests(request: Request, user: dict) -> bool:
+    """Кому открыта панель всех заявок: финансистам и админам.
+
+    Одно место на три ручки (кнопка, выборка, смена статуса) — иначе кнопка
+    показывается, а выборка отказывает.
+    """
+    return is_financier(user["id"]) or await is_bot_admin(
+        request.app.state.bot, user["id"]
+    )
+
+
 @router.get("/finance/requests")
 async def finance_requests(
     request: Request,
@@ -377,14 +388,18 @@ async def finance_requests(
     user = validate_init_data(
         request.headers.get("X-Telegram-Init-Data", ""), settings.telegram_bot_token
     )
-    # Строго по списку финансистов: админ, убравший себя оттуда, панель
-    # теряет — иначе «убрал себя, а кнопка осталась». Нужен доступ —
-    # добавьте себя финансистом (⚙️ → Финансисты).
-    if not is_financier(user["id"]):
+    # Финансистам и админам. Раньше было строго по списку финансистов, и
+    # владелец бота, убравший себя из рассылки карточек, заодно терял
+    # ВОЗМОЖНОСТЬ ВИДЕТЬ заявки — а это разные вещи: список получателей
+    # решает, кому шлём уведомления, а не кому позволено смотреть. Админ и
+    # так видит всё остальное: аналитику, аудит, реестр целиком.
+    if not await _may_see_requests(request, user):
         await audit.log_event(
             audit.FINANCE_DENIED, user["id"], user.get("username"), "панель заявок"
         )
-        raise HTTPException(status_code=403, detail="Панель доступна финансистам.")
+        raise HTTPException(
+            status_code=403, detail="Панель доступна финансистам и админам."
+        )
     if _my_rate_limited(user["id"]):
         raise HTTPException(status_code=429, detail="Слишком часто — подождите минуту.")
 
@@ -429,11 +444,15 @@ async def finance_status(request: Request) -> dict:
     user = validate_init_data(
         request.headers.get("X-Telegram-Init-Data", ""), settings.telegram_bot_token
     )
-    if not is_financier(user["id"]):
+    # Кто видит панель, тот и меняет статус: админ и так удаляет любую
+    # заявку, запрещать ему отметить оплату было бы непоследовательно.
+    if not await _may_see_requests(request, user):
         await audit.log_event(
             audit.STATUS_DENIED, user["id"], user.get("username"), "панель заявок"
         )
-        raise HTTPException(status_code=403, detail="Статусы меняют финансисты.")
+        raise HTTPException(
+            status_code=403, detail="Статусы меняют финансисты и админы."
+        )
     if _my_rate_limited(user["id"]):
         raise HTTPException(status_code=429, detail="Слишком часто — подождите минуту.")
 
@@ -464,7 +483,7 @@ async def finance_access(request: Request) -> dict:
     user = validate_init_data(
         request.headers.get("X-Telegram-Init-Data", ""), settings.telegram_bot_token
     )
-    return {"ok": is_financier(user["id"])}
+    return {"ok": await _may_see_requests(request, user)}
 
 
 @router.post("/requests/delete")
