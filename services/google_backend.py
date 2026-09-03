@@ -181,23 +181,62 @@ def _style_requests(sheet_id: int) -> list[dict]:
             "index": 0,
         }
     })
+    # Чередование строк: в реестре на сотню строк глаз теряет строку при
+    # горизонтальном чтении, а колонок здесь семнадцать.
+    # Полосатость ставится ОТДЕЛЬНЫМ запросом после остальных: в одной пачке
+    # с setBasicFilter она молча не применялась — форматы вставали, а полос
+    # не появлялось (ловилось на боевом листе).
+    requests.append({
+        "addBanding": {
+            "bandedRange": {
+                "range": {"sheetId": sheet_id, "startRowIndex": 0,
+                          "startColumnIndex": 0, "endColumnIndex": n},
+                "rowProperties": {
+                    "headerColor": _rgb("1E2A5A"),
+                    "firstBandColor": _rgb("FFFFFF"),
+                    "secondBandColor": _rgb("F4F6FA"),
+                },
+            }
+        }
+    })
+    # Длинный текст переносится, а не уходит под соседнюю колонку. Выравнивание
+    # по ВЕРХУ: у перенесённой ячейки иначе разъезжается вся строка.
+    requests.append({
+        "repeatCell": {
+            "range": {"sheetId": sheet_id, "startRowIndex": 1,
+                      "startColumnIndex": 0, "endColumnIndex": n},
+            "cell": {"userEnteredFormat": {
+                "wrapStrategy": "WRAP", "verticalAlignment": "TOP",
+            }},
+            "fields": "userEnteredFormat(wrapStrategy,verticalAlignment)",
+        }
+    })
     return requests
 
 
 def _ensure_style_sync() -> None:
-    """Оформляет лист один раз: маркер «уже оформлен» — закреплённая шапка."""
+    """Оформляет лист один раз.
+
+    Маркером была ОДНА закреплённая шапка, и этого мало: на боевом листе она
+    стояла, а раскраски статусов не было вовсе — оформление считало работу
+    сделанной и больше не возвращалось. Смотрим и на условные форматы: их
+    ставит только этот код, так что их отсутствие означает «не оформлен».
+    """
     global _checked_style
     if _checked_style:
         return
     sheet_id = _target_sheet()[0]
     props = next(
         (
-            item["properties"]
+            {**item["properties"], "conditionalFormats": item.get("conditionalFormats", [])}
             for item in _sheets()
             .spreadsheets()
             .get(
                 spreadsheetId=settings.google_sheet_id,
-                fields="sheets(properties(sheetId,gridProperties(frozenRowCount)))",
+                fields=(
+                    "sheets(properties(sheetId,gridProperties(frozenRowCount)),"
+                    "conditionalFormats)"
+                ),
             )
             .execute()
             .get("sheets", [])
@@ -205,7 +244,8 @@ def _ensure_style_sync() -> None:
         ),
         {},
     )
-    if props.get("gridProperties", {}).get("frozenRowCount", 0) >= 1:
+    frozen = props.get("gridProperties", {}).get("frozenRowCount", 0) >= 1
+    if frozen and props.get("conditionalFormats"):
         _checked_style = True
         return
     _sheets().spreadsheets().batchUpdate(
