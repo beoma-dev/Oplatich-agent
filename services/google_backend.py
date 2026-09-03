@@ -7,15 +7,15 @@
 на папку (защита файла счёта и папки хранения по ТЗ).
 
 Все функции синхронные (googleapiclient) — вызывать через to_thread
-из storage-фасада.
+из storage-фасада. Клиенты при этом строятся ПО ПОТОКУ, см. _per_thread.
 """
 from __future__ import annotations
 
 import io
 import logging
 import re
+import threading
 from collections import Counter
-from functools import lru_cache
 
 from bot.models import (
     REQUEST_STATUSES,
@@ -345,8 +345,29 @@ def _ensure_style_sync() -> None:
     log.info("Google-таблица оформлена: шапка, ширины, фильтр, статусные цвета")
 
 
-@lru_cache(maxsize=1)
-def _credentials():
+# Клиенты Google — СВОИ У КАЖДОГО ПОТОКА, а не один на процесс.
+#
+# Под google-api-python-client лежит httplib2: его Http держит открытое
+# TLS-соединение и потокобезопасным не является. Синхронный I/O у нас уходит
+# в asyncio.to_thread, то есть в пул из нескольких потоков, и общий клиент
+# (тут был @lru_cache(maxsize=1)) означал одно TLS-соединение на всех. Процесс
+# от этого падал по segfault ВНУТРИ libssl/libcrypto — шесть раз с 01.09 по
+# 03.09.2026, и ни одной строки в логе: падает нативный код, до Python
+# исключение не доходит, контейнер молча поднимается заново. Ловилось только
+# по dmesg. Потоков в пуле единицы, так что и копий клиента столько же.
+_clients = threading.local()
+
+
+def _per_thread(name: str, make):
+    """Клиент этого потока: создаётся при первом обращении и живёт с потоком."""
+    client = getattr(_clients, name, None)
+    if client is None:
+        client = make()
+        setattr(_clients, name, client)
+    return client
+
+
+def _new_credentials():
     from google.oauth2.service_account import Credentials
 
     return Credentials.from_service_account_file(
@@ -354,15 +375,21 @@ def _credentials():
     )
 
 
-@lru_cache(maxsize=1)
-def _sheets():
+def _credentials():
+    return _per_thread("credentials", _new_credentials)
+
+
+def _new_sheets():
     from googleapiclient.discovery import build
 
     return build("sheets", "v4", credentials=_credentials(), cache_discovery=False)
 
 
-@lru_cache(maxsize=1)
-def _drive_credentials():
+def _sheets():
+    return _per_thread("sheets", _new_sheets)
+
+
+def _new_drive_credentials():
     """Drive: OAuth-токен владельца папки, если есть; иначе service account.
 
     На личных Google-аккаунтах service account не может владеть файлами
@@ -380,11 +407,18 @@ def _drive_credentials():
     return _credentials()
 
 
-@lru_cache(maxsize=1)
-def _drive():
+def _drive_credentials():
+    return _per_thread("drive_credentials", _new_drive_credentials)
+
+
+def _new_drive():
     from googleapiclient.discovery import build
 
     return build("drive", "v3", credentials=_drive_credentials(), cache_discovery=False)
+
+
+def _drive():
+    return _per_thread("drive", _new_drive)
 
 
 def _values():

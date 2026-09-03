@@ -191,6 +191,19 @@ TELEGRAM_BOT_TOKEN=dummy:token python -c "import main, api.server, bot.handlers,
   а не берёт первый: тихая запись не туда всплывёт через месяц при сверке,
   а отказ поднимет критичный алерт `storage`. Инвариант стережёт
   `tests/test_google_mock.py::test_every_range_names_the_registry_sheet`.
+- **Клиент Google — свой у каждого потока** (`google_backend._per_thread`):
+  под `googleapiclient` лежит httplib2, его `Http` держит открытое
+  TLS-соединение и потокобезопасным НЕ является, а весь синхронный I/O у нас
+  уходит в `asyncio.to_thread`, то есть в пул потоков. Один клиент на процесс
+  (`@lru_cache(maxsize=1)`) ронял процесс по segfault внутри
+  `libssl`/`libcrypto`: шесть падений с 01.09 по 03.09.2026 БЕЗ ЕДИНОЙ СТРОКИ
+  в логе — падает нативный код, до Python исключение не доходит, контейнер
+  молча поднимается заново, а человек видит «не удалось загрузить». Искать
+  такое надо в `dmesg`, в логе бота этого нет. Спусковой крючок — открытие
+  админ-панели: она дёргает Google дважды разом (сверка реестра в
+  `/api/admin/settings` и справочник в `/api/admin/staff`). Новый клиент
+  заводить только через `_per_thread`; стережёт
+  `tests/test_google_mock.py::test_client_is_not_shared_between_threads`.
 - Порядок колонок реестра: `SHEET_HEADERS` ↔ `InvoiceRequest.as_sheet_row()`
   (bot/models.py) — единый источник, менять парой. Новые колонки только
   ДОПИСЫВАТЬ в конец: вставка в середину сдвигает уже заполненные реестры

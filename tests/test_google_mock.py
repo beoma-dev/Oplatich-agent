@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import threading
 from unittest.mock import MagicMock
 
 import pytest
@@ -307,3 +308,35 @@ def test_short_columns_are_not_wrapped():
         assert SHEET_HEADERS.index(short) not in wrapped, short
     for long in ("Контрагент", "Комментарий", "Закрывающие документы"):
         assert SHEET_HEADERS.index(long) in wrapped, long
+
+
+def test_client_is_not_shared_between_threads(monkeypatch):
+    """Клиент Google обязан быть свой у каждого потока.
+
+    Под googleapiclient лежит httplib2: его Http держит открытое TLS-соединение
+    и потокобезопасным не является. Синхронные вызовы уходят в asyncio.to_thread,
+    то есть в пул потоков, и один общий клиент ронял ПРОЦЕСС по segfault внутри
+    libssl/libcrypto — шесть раз с 01.09 по 03.09.2026, без единой строки в логе.
+    Открытие админ-панели дёргает Google дважды разом (сверка реестра и
+    справочник сотрудников), так что попадание было делом времени.
+    """
+    monkeypatch.setattr(gb, "_clients", threading.local())
+    monkeypatch.setattr(gb, "_new_sheets", lambda: object())
+    seen: dict[str, tuple[object, object]] = {}
+
+    def grab(tag: str) -> None:
+        # Дважды: в пределах одного потока клиент обязан переиспользоваться,
+        # иначе на каждый вызов будет новое TLS-рукопожатие.
+        seen[tag] = (gb._sheets(), gb._sheets())
+
+    threads = [threading.Thread(target=grab, args=(tag,)) for tag in ("a", "b")]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert seen["a"][0] is seen["a"][1], "клиент пересоздаётся на каждый вызов"
+    assert seen["b"][0] is seen["b"][1], "клиент пересоздаётся на каждый вызов"
+    assert seen["a"][0] is not seen["b"][0], (
+        "клиент общий на два потока — segfault в libssl вернётся"
+    )
