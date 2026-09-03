@@ -162,15 +162,21 @@ def _style_requests(sheet_id: int, with_banding: bool = True) -> list[dict]:
             }
         })
     # Цвета статусов и красная «Срочно» — условное форматирование.
+    # Пастельный фон плюс НАСЫЩЕННЫЙ текст того же тона — палитра чипов
+    # Google. Читается сразу и не кричит: сплошная заливка на весь столбец
+    # (пробовали) превращает реестр в светофор, а бледная заливка с чёрным
+    # текстом (тоже пробовали) теряется — статус приходится искать глазами.
+    # Работает именно пара: цвет несёт фон, а различает — тёмный текст.
     status_colors = [
-        ("Оплачена", "D1E7DD"),
-        ("Отложена", "FFF3CD"),
-        ("Отклонена", "F8D7DA"),
-        ("Отозвана", "E2E3E5"),
+        (STATUS_NEW, "D2E3FC", "174EA6"),
+        ("Оплачена", "CEEAD6", "0D652D"),
+        ("Отложена", "FEEFC3", "B06000"),
+        ("Отклонена", "FAD2CF", "A50E0E"),
+        (STATUS_WITHDRAWN, "E8EAED", "5F6368"),
     ]
     status_range = {"sheetId": sheet_id, "startRowIndex": 1,
                     "startColumnIndex": _STATUS_IDX, "endColumnIndex": _STATUS_IDX + 1}
-    for value, color in status_colors:
+    for value, back, fore in status_colors:
         requests.append({
             "addConditionalFormatRule": {
                 "rule": {
@@ -178,7 +184,10 @@ def _style_requests(sheet_id: int, with_banding: bool = True) -> list[dict]:
                     "booleanRule": {
                         "condition": {"type": "TEXT_EQ",
                                       "values": [{"userEnteredValue": value}]},
-                        "format": {"backgroundColor": _rgb(color)},
+                        "format": {
+                            "backgroundColor": _rgb(back),
+                            "textFormat": {"bold": True, "foregroundColor": _rgb(fore)},
+                        },
                     },
                 },
                 "index": 0,

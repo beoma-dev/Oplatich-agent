@@ -108,7 +108,7 @@ def test_styling_applied_once_by_frozen_marker(svc, sheets, tmp_paths):
     requests = batch.call_args.kwargs["body"]["requests"]
     kinds = [next(iter(r)) for r in requests]
     assert "setBasicFilter" in kinds
-    assert kinds.count("addConditionalFormatRule") == 5  # 4 статуса + «Срочно»
+    assert kinds.count("addConditionalFormatRule") == 6  # 5 статусов + «Срочно»
     freeze = next(r for r in requests if "updateSheetProperties" in r)
     assert freeze["updateSheetProperties"]["properties"]["gridProperties"]["frozenRowCount"] == 1
     # Оформление адресовано листу реестра (gid 7), а не первому в книге (gid 0).
