@@ -7,7 +7,7 @@ const assert = require("node:assert");
 const { launch, openApp } = require("./helpers.cjs");
 
 const ADMIN = {
-  "/api/access": { allowed: true, financier: false, admin: true,
+  "/api/access": { allowed: true, requests: false, admin: true,
                    pending: false, has_admins: true },
   "/api/admin/settings": {
     autofill: true, financiers: [], allowed: [],
@@ -208,7 +208,7 @@ test("панель админа обновляется после решения
       const s = String(u);
       let body = { ok: true, items: [] };
       if (s.endsWith("/api/access")) {
-        body = { allowed: true, financier: false, admin: true,
+        body = { allowed: true, requests: false, admin: true,
                  pending: false, has_admins: true };
       }
       if (s.indexOf("/api/admin/settings") !== -1) body = {
@@ -288,10 +288,9 @@ test("финансист настраивает напоминания себе,
       }
       let body = { ok: true, items: [] };
       if (s.endsWith("/api/access")) {
-        body = { allowed: true, financier: true, admin: false,
+        body = { allowed: true, requests: true, admin: false,
                  pending: false, has_admins: true };
       }
-      if (s.indexOf("/api/finance/access") !== -1) body = { ok: true };
       return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
     };
   });
@@ -495,7 +494,7 @@ test("пропавшая связь видна на экране, даже ко�
 
 test("финансисту здоровье бота не показывают", async () => {
   const page = await openApp(browser, { skin: "neon", width: 390, routes: {
-    "/api/access": { allowed: true, financier: true, admin: false,
+    "/api/access": { allowed: true, requests: true, admin: false,
                      pending: false, has_admins: true },
     "/api/admin/settings": { __status: 403 },
     "/api/registry/links": { registry_url: null, drive_url: null },

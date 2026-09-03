@@ -5,7 +5,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 const path = require("path");
-const { launch } = require("./helpers.cjs");
+const { launch, openApp } = require("./helpers.cjs");
 
 const PAGE_URL = "file://" + path.resolve(__dirname, "../../webapp/index.html");
 
@@ -155,9 +155,8 @@ test("кнопка панели финансиста уходит вместе �
       }
       let body = { ok: true, items: [] };
       if (s.endsWith("/api/access")) {
-        body = { allowed: true, financier: window.__fin, pending: false, has_admins: true };
+        body = { allowed: true, requests: window.__fin, pending: false, has_admins: true };
       }
-      if (s.indexOf("/api/finance/access") !== -1) body = { ok: window.__fin };
       if (s.indexOf("/api/finance/requests") !== -1) body = { items: [], total: 0 };
       return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
     };
@@ -178,6 +177,36 @@ test("кнопка панели финансиста уходит вместе �
   await page.waitForTimeout(7500);
   assert.deepEqual(await read(), { button: false, panel: false },
     "кнопка панели осталась после отзыва прав финансиста");
+  await page.close();
+});
+
+test("админ не из финансистов: шапка не мигает на первом опросе", async () => {
+  // 03.09.2026: на вопрос «показывать ли панель заявок» отвечали ДВЕ ручки, и
+  // для админа, который финансистом не числится, они расходились. /finance/access
+  // отвечала «да» (право = финансист ИЛИ админ), а /api/access отдавала своё
+  // «финансист ли он» — «нет». Кнопка панели появлялась на открытии и пропадала
+  // через шесть секунд, на первом же опросе, утаскивая за собой всю шапку:
+  // значок аналитики уезжал на 36 px вбок.
+  const page = await openApp(browser, { skin: "light", width: 390, routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true,
+                     admin: true, requests: true },
+    "/api/admin/settings": { ok: true, financiers: [], allowed: [], admins: [] },
+  } });
+  const shot = () => page.evaluate(() => {
+    const g = (id) => document.getElementById(id);
+    return { fin: !g("fin-btn").classList.contains("hidden"),
+             stats: !g("stats-btn").classList.contains("hidden"),
+             statsX: Math.round(g("stats-btn").getBoundingClientRect().left) };
+  });
+  const before = await shot();
+  assert.deepEqual({ fin: before.fin, stats: before.stats }, { fin: true, stats: true },
+    "админу нужны обе кнопки: панель заявок и аналитика");
+  await page.waitForTimeout(7500);          // круг опроса — здесь всё и ломалось
+  assert.deepEqual(await shot(), before, "шапка переехала на первом же опросе");
+  const probes = (await page.evaluate(() => window.__gets))
+    .filter((u) => u.indexOf("/api/finance/access") !== -1);
+  assert.equal(probes.length, 0,
+    "у кнопки панели снова два источника правды — расхождение вернётся");
   await page.close();
 });
 
@@ -205,7 +234,7 @@ test("права админа появляются и уходят без пер
       }
       let body = { ok: true, items: [] };
       if (s.endsWith("/api/access")) {
-        body = { allowed: true, financier: false, admin: window.__admin,
+        body = { allowed: true, requests: false, admin: window.__admin,
                  pending: false, has_admins: true };
       }
       if (s.indexOf("/api/admin/settings") !== -1) {
@@ -213,7 +242,6 @@ test("права админа появляются и уходят без пер
                  backup: {}, reminders: {}, registry_url: null, drive_url: null };
       }
       if (s.indexOf("/api/admin/users") !== -1) body = { whitelist_empty: false, users: [] };
-      if (s.indexOf("/api/finance/access") !== -1) body = { ok: false };
       return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
     };
   });

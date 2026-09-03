@@ -17,10 +17,9 @@ const ITEM = {
 };
 
 const ROUTES = {
-  "/api/access": { allowed: true, financier: true, admin: true,
+  "/api/access": { allowed: true, requests: true, admin: true,
                    pending: false, has_admins: true },
   "/api/my-requests": { items: [ITEM] },
-  "/api/finance/access": { ok: true },
   "/api/finance/requests": {
     items: [Object.assign({}, ITEM, { sender_username: "@tester" })], total: 1,
   },
@@ -75,7 +74,7 @@ test("недоступный реестр не выглядит как «зая�
   // Пустой список здесь — ложь про чужие заявки: ровно та подмена, что
   // однажды съела напоминания.
   const page = await openApp(browser, { skin: "neon", width: 430, routes: {
-    "/api/access": { allowed: true, financier: false, admin: false,
+    "/api/access": { allowed: true, requests: false, admin: false,
                      pending: false, has_admins: true },
     "/api/my-requests": { __status: 403, detail: "Реестр сейчас недоступен." },
   } });
@@ -336,7 +335,6 @@ test("ссылка из уведомления открывает панель �
   const rid = "INV-20260701-120000-0009";
   const page = await openApp(browser, { skin: "neon", hash: "?fin=" + rid, routes: {
     "/api/access": { allowed: true, pending: false, has_admins: true },
-    "/api/finance/access": { ok: true },
     "/api/finance/requests": { items: [], total_found: 0, shown: 0 },
   } });
   await page.waitForTimeout(500);
@@ -363,7 +361,6 @@ test("ряд панели финансиста тоже в одну строку
     for (const width of [360, 430]) {
       const page = await openApp(browser, { skin: "neon", width, routes: {
         "/api/access": { allowed: true, pending: false, has_admins: true, admin: true },
-        "/api/finance/access": { ok: true },
         "/api/finance/requests": {
           items: [{ ...base, id: "INV-20260826-180840-2541", status }],
           total_found: 1, shown: 1,
@@ -397,7 +394,6 @@ test("разбор start_param из initData, а не только из адре
     "query_id=AAA&user=%7B%22id%22%3A1%7D&start_param=fin_" + rid + "&auth_date=1&hash=x";
   const page = await openApp(browser, { skin: "neon", initData, routes: {
     "/api/access": { allowed: true, pending: false, has_admins: true },
-    "/api/finance/access": { ok: true },
     "/api/finance/requests": { items: [], total_found: 0, shown: 0 },
   } });
   await page.waitForTimeout(600);
@@ -466,7 +462,6 @@ test("подробности: значение шире ярлыка и слов
 test("фильтры панели стоят сеткой, а не зигзагом", async () => {
   const page = await openApp(browser, { skin: "light", width: 360, routes: {
     "/api/access": { allowed: true, pending: false, has_admins: true },
-    "/api/finance/access": { ok: true },
     "/api/finance/requests": { items: [], total_found: 0, shown: 0 },
   } });
   await page.evaluate(() => document.querySelector("#fin-btn").classList.remove("hidden"));
@@ -564,7 +559,6 @@ test("ссылка из сводки просрочки включает фил�
   // Сводка перечисляет несколько заявок, поэтому ведёт на ВЫБОРКУ.
   const page = await openApp(browser, { skin: "neon", hash: "?fin=overdue", routes: {
     "/api/access": { allowed: true, pending: false, has_admins: true },
-    "/api/finance/access": { ok: true },
     "/api/finance/requests": { items: [], total_found: 0, shown: 0 },
   } });
   await page.waitForTimeout(600);
@@ -589,7 +583,6 @@ test("ссылка из сводки «к оплате» подставляет 
     + "&auth_date=1&hash=x";
   const page = await openApp(browser, { skin: "neon", initData, routes: {
     "/api/access": { allowed: true, pending: false, has_admins: true },
-    "/api/finance/access": { ok: true },
     "/api/finance/requests": { items: [], total_found: 0, shown: 0 },
   } });
   await page.waitForTimeout(600);
@@ -623,7 +616,6 @@ test("пустая заявка не обещает реквизитов ни в
   ]) {
     const page = await openApp(browser, { skin: "neon", routes: {
       "/api/access": { allowed: true, pending: false, has_admins: true },
-      "/api/finance/access": { ok: true },
       [route]: { items: [base], total_found: 1, shown: 1 },
     } });
     await page.evaluate((b) => document.querySelector(b).classList.remove("hidden"), btn);

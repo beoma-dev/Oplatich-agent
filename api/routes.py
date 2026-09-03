@@ -138,7 +138,11 @@ async def access_state(request: Request) -> dict:
     # так что опрос его не дёргает.
     return {
         "allowed": is_allowed(user["id"]),
-        "financier": is_financier(user["id"]),
+        # Кнопку панели решает ТОТ ЖЕ предикат, что и выборку, — _may_see_requests.
+        # Отдельный ответ «финансист ли он» здесь уже был, и для админа, который
+        # финансистом не числится, он противоречил /finance/access: кнопка
+        # появлялась на открытии и пропадала на первом же опросе (6 с).
+        "requests": await _may_see_requests(request, user),
         "admin": await is_bot_admin(request.app.state.bot, user["id"]),
         "pending": rs.access_request_pending(user["id"]),
         "has_admins": bool(rs.effective_admin_ids()),
@@ -363,8 +367,12 @@ def _matches(
 async def _may_see_requests(request: Request, user: dict) -> bool:
     """Кому открыта панель всех заявок: финансистам и админам.
 
-    Одно место на три ручки (кнопка, выборка, смена статуса) — иначе кнопка
-    показывается, а выборка отказывает.
+    Одно место на ВСЕ ручки, где спрашивают это право (кнопка, выборка, смена
+    статуса, ссылки на реестр, настройки напоминаний) — иначе кнопка
+    показывается, а выборка отказывает. Ровно так и вышло 03.09.2026: у
+    /api/access был свой ответ, «финансист ли он», и админу, не числящемуся
+    финансистом, кнопка панели показывалась на открытии и пропадала через 6 с,
+    на первом же опросе.
     """
     return is_financier(user["id"]) or await is_bot_admin(
         request.app.state.bot, user["id"]
@@ -479,7 +487,13 @@ async def finance_status(request: Request) -> dict:
 
 @router.get("/finance/access")
 async def finance_access(request: Request) -> dict:
-    """Показывать ли кнопку панели: ровно то же условие, что и у выборки."""
+    """Показывать ли кнопку панели: ровно то же условие, что и у выборки.
+
+    Приложение эту ручку не опрашивает — право приезжает полем «requests»
+    в /api/access, одним ответом со всем остальным доступом. Ручка осталась
+    как отдельно проверяемая формулировка права и как страховка для клиента,
+    открытого через деплой: у него на руках старый JS, который зовёт её.
+    """
     user = validate_init_data(
         request.headers.get("X-Telegram-Init-Data", ""), settings.telegram_bot_token
     )
@@ -1145,8 +1159,7 @@ async def registry_links(request: Request) -> dict:
     user = validate_init_data(
         request.headers.get("X-Telegram-Init-Data", ""), settings.telegram_bot_token
     )
-    uid = user["id"]
-    if not (is_financier(uid) or await is_bot_admin(request.app.state.bot, uid)):
+    if not await _may_see_requests(request, user):
         raise HTTPException(status_code=403, detail="Только для финансистов и админов.")
     registry, drive = _registry_links()
     return {"registry_url": registry, "drive_url": drive}
@@ -1192,7 +1205,7 @@ async def my_reminders(request: Request) -> dict:
         request.headers.get("X-Telegram-Init-Data", ""), settings.telegram_bot_token
     )
     uid = user["id"]
-    if not (is_financier(uid) or await is_bot_admin(request.app.state.bot, uid)):
+    if not await _may_see_requests(request, user):
         raise HTTPException(status_code=403, detail="Только для финансистов и админов.")
     cfg = rs.personal_reminders(uid)
     cfg["defaults"] = rs.reminders_config()
@@ -1211,7 +1224,7 @@ async def save_my_reminders(request: Request) -> dict:
         request.headers.get("X-Telegram-Init-Data", ""), settings.telegram_bot_token
     )
     uid = user["id"]
-    if not (is_financier(uid) or await is_bot_admin(request.app.state.bot, uid)):
+    if not await _may_see_requests(request, user):
         raise HTTPException(status_code=403, detail="Только для финансистов и админов.")
     body = await request.json()
     if body.get("action") == "reset":

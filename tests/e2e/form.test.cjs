@@ -241,7 +241,11 @@ test("герой остаётся на месте после возврата с
   // Пересчёт шапки прилетает асинхронно (ответ доступа, опрос финансиста).
   // Попав на скрытую форму, он мерил нули: отступ схлопывался, и герой
   // уезжал на 80 с лишним пикселей, налезая на панель кнопок.
-  const page = await openApp(browser, { skin: "tg", routes: HINTS });
+  // Кнопка панели должна быть видна С САМОГО НАЧАЛА: ниже тест показывает её
+  // руками, чтобы поймать пересчёт на скрытой форме, и набор значков в шапке
+  // обязан совпадать до и после — иначе сравниваются разные раскладки.
+  const page = await openApp(browser, { skin: "tg", routes: { ...HINTS,
+    "/api/access": { ...HINTS["/api/access"], requests: true } } });
   const geom = () => page.evaluate(() => {
     const h = document.querySelector("#form-view header");
     return { pad: getComputedStyle(h).paddingRight,
@@ -429,7 +433,7 @@ test("марка в пустом списке рисуется полность�
   // Клон берёт градиенты из общего блока: пока они лежали в скрытой шапке,
   // у персонажа пропадали и шерсть, и бумага.
   const page = await openApp(browser, { skin: "tg", width: 430, routes: {
-    "/api/access": { allowed: true, financier: false, admin: false,
+    "/api/access": { allowed: true, requests: false, admin: false,
                      pending: false, has_admins: true },
     "/api/my-requests": { items: [] },
   } });
@@ -497,7 +501,7 @@ test("панель кнопок не налезает на строку с ге�
 test("падение скрипта видно человеку и уходит админам", async () => {
   // Раньше исключение мимо catch оставляло застывшую форму и полную тишину.
   const page = await openApp(browser, { skin: "tg", routes: {
-    "/api/access": { allowed: true, financier: false, admin: false,
+    "/api/access": { allowed: true, requests: false, admin: false,
                      pending: false, has_admins: true },
     "/api/client-error": { ok: true },
   } });
@@ -536,7 +540,7 @@ test("плашка контура появляется только на сте�
   // Два бота выглядят одинаково: спутать их — значит подать настоящую заявку
   // в пустоту или наоборот.
   const boevoy = await openApp(browser, { skin: "tg", routes: {
-    "/api/access": { allowed: true, financier: false, admin: false,
+    "/api/access": { allowed: true, requests: false, admin: false,
                      pending: false, has_admins: true, env_label: "" },
   } });
   assert.ok(await boevoy.evaluate(() =>
@@ -545,7 +549,7 @@ test("плашка контура появляется только на сте�
   await boevoy.close();
 
   const stend = await openApp(browser, { skin: "tg", routes: {
-    "/api/access": { allowed: true, financier: false, admin: false,
+    "/api/access": { allowed: true, requests: false, admin: false,
                      pending: false, has_admins: true, env_label: "СТЕНД" },
   } });
   const shown = await stend.evaluate(() => {

@@ -829,6 +829,29 @@ class TestFinancePanel:
             "ok": True
         }
 
+    async def test_access_and_panel_never_disagree(self, api, monkeypatch):
+        """/api/access и /finance/access отвечают на один вопрос — одинаково.
+
+        03.09.2026 они разошлись: /finance/access спрашивала «финансист ИЛИ
+        админ», а /api/access отдавала своё поле «финансист ли он». Админу,
+        убравшему себя из рассылки, приложение показывало кнопку панели на
+        открытии и убирало через шесть секунд, на первом же опросе.
+        """
+        client, _ = api
+        _allow(monkeypatch, "42,77")
+        for financiers, admins, expected in (
+            ("999", "999", False),   # ни то, ни другое
+            ("42", "999", True),     # финансист
+            ("999", "42", True),     # админ, финансистом не числится
+            ("42", "42", True),      # и то, и другое
+        ):
+            self._financiers(monkeypatch, financiers)
+            _admins(monkeypatch, admins)
+            panel = (await client.get("/api/finance/access", headers=_auth(42))).json()
+            state = (await client.get("/api/access", headers=_auth(42))).json()
+            assert panel["ok"] is expected, (financiers, admins)
+            assert state["requests"] is expected, (financiers, admins)
+
     async def test_outsider_still_has_no_panel(self, api, monkeypatch):
         """Ни финансист, ни админ — панели нет, отказ пишется в аудит."""
         from services import audit
@@ -1426,7 +1449,10 @@ class TestAccessRequests:
         _admins(monkeypatch, "1")
         first = (await client.get("/api/access", headers=_auth())).json()
         assert first == {
-            "allowed": False, "financier": False, "admin": False,
+            # «requests» — видит ли он ЧУЖИЕ заявки (финансист или админ).
+            # Отдельного «финансист ли он» здесь нет намеренно: два ответа на
+            # один вопрос уже разъехались, см. test_access_and_panel_never_disagree.
+            "allowed": False, "requests": False, "admin": False,
             "pending": False, "has_admins": True, "env_label": "",
             # Плашка «технические работы» едет тем же ответом: её видят все,
             # кто открыл форму, и ради неё не стоит второго запроса.
@@ -2110,6 +2136,23 @@ class TestAnalyticsRoute:
         assert resp.status_code == 403
         events = [e["event"] for e in await audit.recent_events(limit=5)]
         assert audit.ADMIN_DENIED in events
+
+    async def test_financier_is_not_an_admin_here(self, api, monkeypatch):
+        """Панель заявок финансисту положена, аналитика — нет.
+
+        Это разные права, и путать их нельзя: на экране аналитики суммы,
+        контрагенты и загрузка ВСЕЙ компании. Проверяем обе стороны разом —
+        и отказ ручки, и флаг, по которому приложение рисует значок.
+        """
+        client, _ = api
+        _allow(monkeypatch, "42,77")
+        _admins(monkeypatch, "42")
+        settings.__dict__.pop("finance_recipients", None)
+        monkeypatch.setattr(settings, "finance_chat_ids_raw", "77")
+        state = (await client.get("/api/access", headers=_auth(77))).json()
+        assert state["requests"] is True, "финансист без панели заявок"
+        assert state["admin"] is False, "значок аналитики достанется финансисту"
+        assert (await client.get("/api/admin/analytics", headers=_auth(77))).status_code == 403
 
     async def test_period_is_clamped(self, api, monkeypatch):
         """days из адресной строки — чужой ввод: без границ он уедет в вечность."""

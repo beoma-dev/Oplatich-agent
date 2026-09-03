@@ -868,8 +868,10 @@
 
   // Доступ к подаче: null — ещё не спросили, false — отказано.
   var canSubmit = null;
-  // Финансист ли открывший форму: решает и кнопку панели, и вкладку напоминаний.
-  var isFinancier = false;
+  // Видит ли открывший форму ЧУЖИЕ заявки: финансист или админ. Решает и
+  // кнопку панели, и вкладку напоминаний. Ответ один и приходит из /api/access:
+  // второй источник (своя проба /api/finance/access) с ним расходился.
+  var seesRequests = false;
 
   /** Вкладка «Напоминания» есть у получателей: настраивают её себе сами. */
   var recipientShown = null;
@@ -1881,7 +1883,7 @@
     // Форма скрыта — открыта другая вкладка. Тогда getBoundingClientRect
     // отдаёт нули, и шапка пересчитывается в мусор: отступ схлопывается,
     // герой съезжает с места и налезает на панель кнопок. Пересчёт приходит
-    // асинхронно (ответ /api/finance/access, опрос доступа), поэтому попасть
+    // асинхронно (опрос доступа), поэтому попасть
     // на скрытую форму — обычное дело. Откладываем до возвращения на форму.
     if (!box.width || !box.height) { layoutHeaderIcons._pending = true; return; }
     layoutHeaderIcons._pending = false;
@@ -2212,7 +2214,7 @@
         applyAccess(d.allowed, false);
         // Сразу, а не на первом тике опроса: иначе вкладка напоминаний
         // появлялась у финансиста через несколько секунд после открытия.
-        applyFinance(d.financier);
+        applyFinance(d.requests);
         applyAdmin(d.admin);
         if (d.allowed) return;
         if (!d.has_admins) {
@@ -2275,7 +2277,7 @@
       .then(function (d) {
         if (!d) return;
         applyAccess(d.allowed, true);
-        applyFinance(d.financier);
+        applyFinance(d.requests);
         applyAdmin(d.admin);
       })
       .catch(function () { /* сеть мигнула — попробуем на следующем круге */ });
@@ -2293,7 +2295,7 @@
     [].forEach.call(document.querySelectorAll("#admin-view [data-admin]"), function (el) {
       el.classList.toggle("hidden", !isBotAdmin);
     });
-    applyRecipientTab(isFinancier || isBotAdmin);
+    applyRecipientTab(seesRequests || isBotAdmin);
     if (statsPanel) statsPanel.setAdmin(isBotAdmin);
     if (isBotAdmin && staffPanel) staffPanel.reload();
     if (isBotAdmin) {
@@ -2308,9 +2310,9 @@
   }
 
   function applyFinance(allowed) {
-    isFinancier = !!allowed;
+    seesRequests = !!allowed;
     // Напоминания настраивает получатель — финансист или админ.
-    applyRecipientTab(isFinancier || isBotAdmin);
+    applyRecipientTab(seesRequests || isBotAdmin);
     var btn = $("fin-btn");
     if (!btn || btn.classList.contains("hidden") === !allowed) return;
     btn.classList.toggle("hidden", !allowed);
@@ -2379,19 +2381,6 @@
   });
   checkAccess();
   watchAccess();
-
-  function tryFinance() {
-    if (!insideTelegram) return;
-    fetch("/api/finance/access", { headers: { "X-Telegram-Init-Data": initData } })
-      .then(function (r) { return r.ok ? r.json() : { ok: false }; })
-      .then(function (d) {
-        var allowed = !!(d && d.ok);
-        $("fin-btn").classList.toggle("hidden", !allowed);
-        if (!allowed && !$("fin-view").classList.contains("hidden")) closeFinance();
-        layoutHeaderIcons();
-      })
-      .catch(function () { /* не финансист или сеть — кнопки просто нет */ });
-  }
 
   function openFinance() {
     $("form-view").style.display = "none";
@@ -2891,7 +2880,8 @@
       refreshMainButton();
     }
     // В настройках могли поменять список финансистов — в том числе себя.
-    tryFinance();
+    // Спрашиваем весь доступ разом: кнопка панели едет тем же ответом.
+    pollAccess();
   }
   $("admin-btn").addEventListener("click", openAdmin);
 
@@ -2923,7 +2913,6 @@
   restoreDraft();
   layoutHeaderIcons();
   playMark();
-  tryFinance();
   refreshMainButton();
 
   // Куда вести по ссылке из чата — таблица в list-tools.js.
