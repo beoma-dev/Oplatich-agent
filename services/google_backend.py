@@ -65,7 +65,7 @@ def _rgb(hex_color: str) -> dict:
     }
 
 
-def _style_requests(sheet_id: int) -> list[dict]:
+def _style_requests(sheet_id: int, with_banding: bool = True) -> list[dict]:
     """Оформление листа: как у xlsx-реестра (шапка, ширины, фильтр, цвета)."""
     n = len(SHEET_HEADERS)
     requests: list[dict] = [
@@ -183,10 +183,12 @@ def _style_requests(sheet_id: int) -> list[dict]:
     })
     # Чередование строк: в реестре на сотню строк глаз теряет строку при
     # горизонтальном чтении, а колонок здесь семнадцать.
-    # Полосатость ставится ОТДЕЛЬНЫМ запросом после остальных: в одной пачке
-    # с setBasicFilter она молча не применялась — форматы вставали, а полос
-    # не появлялось (ловилось на боевом листе).
-    requests.append({
+    # Полосатость добавляем, только если её ещё нет: повторный addBanding
+    # отвечает 400 «range already has alternating background colors» и
+    # роняет ВСЮ пачку — оформление тогда не применяется вовсе. Ловилось на
+    # боевом листе: шапка так и осталась недооформленной.
+    if with_banding:
+        requests.append({
         "addBanding": {
             "bandedRange": {
                 "range": {"sheetId": sheet_id, "startRowIndex": 0,
@@ -198,7 +200,7 @@ def _style_requests(sheet_id: int) -> list[dict]:
                 },
             }
         }
-    })
+        })
     # Длинный текст переносится, а не уходит под соседнюю колонку. Выравнивание
     # по ВЕРХУ: у перенесённой ячейки иначе разъезжается вся строка.
     requests.append({
@@ -212,6 +214,35 @@ def _style_requests(sheet_id: int) -> list[dict]:
         }
     })
     return requests
+
+
+def _header_styled(sheet_id: int) -> bool:
+    """Оформлена ли ПОСЛЕДНЯЯ колонка шапки.
+
+    Колонки реестра дописываются в конец (см. SHEET_HEADERS), а оформление
+    ставится один раз — и отстаёт ровно на новые колонки: «Дополнительные
+    документы» и «Закрывающие документы» стояли чёрным по тёмно-синему,
+    то есть выглядели пустыми. Проверяем цвет текста у последней: он белый
+    только если по ней прошёлся наш формат.
+    """
+    col = len(SHEET_HEADERS) - 1
+    letter = _col_letter(col)
+    data = (
+        _sheets()
+        .spreadsheets()
+        .get(
+            spreadsheetId=settings.google_sheet_id,
+            ranges=[_rng(f"{letter}1")],
+            includeGridData=True,
+            fields="sheets(data(rowData(values(effectiveFormat(textFormat(bold))))))",
+        )
+        .execute()
+    )
+    try:
+        cell = data["sheets"][0]["data"][0]["rowData"][0]["values"][0]
+        return bool(cell["effectiveFormat"]["textFormat"].get("bold"))
+    except (KeyError, IndexError):
+        return False
 
 
 def _ensure_style_sync() -> None:
@@ -228,14 +259,16 @@ def _ensure_style_sync() -> None:
     sheet_id = _target_sheet()[0]
     props = next(
         (
-            {**item["properties"], "conditionalFormats": item.get("conditionalFormats", [])}
+            {**item["properties"],
+             "conditionalFormats": item.get("conditionalFormats", []),
+             "bandedRanges": item.get("bandedRanges", [])}
             for item in _sheets()
             .spreadsheets()
             .get(
                 spreadsheetId=settings.google_sheet_id,
                 fields=(
                     "sheets(properties(sheetId,gridProperties(frozenRowCount)),"
-                    "conditionalFormats)"
+                    "conditionalFormats,bandedRanges)"
                 ),
             )
             .execute()
@@ -245,12 +278,14 @@ def _ensure_style_sync() -> None:
         {},
     )
     frozen = props.get("gridProperties", {}).get("frozenRowCount", 0) >= 1
-    if frozen and props.get("conditionalFormats"):
+    if frozen and props.get("conditionalFormats") and _header_styled(sheet_id):
         _checked_style = True
         return
     _sheets().spreadsheets().batchUpdate(
         spreadsheetId=settings.google_sheet_id,
-        body={"requests": _style_requests(sheet_id)},
+        body={"requests": _style_requests(
+            sheet_id, with_banding=not props.get("bandedRanges")
+        )},
     ).execute()
     _checked_style = True
     log.info("Google-таблица оформлена: шапка, ширины, фильтр, статусные цвета")
