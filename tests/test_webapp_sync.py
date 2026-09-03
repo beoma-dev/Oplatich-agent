@@ -641,9 +641,15 @@ def test_tabs_fit_one_row():
     # Кнопки не сжимаются — сжатая молча режет подпись.
     tab = re.search(r"\n  \.tab \{([^}]*)\}", HTML)
     assert tab and "flex: 0 0 auto" in tab.group(1)
-    # На узких экранах ужимаем кегль и поля, иначе шесть вкладок не влезут.
+    # Кегль и поля ужимаются ПЛАВНО, а не ступеньками по медиазапросам:
+    # ступеньки стояли на 460/400/340 px, и ширина окна пересекала их сама —
+    # полоса прокрутки то есть, то нет, окно дёргается на ~16 px, и подписи
+    # прыгали в размере. Порог по ширине для .tab заводить обратно нельзя.
+    assert "clamp(" in tab.group(1), "кегль вкладок снова ступеньками"
     for width in (460, 400, 340):
-        assert any(".tab {" in block for block in _media_blocks(f"max-width: {width}px")), width
+        assert not any(".tab {" in block for block in _media_blocks(f"max-width: {width}px")), (
+            f"вернулся порог {width}px — кегль снова будет прыгать"
+        )
     # Самая длинная подпись разворачивается только там, где есть место.
     assert '<span class="t-long">Оформление</span>' in HTML
     assert '<span\n            class="t-short">Тема</span>' in HTML
@@ -980,7 +986,7 @@ def test_split_files_stay_reasonably_small():
                         ("maint-panel.js", 150),
                         ("closing-panel.js", 150),
                         ("nudge-panel.js", 100),
-                        ("list-tools.js", 160),
+                        ("list-tools.js", 200),
                         ("help-tour.js", 220), ("tour.css", 240),
                         ("stats-panel.js", 240), ("stats.css", 130),
                         ("staff-panel.js", 180),

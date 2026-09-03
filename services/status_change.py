@@ -20,7 +20,7 @@ from telegram.constants import ParseMode
 from bot.models import REQUEST_STATUSES, STATUS_WITHDRAWN
 from config import settings
 from services import audit, cards, request_meta, storage, tg_retry
-from services.notifier import build_card_keyboard, open_button
+from services.notifier import author_button, build_card_keyboard, open_button
 
 log = logging.getLogger(__name__)
 
@@ -113,7 +113,8 @@ async def notify_author(
         # заявку оплатили.
         await tg_retry.send_with_retry(
             lambda: bot.send_message(
-                chat_id=author_id, text=text, parse_mode=ParseMode.HTML
+                chat_id=author_id, text=text, parse_mode=ParseMode.HTML,
+                reply_markup=author_button(request_id),
             ),
             what=f"Автор заявки {request_id}",
         )

@@ -118,3 +118,34 @@ function datesLine(item) {
   }
   return out;
 }
+
+/** Куда вести по ссылке, которой открыли приложение.
+ *
+ * Ссылок из чата накопилось четыре, и разбор их всех — это не логика формы,
+ * а таблица «параметр → экран». Живёт здесь, чтобы app.js не рос.
+ *
+ *   help          — экран инструкции (кнопка в группе и «❓» в личке)
+ *   repeat_<id>   — форма, заполненная прошлой заявкой
+ *   my_<id>       — «Мои заявки», раскрытая на этой заявке (уведомление автору)
+ *   fin_<что-то>  — панель финансиста с нужной выборкой (см. finLinkFilters)
+ *
+ * `on` — что делать в каждом случае; отсутствующий обработчик просто
+ * пропускается, поэтому экран, которого ещё нет, ничего не ломает.
+ */
+function applyDeepLink(initData, search, on) {
+  var query = new URLSearchParams(search);
+  var param = startParamFrom(initData, search);
+
+  function after(prefix, name) {
+    return query.get(name) ||
+      (param.indexOf(prefix) === 0 ? param.slice(prefix.length) : "");
+  }
+
+  if ((param === "help" || query.get("help") === "1") && on.help) on.help();
+  var repeat = after("repeat_", "repeat");
+  if (repeat && on.repeat) on.repeat(repeat);
+  var mine = after("my_", "my");
+  if (mine && on.my) on.my(mine);
+  var fin = after("fin_", "fin");
+  if (fin && on.fin) on.fin(fin);
+}

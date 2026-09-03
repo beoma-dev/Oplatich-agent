@@ -1435,6 +1435,8 @@
       .then(function () { btn.disabled = false; btn.style.opacity = ""; });
   }
 
+  var openMyId = "";
+
   function renderMy(items) {
     var box = $("my-list");
     box.innerHTML = "";
@@ -1574,6 +1576,12 @@
       makeTappable(row, it, it.status === "Отозвана" ? null : loadMy);
       box.appendChild(row);
     });
+    // Пришли по ссылке из уведомления — сразу раскрываем ту самую заявку.
+    if (openMyId) {
+      var want = items.filter(function (x) { return x.id === openMyId; })[0];
+      openMyId = "";
+      if (want) showRequestDetail(want, want.status === "Отозвана" ? null : loadMy);
+    }
   }
 
   function loadMy(done) {
@@ -2918,24 +2926,11 @@
   tryFinance();
   refreshMainButton();
 
-  // Открытие сразу на инструкции: кнопка «Инструкция» в группе/канале
-  // (прямая ссылка ?startapp=help) или web_app-кнопка в личке (?help=1).
-  var query = new URLSearchParams(location.search);
-  var startParam = startParamFrom(initData, location.search);
-  if (startParam === "help" || query.get("help") === "1") {
-    openHelp();
-  }
-
-  // Кнопка «↻ Повторить» из списка /my в чате открывает форму с полями
-  // прошлой заявки: ?repeat=<id> (web_app-кнопка в личке).
-  var repeatId = query.get("repeat") ||
-    (startParam.indexOf("repeat_") === 0 ? startParam.slice(7) : "");
-  if (repeatId) applyRepeatById(repeatId);
-
-  // Ссылка под уведомлением финансисту открывает панель сразу на этой
-  // заявке: startapp=fin_<id>. Права всё равно за сервером — не финансист
-  // получит отказ выборки, а не список чужих заявок.
-  var finId = query.get("fin") ||
-    (startParam.indexOf("fin_") === 0 ? startParam.slice(4) : "");
-  if (finId) openFinanceAt(finId);
+  // Куда вести по ссылке из чата — таблица в list-tools.js.
+  applyDeepLink(initData, location.search, {
+    help: openHelp,
+    repeat: applyRepeatById,
+    my: function (id) { openMyId = id; openMy(); },
+    fin: openFinanceAt
+  });
 })();

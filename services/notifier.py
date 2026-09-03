@@ -97,6 +97,25 @@ def open_button(
     return InlineKeyboardButton(OPEN_LABEL, url=link) if link else None
 
 
+def author_button(request_id: str) -> InlineKeyboardMarkup | None:
+    """Кнопка автору: открывает «Мои заявки» на ЕГО заявке.
+
+    Цель другая, чем у финансиста: панель ему не положена, а нужна карточка
+    собственной заявки — причина отказа, статус, кнопки «Напомнить» и
+    «Акт / УПД». Автору пишут только в личку, поэтому здесь всегда `web_app`
+    и короткое имя Mini App не нужно.
+    """
+    url = (settings.webapp_url or "").strip()
+    if not url.startswith("https://"):
+        return None
+    sep = "&" if "?" in url else "?"
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton(
+            "🧾 Открыть заявку", web_app=WebAppInfo(url=f"{url}{sep}my={request_id}")
+        )
+    ]])
+
+
 def build_card_keyboard(
     request_id: str, open_btn: InlineKeyboardButton | None = None
 ) -> InlineKeyboardMarkup:
