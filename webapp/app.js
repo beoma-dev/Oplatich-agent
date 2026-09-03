@@ -1149,8 +1149,8 @@
           return null;
         }
         if (!resp.ok) {
-          throw new Error(detailText(
-            data.detail, "Ошибка сервера (" + resp.status + "). Попробуйте позже."));
+          throw new Error(detailText(data.detail, httpProblem(resp.status)
+            || "Ошибка сервера (" + resp.status + "). Попробуйте позже."));
         }
         return data;
       });

@@ -52,8 +52,10 @@ function closingButton(actions, item, ctx) {
             : (Array.isArray(d.detail) && d.detail.length
                 ? d.detail.map(function (x) { return (x && x.msg) || String(x); }).join("; ")
                 : null);
-          ctx.showMsg(d.message || text || "Не удалось приложить документы.",
-                      !(r.ok && d.ok));
+          ctx.showMsg(
+            d.message || text || httpProblem(r.status) || "Не удалось приложить документы.",
+            !(r.ok && d.ok)
+          );
           if (r.ok && d.ok && ctx.reload) ctx.reload();
         });
       })
