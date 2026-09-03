@@ -42,7 +42,7 @@ def sheets(svc):
     return svc.spreadsheets.return_value.values.return_value
 
 
-def test_append_is_raw_overwrite_and_keeps_foreign_header(sheets, tmp_paths):
+def test_append_is_raw_insert_and_keeps_foreign_header(sheets, tmp_paths):
     sheets.get.return_value.execute.return_value = {"values": [SHEET_HEADERS[:9]]}
     sheets.append.return_value.execute.return_value = {
         "updates": {"updatedRange": "SHEET1!A5:N5"}
