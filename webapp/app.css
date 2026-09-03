@@ -1336,18 +1336,23 @@
      столбец переключателей читается как один длинный список. Разделяем
      стилями, а не разметкой: index.html у своего потолка, да и лишние
      обёртки ради линии — плохой обмен. */
-  #my-rem-card > label.field-label {
+  #my-rem-card label.field-label {
     font-size: 12.5px;
     font-weight: 700;
     color: var(--text);
   }
-  /* Второй заголовок раздела = второй прямой label. Соседство с #my-cards-seg
-     не годится: между ними вклинилась подпись, и линия молча исчезла. */
-  #my-rem-card > label.field-label ~ label.field-label {
-    margin-top: 16px;
-    padding-top: 13px;
+  /* Линия перед каждым разделом, кроме первого. Прямыми потомками карточки
+     заголовки быть перестали: «карточки заявок» и «напоминания» уехали
+     внутрь #my-notify-opts, который гаснет целиком при тишине. Поэтому
+     линию вешаем на сам блок и на второй заголовок ВНУТРИ него. */
+  #my-notify-opts,
+  #my-notify-opts > label.field-label ~ label.field-label {
+    margin-top: 14px;
+    padding-top: 11px;
     border-top: 1px solid var(--bg2);
   }
+  /* Свой отступ первого заголовка не нужен: его уже дал отступ блока. */
+  #my-notify-opts > label.field-label:first-child { margin-top: 0; }
   /* Второстепенные действия жмут редко, а места занимали как «Сохранить».
      Саму «Сохранить» не трогаем: она главная и должна оставаться крупной. */
   #my-rem-card .add-btn.btn-ghost { padding: 9px 12px; font-size: 13px; }

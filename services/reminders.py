@@ -240,6 +240,9 @@ async def send_to(bot: Bot, user_id: int, rows: list[dict[str, str]],
     расписания, но НЕ личный отказ получателя.
     """
     cfg = rs.personal_reminders(user_id)
+    # «Не присылать ничего» сильнее ручного прогона: человек выключил всё.
+    if cfg["silent"]:
+        return 0, 0
     if cfg["muted"] or (not cfg["enabled"] and not force):
         return 0, 0
     # Выходные: платежей нет, напоминать не о чем — но ручной прогон делаем.

@@ -240,6 +240,8 @@ async def closing_docs_notify(
     )
     delivered = 0
     for chat_id in resolved_finance_ids():
+        if rs.is_silent(chat_id):
+            continue
         btn = open_button(bot, request_id, chat_id)
         keyboard = InlineKeyboardMarkup([[btn]]) if btn else None
         try:
@@ -290,6 +292,8 @@ async def overdue_nudge(
     )
     delivered = 0
     for chat_id in resolved_finance_ids():
+        if rs.is_silent(chat_id):
+            continue
         # Клавиатура своя на каждого: в личке кнопка web_app, в группе ссылка.
         keyboard = build_card_keyboard(
             request_id, open_button(bot, request_id, chat_id)
@@ -319,7 +323,9 @@ def recipients_for(request: InvoiceRequest) -> list[int]:
     отличает «никому не отправили» от «никому и не собирались». Первое —
     сбой, о котором будят админа; второе — осознанный выбор получателей.
     """
-    ids = resolved_finance_ids()
+    # Тишина главнее срочности: «не присылайте мне ничего» значит ничего,
+    # иначе тумблер был бы наполовину тумблером.
+    ids = [i for i in resolved_finance_ids() if not rs.is_silent(i)]
     if request.urgency.is_urgent:
         return ids
     return [

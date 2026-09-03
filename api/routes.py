@@ -1260,6 +1260,7 @@ async def save_my_reminders(request: Request) -> dict:
         due_enabled=bool(body.get("due_enabled", True)),
         overdue_enabled=bool(body.get("overdue_enabled", True)),
         weekdays_only=bool(body.get("weekdays_only", False)),
+        silent=bool(body.get("silent", False)),
     )
     cfg["card_urgency"] = rs.personal_card_urgency(uid)
     # Предупреждение, а не запрет: если ВСЕ получатели просят только срочные,
@@ -1267,7 +1268,19 @@ async def save_my_reminders(request: Request) -> dict:
     # в панели, но пуш-уведомления о ней исчезают — и никакой алерт об этом
     # не скажет. Человек должен узнать это в момент, когда сам это включает.
     message = "Настройки сохранены."
-    if cfg["card_urgency"] == rs.CARD_URGENCY_URGENT:
+    if cfg["silent"]:
+        message = "Готово: бот вам больше ничего не присылает."
+        # Тот же случай, что и с «только срочные», но резче: замолчали ВСЕ
+        # получатели — о новых заявках не узнает никто. Заявка в реестре
+        # и видна в панели, но узнать о ней можно только зайдя туда.
+        others = [i for i in notifier.resolved_finance_ids() if i != uid]
+        if not others or all(rs.is_silent(i) for i in others):
+            message += (
+                " Учтите: вы были последним, кому приходили уведомления — "
+                "теперь о новых заявках не узнает никто, их видно только "
+                "в панели 📊."
+            )
+    elif cfg["card_urgency"] == rs.CARD_URGENCY_URGENT:
         others = [i for i in notifier.resolved_finance_ids() if i != uid]
         if not any(
             rs.personal_card_urgency(i) == rs.CARD_URGENCY_ALL for i in others

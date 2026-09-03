@@ -520,6 +520,10 @@ def personal_reminders(user_id: int) -> dict:
         # True — он ЯВНО отписался. Общий выключатель — это расписание, его
         # ручной прогон обходит; личный отказ обходить нельзя.
         "muted": own.get("enabled") is False,
+        # Главный тумблер получателя: «не присылайте мне ничего». Гасит и
+        # напоминания, и карточки заявок, и просьбы авторов поторопиться.
+        # Отдельно от «muted»: тот выключает только расписание.
+        "silent": bool(own.get("silent", False)),
     }
 
 
@@ -579,6 +583,17 @@ def set_personal_card_urgency(user_id: int, value: str) -> str:
     return value
 
 
+def is_silent(user_id: int) -> bool:
+    """Получатель попросил не присылать ему НИЧЕГО.
+
+    Отдельная функция, а не чтение словаря по месту: тумблер спрашивают из
+    четырёх мест (карточки, напоминания, закрывающие, просьбы авторов), и
+    забытое место означало бы сообщение тому, кто просил тишины.
+    """
+    with _lock:
+        return bool(_load_locked()["reminders_by_user"].get(str(user_id), {}).get("silent"))
+
+
 def set_personal_reminders(
     user_id: int,
     *,
@@ -588,6 +603,7 @@ def set_personal_reminders(
     due_enabled: bool | None = None,
     overdue_enabled: bool | None = None,
     weekdays_only: bool | None = None,
+    silent: bool | None = None,
 ) -> dict:
     """Сохраняет личные настройки получателя. Возвращает эффективные."""
     with _lock:
@@ -603,6 +619,8 @@ def set_personal_reminders(
             own["due_enabled"] = bool(due_enabled)
         if overdue_enabled is not None:
             own["overdue_enabled"] = bool(overdue_enabled)
+        if silent is not None:
+            own["silent"] = bool(silent)
         if weekdays_only is not None:
             own["weekdays_only"] = bool(weekdays_only)
         _save_locked()

@@ -22,6 +22,10 @@ function buildRemindersPanel(ctx) {
   // по срокам: там свои настройки ниже. Срочные приходят всегда — отписаться
   // от них нельзя, поэтому выбор только между «все» и «только срочные».
   var myCards = "all";
+  // Главный тумблер получателя. Гасит всё разом: и карточки заявок, и
+  // напоминания по срокам, и просьбы авторов поторопиться. Отдельный от
+  // «присылать напоминания» — тот про расписание, этот про весь бот.
+  var mySilent = false;
 
   /** Прямым текстом, что человек сейчас получает. Без этой строки узнать,
    *  почему заявка «не пришла», можно было только спросив — так и вышло
@@ -34,7 +38,28 @@ function buildRemindersPanel(ctx) {
       : "Приходят все новые заявки.";
   }
 
+  /** Прямым текстом, что означает тишина: иначе человек включит её и потом
+   *  будет искать, почему «бот сломался». */
+  function showSilenceNote() {
+    var note = $("my-silence-note");
+    if (note) {
+      note.textContent = mySilent
+        ? "🔕 Бот вам ничего не присылает: ни карточек заявок, ни напоминаний. "
+          + "Заявки по-прежнему видно в панели 📊."
+        : "";
+      note.style.display = mySilent ? "" : "none";
+    }
+    var opts = $("my-notify-opts");
+    if (opts) {
+      opts.style.opacity = mySilent ? ".45" : "";
+      opts.style.pointerEvents = mySilent ? "none" : "";
+    }
+  }
+
   function fillMyReminders(cfg) {
+    mySilent = !!cfg.silent;
+    setSeg("my-silence-seg", mySilent ? "off" : "on");
+    showSilenceNote();
     if (cfg.card_urgency) {
       myCards = cfg.card_urgency;
       setSeg("my-cards-seg", myCards);
@@ -50,8 +75,8 @@ function buildRemindersPanel(ctx) {
     // Финансист получает и «скоро к оплате», и просрочку; остальные — только
     // просрочку, если админ так настроил маршрут.
     $("my-rem-note").textContent = cfg.custom
-      ? "Это ваши настройки — на других они не влияют."
-      : "Пока действуют настройки по умолчанию. Измените — станут вашими.";
+      ? "Ваши настройки, на других не влияют."
+      : "Пока по умолчанию. Измените — станут вашими.";
   }
 
   /** Личный выключатель чтения счёта. Доступен ВСЕМ: бета есть бета, и тот,
@@ -119,6 +144,10 @@ function buildRemindersPanel(ctx) {
       .then(function () { btn.disabled = false; btn.style.opacity = ""; });
   }
 
+  bindFilterSeg("my-silence-seg", function (v) {
+    mySilent = v === "off";
+    showSilenceNote();
+  });
   bindFilterSeg("my-cards-seg", function (v) { myCards = v; showCardsNote(); });
   bindFilterSeg("my-rem-seg", function (v) {
     myRem.enabled = v === "on";
@@ -129,6 +158,7 @@ function buildRemindersPanel(ctx) {
   bindFilterSeg("my-rem-weekdays-seg", function (v) { myRem.weekdays = v === "on"; });
   $("my-rem-save").addEventListener("click", function () {
     myReminderRequest({
+      silent: mySilent,
       card_urgency: myCards,
       enabled: myRem.enabled,
       time: $("my-rem-time").value,

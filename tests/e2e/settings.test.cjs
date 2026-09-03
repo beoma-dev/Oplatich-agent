@@ -334,12 +334,12 @@ test("финансист настраивает напоминания себе,
   assert.deepEqual(await page.evaluate(() => window.__saved), {
     // card_urgency едет тем же «Сохранить»: это один экран настроек
     // получателя, и второй круг по каналу ради одного поля не нужен.
-    card_urgency: "all",
+    silent: false, card_urgency: "all",
     enabled: true, time: "07:15", days_before: "3",
     due_enabled: false, overdue_enabled: true, weekdays_only: true,
   });
   assert.match(await page.evaluate(() =>
-    document.getElementById("my-rem-note").textContent), /ваши настройки/);
+    document.getElementById("my-rem-note").textContent), /ваши настройки/i);
   // Прогон на себе: приходит только нажавшему и не ждёт расписания.
   await page.click("#my-rem-test");
   await page.waitForTimeout(300);
@@ -569,8 +569,10 @@ test("карточка получателя ужата и помещается �
   // заявке и напоминания по срокам настраиваются независимо.
   const split = await page.evaluate(() => {
     const card = document.getElementById("my-rem-card");
-    const heads = [...card.children].filter((e) => e.matches("label.field-label"));
-    const second = heads[1] && getComputedStyle(heads[1]);
+    const heads = [...card.children, ...document.getElementById("my-notify-opts").children]
+      .filter((e) => e.matches("label.field-label"));
+    // Линия отделяет напоминания от карточек — это третий заголовок.
+    const second = heads[2] && getComputedStyle(heads[2]);
     const ghost = getComputedStyle(document.getElementById("my-rem-test"));
     const save = getComputedStyle(document.getElementById("my-rem-save"));
     return {
@@ -581,7 +583,8 @@ test("карточка получателя ужата и помещается �
       save: parseFloat(save.fontSize),
     };
   });
-  assert.equal(split.разделов, 2, "разделов должно быть два: уведомление и напоминания");
+  assert.equal(split.разделов, 3,
+    "разделов должно быть три: тишина, карточки заявок, напоминания");
   assert.ok(split.линия > 0, "второй раздел не отделён линией");
   assert.ok(Number(split.жирный) >= 700, "заголовок раздела не выделен");
   // Второстепенные действия мельче главной: жмут их редко.
@@ -831,6 +834,60 @@ test("справочник не растёт вместе со штатом", as
   assert.ok(r.card < 700, `карточка на ${r.card}px — справочник снова во весь экран`);
   assert.ok(r.oneLine, `строка ${r.row}px — имя и аккаунт снова в два этажа`);
   assert.equal(r.clipped, 0, "длинное имя обрезано без многоточия");
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test("тумблер тишины гасит остальные настройки уведомлений", async () => {
+  // Один выключатель на всё: карточки, напоминания, просьбы авторов.
+  // Остальные настройки при нём бессмысленны — гасим их визуально, чтобы
+  // человек не крутил ручки, которые ни на что не влияют.
+  const page = await openApp(browser, { skin: "light", width: 390, height: 1000, routes: {
+    "/api/access": { allowed: true, pending: false, has_admins: true, admin: true },
+    "/api/admin/settings": { ok: true, financiers: [], allowed: [], admins: [] },
+    "/api/admin/staff": { items: [], source: false },
+    "/api/reminders/me": {
+      enabled: true, time: "09:30", days_before: 1, due_enabled: true,
+      overdue_enabled: true, weekdays_only: false, custom: false, muted: false,
+      silent: false, card_urgency: "all", financier: true,
+      defaults: { enabled: true, time: "09:30", days_before: 1 },
+    },
+  } });
+  await page.waitForTimeout(500);
+  await page.click("#admin-btn");
+  await page.waitForTimeout(300);
+  await page.evaluate(() => document.querySelector('[data-pane="fin"]').click());
+  await page.waitForTimeout(400);
+
+  const before = await page.evaluate(() => ({
+    active: document.querySelector("#my-silence-seg button.active").dataset.value,
+    dimmed: getComputedStyle(document.getElementById("my-notify-opts")).opacity,
+    note: document.getElementById("my-silence-note").textContent,
+  }));
+  assert.equal(before.active, "on");
+  assert.equal(before.dimmed, "1", "настройки погашены при включённых уведомлениях");
+  assert.equal(before.note, "",
+    "лишняя строка при включённых уведомлениях — карточка и так впритык");
+
+  await page.evaluate(() =>
+    document.querySelector('#my-silence-seg button[data-value="off"]').click());
+  await page.waitForTimeout(200);
+  const after = await page.evaluate(() => ({
+    dimmed: getComputedStyle(document.getElementById("my-notify-opts")).opacity,
+    clicks: getComputedStyle(document.getElementById("my-notify-opts")).pointerEvents,
+    note: document.getElementById("my-silence-note").textContent,
+  }));
+  assert.ok(Number(after.dimmed) < 1, "настройки не погасли при тишине");
+  assert.equal(after.clicks, "none", "погашенные настройки всё ещё нажимаются");
+  assert.match(after.note, /ничего не присылает/);
+
+  // И тумблер уходит на сервер вместе с остальным.
+  await page.click("#my-rem-save");
+  await page.waitForTimeout(300);
+  const sent = await page.evaluate(() =>
+    window.__posts.filter((p) => p[0].indexOf("/api/reminders/me") !== -1).pop());
+  assert.ok(sent, "настройки не отправились");
+  assert.match(String(sent[1]), /"silent":true/);
   assert.deepEqual(page.errors, []);
   await page.close();
 });

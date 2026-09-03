@@ -2159,3 +2159,90 @@ class TestAssetVersioning:
         client, _ = api
         page = (await client.get("/")).text
         assert "?v=" in page and 'src="app.js?v=' in page
+
+
+class TestSilenceSwitch:
+    """Тумблер «не присылать мне ничего» — один на все потоки сообщений."""
+
+    def _setup(self, monkeypatch, ids: str = "42"):
+        settings.__dict__.pop("finance_recipients", None)
+        monkeypatch.setattr(settings, "finance_chat_ids_raw", ids)
+
+    async def test_silence_stops_cards_of_new_requests(self, api, monkeypatch):
+        from services import notifier
+
+        client, bot = api
+        self._setup(monkeypatch, "555")
+        _allow(monkeypatch)
+        monkeypatch.setattr(notifier, "resolved_finance_ids", lambda: [555])
+        rs.set_personal_reminders(555, silent=True)
+        bot.send_message.reset_mock()
+        bot.send_document.reset_mock()
+
+        assert (await client.post(
+            "/api/invoice", data=_form(), headers=_auth()
+        )).status_code == 200
+        to_financier = [
+            c for c in list(bot.send_message.await_args_list)
+            + list(bot.send_document.await_args_list)
+            if c.kwargs.get("chat_id") == 555
+        ]
+        assert to_financier == [], "карточка ушла тому, кто просил тишины"
+        # Автору подтверждение приходит по-прежнему: тишину включил не он.
+        assert any(
+            c.kwargs.get("chat_id") == 42
+            for c in list(bot.send_message.await_args_list)
+            + list(bot.send_document.await_args_list)
+        ), "автор остался без подтверждения"
+
+    async def test_silence_beats_urgent(self, api, monkeypatch):
+        """Срочные приходят всегда — но не тому, кто выключил всё."""
+        from services import notifier
+        from tests.conftest import make_request
+
+        self._setup(monkeypatch)
+        monkeypatch.setattr(notifier, "resolved_finance_ids", lambda: [42])
+        rs.set_personal_reminders(42, silent=True)
+        urgent = make_request(urgency=__import__(
+            "bot.models", fromlist=["Urgency"]).Urgency.URGENT)
+        assert notifier.recipients_for(urgent) == []
+
+    async def test_silence_stops_reminders_even_on_manual_run(self, tmp_paths, monkeypatch):
+        from unittest.mock import AsyncMock, MagicMock
+
+        from services import reminders, storage
+        from tests.conftest import make_request
+
+        self._setup(monkeypatch, "111")
+        await storage.append_invoice(make_request(
+            planned_date=date(2026, 8, 5), request_id="INV-20260804-100030-0030"
+        ))
+        rs.set_personal_reminders(111, silent=True)
+        bot = MagicMock()
+        bot.send_message = AsyncMock()
+        rows = await storage.recent_requests(limit=50)
+        assert await reminders.send_to(bot, 111, rows, date(2026, 8, 4), force=True) == (0, 0)
+        bot.send_message.assert_not_awaited()
+
+    async def test_turning_it_back_on_restores_delivery(self, api, monkeypatch):
+        from services import notifier
+        from tests.conftest import make_request
+
+        self._setup(monkeypatch)
+        monkeypatch.setattr(notifier, "resolved_finance_ids", lambda: [42])
+        rs.set_personal_reminders(42, silent=True)
+        assert notifier.recipients_for(make_request()) == []
+        rs.set_personal_reminders(42, silent=False)
+        assert notifier.recipients_for(make_request()) == [42]
+
+    async def test_last_recipient_going_silent_is_warned(self, api, monkeypatch):
+        """Замолчали все — о новых заявках не узнает никто. Сказать об этом."""
+        from services import notifier
+
+        client, _ = api
+        self._setup(monkeypatch)
+        _allow(monkeypatch)
+        monkeypatch.setattr(notifier, "resolved_finance_ids", lambda: [42])
+        resp = await client.post("/api/reminders/me", json={"silent": True}, headers=_auth())
+        assert resp.status_code == 200
+        assert "не узнает никто" in resp.json()["message"]
