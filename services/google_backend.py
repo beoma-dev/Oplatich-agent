@@ -357,6 +357,13 @@ def _ensure_style_sync() -> None:
 # по dmesg. Потоков в пуле единицы, так что и копий клиента столько же.
 _clients = threading.local()
 
+# Дописывание строки — под замком на процесс. Google определяет место вставки
+# сам, но между «куда» и «записал» проходит сетевой круг, и две одновременные
+# подачи успевают договориться об одной и той же строке. Замок заодно держит
+# вместе append и доводку ссылок: она адресуется НОМЕРОМ строки, который до
+# неё обязан остаться верным.
+_append_lock = threading.Lock()
+
 
 def _per_thread(name: str, make):
     """Клиент этого потока: создаётся при первом обращении и живёт с потоком."""
@@ -532,8 +539,18 @@ def append_invoice_sync(request: InvoiceRequest) -> int:
 
     valueInputOption=RAW — обязательно: пользовательский ввод пишется как
     литеральный текст, «=IMPORTRANGE(...)» в контрагенте останется строкой,
-    а не исполнится формулой. insertDataOption=OVERWRITE — новая строка не
-    наследует оформление шапки и не ломает data validation листа.
+    а не исполнится формулой.
+
+    insertDataOption=INSERT_ROWS, а НЕ OVERWRITE. С OVERWRITE Google пишет
+    в первую свободную строку под таблицей, и две одновременные подачи
+    получают одну и ту же: вторая молча затирает первую. Поймано живьём
+    03.09.2026 на пяти одновременных заявках — в таблице оказалось девять
+    строк из десяти, причём заявка вернула автору номер и лежала в xlsx-
+    зеркале, то есть пропажу было видно только сверкой. INSERT_ROWS вставляет
+    НОВУЮ строку, и столкнуться им негде. Прежний довод за OVERWRITE
+    («строка не наследует оформление шапки») закрыт иначе: оформление,
+    полосатость и проверку данных ставит _style_requests на весь столбец,
+    а не построчно.
     Сумма — настоящим числом (float безопасен: формат контролируем мы),
     чтобы в таблице работали сортировка и автосумма.
     """
@@ -544,27 +561,28 @@ def append_invoice_sync(request: InvoiceRequest) -> int:
         log.exception("Не удалось оформить Google-таблицу")
     values: list = list(request.as_sheet_row())
     values[_AMOUNT_IDX] = float(request.amount)
-    resp = (
-        _values()
-        .append(
-            spreadsheetId=settings.google_sheet_id,
-            range=_rng("A1"),
-            valueInputOption="RAW",
-            insertDataOption="OVERWRITE",
-            body={"values": [values]},
+    with _append_lock:
+        resp = (
+            _values()
+            .append(
+                spreadsheetId=settings.google_sheet_id,
+                range=_rng("A1"),
+                valueInputOption="RAW",
+                insertDataOption="INSERT_ROWS",
+                body={"values": [values]},
+            )
+            .execute()
         )
-        .execute()
-    )
-    updated_range = resp.get("updates", {}).get("updatedRange", "")
-    # Номер строки берём из части ПОСЛЕ «!»: имя листа вроде «SHEET1» иначе
-    # ошибочно совпало бы с шаблоном ячейки.
-    cell_ref = updated_range.split("!")[-1]
-    m = re.search(r"[A-Z]+(\d+)", cell_ref)
-    row = int(m.group(1)) if m else 0
-    number = max(row - 1, 1)  # минус строка заголовков
-    if request.extra_files:
-        _apply_link_runs(row, "Дополнительные документы",
-                         "\n".join(request.extra_files))
+        updated_range = resp.get("updates", {}).get("updatedRange", "")
+        # Номер строки берём из части ПОСЛЕ «!»: имя листа вроде «SHEET1» иначе
+        # ошибочно совпало бы с шаблоном ячейки.
+        cell_ref = updated_range.split("!")[-1]
+        m = re.search(r"[A-Z]+(\d+)", cell_ref)
+        row = int(m.group(1)) if m else 0
+        number = max(row - 1, 1)  # минус строка заголовков
+        if request.extra_files:
+            _apply_link_runs(row, "Дополнительные документы",
+                             "\n".join(request.extra_files))
     log.info("Заявка %s записана в Google Sheets (№%s)", request.request_id, number)
     return number
 

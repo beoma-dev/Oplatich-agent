@@ -51,7 +51,10 @@ def test_append_is_raw_overwrite_and_keeps_foreign_header(sheets, tmp_paths):
 
     kwargs = sheets.append.call_args.kwargs
     assert kwargs["valueInputOption"] == "RAW"          # инъекция формул закрыта
-    assert kwargs["insertDataOption"] == "OVERWRITE"    # не копируем оформление шапки
+    # INSERT_ROWS, а не OVERWRITE: с OVERWRITE две одновременные подачи получают
+    # одну и ту же свободную строку, и вторая молча затирает первую. Поймано
+    # живьём 03.09.2026 — из десяти заявок в таблице оказалось девять.
+    assert kwargs["insertDataOption"] == "INSERT_ROWS"
     sheets.update.assert_not_called()                   # чужая шапка неприкосновенна
     # Имя листа «SHEET1» не спутано с ячейкой: A5 → строка 5 → запись №4.
     assert row == 4

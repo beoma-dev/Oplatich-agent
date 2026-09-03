@@ -6,8 +6,9 @@
 from __future__ import annotations
 
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
@@ -270,7 +271,10 @@ class TestSubmitFlow:
         request_id = resp.json()["request_id"]
         assert request_id.startswith("INV-")
         assert settings.registry_path.exists()
-        bot.send_document.assert_awaited()  # подтверждение автору (PDF-подписью)
+        # Подтверждение автору — обычным сообщением: свой PDF заявки в
+        # Telegram больше не вкладывается (intake.ATTACH_REQUEST_PDF).
+        bot.send_message.assert_awaited()
+        bot.send_document.assert_not_awaited()
 
     async def test_file_flow_saves_invoice(self, api, monkeypatch):
         client, _ = api
@@ -1058,6 +1062,16 @@ class TestOverdueFlag:
     четвёртым местом, которое разъедется.
     """
 
+    @staticmethod
+    def _today() -> date:
+        """Сегодня — в поясе ПРОЕКТА, как считает _is_overdue.
+
+        date.today() берёт пояс контейнера (UTC), и с 21:00 UTC он на сутки
+        отстаёт от Москвы: тест «сегодня ещё не просрочено» падал каждый
+        вечер, хотя код исправен.
+        """
+        return datetime.now(ZoneInfo(settings.timezone)).date()
+
     def _row(self, planned: str, status: str = "Новая") -> dict:
         return {
             "ID заявки": "INV-1", "Статус оплаты": status,
@@ -1067,21 +1081,21 @@ class TestOverdueFlag:
     def test_yesterday_is_overdue(self, monkeypatch):
         from api import routes
 
-        yesterday = (date.today() - timedelta(days=1)).strftime("%d.%m.%Y")
+        yesterday = (self._today() - timedelta(days=1)).strftime("%d.%m.%Y")
         assert routes._is_overdue(self._row(yesterday)) is True
         assert routes._as_item(self._row(yesterday), "")["overdue"] is True
 
     def test_today_is_not_overdue_yet(self):
         from api import routes
 
-        today = date.today().strftime("%d.%m.%Y")
+        today = self._today().strftime("%d.%m.%Y")
         assert routes._is_overdue(self._row(today)) is False
 
     def test_paid_is_never_overdue(self):
         """Оплаченную вчерашним сроком дёргать незачем."""
         from api import routes
 
-        yesterday = (date.today() - timedelta(days=1)).strftime("%d.%m.%Y")
+        yesterday = (self._today() - timedelta(days=1)).strftime("%d.%m.%Y")
         assert routes._is_overdue(self._row(yesterday, "Оплачена")) is False
 
     def test_missing_date_is_not_overdue(self):
@@ -1093,7 +1107,7 @@ class TestOverdueFlag:
         """Фильтр «Просрочены» и признак в карточке — одна логика."""
         from api import routes
 
-        yesterday = (date.today() - timedelta(days=1)).strftime("%d.%m.%Y")
+        yesterday = (self._today() - timedelta(days=1)).strftime("%d.%m.%Y")
         row = self._row(yesterday)
         shown = routes._matches(
             row, status=routes.OVERDUE_FILTER, urgency="", query="",

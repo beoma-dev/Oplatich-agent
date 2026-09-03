@@ -18,6 +18,14 @@ from services.notifier import notify_finance
 from services.pdf_report import build_request_pdf
 from services.runtime_settings import effective_finance_recipients
 
+# Прикладывать ли НАШ сгенерированный PDF заявки к сообщениям в Telegram.
+# Выключено 03.09.2026 по просьбе заказчика: в переписке он только утяжеляет
+# сообщение — те же данные есть в тексте карточки и в панели. Сам документ
+# по-прежнему создаётся и кладётся в хранилище рядом с заявкой (он нужен как
+# архивный), поэтому выключатель именно про ВЛОЖЕНИЕ. На файл счёта от
+# поставщика это не влияет: он приходит как приходил.
+ATTACH_REQUEST_PDF = False
+
 log = logging.getLogger(__name__)
 
 # Три случая, а не два: см. InvoiceRequest.payment_source.
@@ -124,7 +132,7 @@ async def finalize_submission(
             bot,
             request,
             row_number,
-            pdf=pdf,
+            pdf=pdf if ATTACH_REQUEST_PDF else None,
             invoice_file=invoice_file,
             file_warning=file_warning,
         )
@@ -200,7 +208,7 @@ async def finalize_submission(
     await _send_user_confirmation(
         bot,
         request,
-        pdf=pdf,
+        pdf=pdf if ATTACH_REQUEST_PDF else None,
         notified=notified,
         file_warning=file_warning,
         summary_in_group=return_chat_id is not None,

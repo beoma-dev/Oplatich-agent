@@ -380,6 +380,21 @@ class TestNotifications:
         await intake.finalize_submission(self._bot(), make_request(), invoice_file=None)
         assert "не настроены" in seen["title"] and seen["kind"] == "delivery"
 
+    async def test_generated_pdf_is_not_attached_in_telegram(self, tmp_paths):
+        """Свой PDF заявки в сообщения не вкладывается (ATTACH_REQUEST_PDF).
+
+        Выключено по просьбе заказчика 03.09.2026. Документ по-прежнему
+        создаётся и лежит в хранилище — выключатель только про вложение,
+        и на файл счёта от поставщика он не влияет.
+        """
+        assert intake.ATTACH_REQUEST_PDF is False, "флаг вернули — поправьте тест"
+        bot = self._bot()
+        await intake.finalize_submission(bot, make_request(), invoice_file=None)
+        sent = [c.kwargs.get("filename", "") for c in bot.send_document.await_args_list]
+        assert not any(str(n).endswith(".pdf") for n in sent), (
+            f"наш PDF всё ещё уезжает в Telegram: {sent}"
+        )
+
     async def test_author_is_not_told_about_the_financier_failure(self):
         """Осечку чинит админ — сотруднику про неё не пишем."""
         bot = self._bot()

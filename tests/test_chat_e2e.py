@@ -93,7 +93,10 @@ async def test_happy_path_requisites(tmp_paths):
     assert ws.cell(2, 4).value == "ООО «Ромашка»"
     # Дата — серверная: следующий рабочий день для «Обычной».
     assert ws.cell(2, 2).value == auto_planned_date(False).strftime("%d.%m.%Y")
-    bot.send_document.assert_awaited()  # подтверждение автору (PDF)
+    # Подтверждение автору — сообщением, без вложения нашего PDF
+    # (intake.ATTACH_REQUEST_PDF выключен).
+    bot.send_message.assert_awaited()
+    bot.send_document.assert_not_awaited()
 
 
 async def test_custom_date_path(tmp_paths):
