@@ -17,7 +17,13 @@ import re
 from collections import Counter
 from functools import lru_cache
 
-from bot.models import SHEET_HEADERS, InvoiceRequest
+from bot.models import (
+    REQUEST_STATUSES,
+    SHEET_HEADERS,
+    STATUS_NEW,
+    STATUS_WITHDRAWN,
+    InvoiceRequest,
+)
 from config import settings
 
 log = logging.getLogger(__name__)
@@ -63,6 +69,19 @@ def _rgb(hex_color: str) -> dict:
         "green": int(hex_color[2:4], 16) / 255,
         "blue": int(hex_color[4:6], 16) / 255,
     }
+
+
+# Колонки со свободным текстом — их переносим; остальные подрезаем.
+_WRAP_IDX = {
+    SHEET_HEADERS.index(h) for h in (
+        "Сотрудник по заявке", "Контрагент", "Статья", "Комментарий",
+        "Реквизиты", "Срок исполнения работ по договору",
+        "Дополнительные документы", "Закрывающие документы",
+    )
+}
+_CLIP_IDX = set(range(len(SHEET_HEADERS))) - _WRAP_IDX
+# Значения выпадающего списка — то же зеркало статусов, что и везде.
+_STATUS_VALUES = [STATUS_NEW, *(v for _, v in REQUEST_STATUSES.values()), STATUS_WITHDRAWN]
 
 
 def _style_requests(sheet_id: int, with_banding: bool = True) -> list[dict]:
@@ -201,16 +220,42 @@ def _style_requests(sheet_id: int, with_banding: bool = True) -> list[dict]:
             }
         }
         })
-    # Длинный текст переносится, а не уходит под соседнюю колонку. Выравнивание
-    # по ВЕРХУ: у перенесённой ячейки иначе разъезжается вся строка.
+    # Перенос — ТОЛЬКО у колонок со свободным текстом. Раньше он стоял на
+    # всех, и короткие значения вроде «Оплачена» ломались пополам («Оплачен/
+    # а»): в колонке со списком место занимает ещё и стрелка выпадашки.
+    # Остальным CLIP: они по ширине помещаются, а спойлить в соседнюю
+    # колонку длинной ссылке на счёт незачем.
+    for indices, strategy in ((_WRAP_IDX, "WRAP"), (_CLIP_IDX, "CLIP")):
+        for idx in sorted(indices):
+            if idx >= n:
+                continue
+            requests.append({
+                "repeatCell": {
+                    "range": {"sheetId": sheet_id, "startRowIndex": 1,
+                              "startColumnIndex": idx, "endColumnIndex": idx + 1},
+                    "cell": {"userEnteredFormat": {
+                        "wrapStrategy": strategy, "verticalAlignment": "TOP",
+                    }},
+                    "fields": "userEnteredFormat(wrapStrategy,verticalAlignment)",
+                }
+            })
+    # Список статусов на ВСЮ колонку, без нижней границы: раньше выпадашку
+    # ставили руками на конечный диапазон, и у заявок ниже его она просто
+    # не появлялась. strict=False — предупреждение вместо отказа: закрыть
+    # запись статуса в реестр важнее, чем не пустить туда опечатку.
     requests.append({
-        "repeatCell": {
+        "setDataValidation": {
             "range": {"sheetId": sheet_id, "startRowIndex": 1,
-                      "startColumnIndex": 0, "endColumnIndex": n},
-            "cell": {"userEnteredFormat": {
-                "wrapStrategy": "WRAP", "verticalAlignment": "TOP",
-            }},
-            "fields": "userEnteredFormat(wrapStrategy,verticalAlignment)",
+                      "startColumnIndex": _STATUS_IDX,
+                      "endColumnIndex": _STATUS_IDX + 1},
+            "rule": {
+                "condition": {
+                    "type": "ONE_OF_LIST",
+                    "values": [{"userEnteredValue": v} for v in _STATUS_VALUES],
+                },
+                "showCustomUi": True,
+                "strict": False,
+            },
         }
     })
     return requests

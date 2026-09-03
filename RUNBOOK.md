@@ -75,6 +75,13 @@ docker compose start app
   роняло боевой контур. Хватает `docker compose restart warp`.
 - **Не выкатывать непроверенное:** `pytest -q` и `npm run test:e2e` перед
   `docker compose up -d --build app`. Стенд пересобирается ОТДЕЛЬНО.
+- **Оформление листа ставится ОДИН раз.** Изменили код оформления —
+  существующий лист его не получит: страж считает лист готовым. Применить
+  заново: `docker exec -e PYTHONPATH=/app -w /app invoice-bot-app-1 python -c
+  "from services import google_backend as g; from config import settings;
+  g._sheets().spreadsheets().batchUpdate(spreadsheetId=settings.google_sheet_id,
+  body={'requests': g._style_requests(0, with_banding=False)}).execute()"`
+  (`with_banding=False` — повторный addBanding отвечает 400 и роняет пачку).
 - **Не удалять строки в Google-таблице** — бот об этом не узнает, а сверка
   зеркала поднимет алерт только после ближайшего бэкапа.
 

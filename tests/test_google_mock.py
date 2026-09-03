@@ -266,3 +266,44 @@ def test_plain_columns_are_not_touched_by_link_markup(svc, sheets, tmp_paths):
     svc.spreadsheets.return_value.batchUpdate.reset_mock()
     gb.set_cell_sync("INV-1", "Комментарий", "https://example.org и текст")
     assert not svc.spreadsheets.return_value.batchUpdate.called
+
+
+def test_status_column_gets_a_dropdown_for_every_future_row():
+    """Список статусов ставится на ВСЮ колонку, без нижней границы.
+
+    Выпадашку однажды поставили руками на конечный диапазон, и у заявок
+    ниже его она просто не появлялась — в таблице это выглядело как «у
+    старых строк список есть, у новых нет».
+    """
+    from bot.models import REQUEST_STATUSES, SHEET_HEADERS, STATUS_NEW, STATUS_WITHDRAWN
+    from services.google_backend import _style_requests
+
+    rule = next(
+        r["setDataValidation"] for r in _style_requests(0) if "setDataValidation" in r
+    )
+    assert rule["range"]["startColumnIndex"] == SHEET_HEADERS.index("Статус оплаты")
+    assert "endRowIndex" not in rule["range"], "у списка появилась нижняя граница"
+    values = [v["userEnteredValue"] for v in rule["rule"]["condition"]["values"]]
+    assert set(values) == {STATUS_NEW, STATUS_WITHDRAWN} | {
+        v for _, v in REQUEST_STATUSES.values()
+    }
+    # Не strict: отказ записать статус хуже, чем опечатка в нём.
+    assert rule["rule"]["strict"] is False
+
+
+def test_short_columns_are_not_wrapped():
+    """«Оплачена» ломалась пополам: перенос стоял на всех колонках сразу."""
+    from bot.models import SHEET_HEADERS
+    from services.google_backend import _style_requests
+
+    wrapped = {
+        r["repeatCell"]["range"]["startColumnIndex"]
+        for r in _style_requests(0)
+        if "repeatCell" in r
+        and r["repeatCell"]["cell"]["userEnteredFormat"].get("wrapStrategy") == "WRAP"
+        and r["repeatCell"]["range"].get("startRowIndex") == 1
+    }
+    for short in ("Статус оплаты", "Срочность", "Валюта", "Сумма", "Ссылка на счет"):
+        assert SHEET_HEADERS.index(short) not in wrapped, short
+    for long in ("Контрагент", "Комментарий", "Закрывающие документы"):
+        assert SHEET_HEADERS.index(long) in wrapped, long
