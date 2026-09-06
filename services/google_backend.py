@@ -759,7 +759,18 @@ def _clear_inherited_format(row: int) -> None:
                     "userEnteredFormat.textFormat.fontSize,"
                     "userEnteredFormat.textFormat.fontFamily"
                 ),
-            }}]},
+            }}, {
+                # Высоту строка тоже наследует, и у шапки она ПРИБИТА к 36 px.
+                # С прибитой высотой перенос бесполезен: три ссылки в ячейке
+                # переносятся, но видна только первая. Просим Google подогнать
+                # высоту под содержимое — тогда ячейка растёт, как и просили.
+                "autoResizeDimensions": {"dimensions": {
+                    "sheetId": sheet_id,
+                    "dimension": "ROWS",
+                    "startIndex": row - 1,
+                    "endIndex": row,
+                }},
+            }]},
         ).execute()
     except Exception:  # noqa: BLE001 — оформление вторично, заявка уже записана
         log.exception("Не удалось снять унаследованный формат со строки %s", row)
