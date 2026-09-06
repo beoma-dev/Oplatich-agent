@@ -671,7 +671,7 @@ async def my_closing_docs(
         if len(blob) > MAX_FILE_SIZE_BYTES:
             raise HTTPException(status_code=422, detail=f"«{item.filename}» больше 20 МБ.")
         try:
-            validate_file(item.content_type, len(blob))
+            validate_file(item.content_type, len(blob), blob)
         except ValidationError as exc:
             raise HTTPException(
                 status_code=422, detail=f"«{item.filename}»: {exc}"
@@ -1702,7 +1702,7 @@ async def submit_invoice(
                 status_code=422, detail=f"«{extra.filename}» больше 20 МБ."
             )
         try:
-            validate_file(extra.content_type, len(blob))
+            validate_file(extra.content_type, len(blob), blob)
         except ValidationError as exc:
             raise HTTPException(
                 status_code=422, detail=f"«{extra.filename}»: {exc}"
@@ -1720,7 +1720,7 @@ async def submit_invoice(
         if len(content) > MAX_FILE_SIZE_BYTES:
             raise HTTPException(status_code=422, detail="Файл больше 20 МБ.")
         try:
-            validate_file(file.content_type, len(content))
+            validate_file(file.content_type, len(content), content)
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         # Мягкая автопроверка «похоже ли на счёт» (текст PDF / OCR).

@@ -280,11 +280,52 @@ def validate_line_field(
     return validate_text_field(value, field_name=field_name, max_len=max_len)
 
 
-def validate_file(mime_type: str | None, file_size: int | None) -> None:
-    """Проверяет тип и размер прикреплённого файла счёта."""
+# Подписи в начале файла — по ним видно НАСТОЯЩИЙ тип, а не заявленный.
+# xls и xlsx различаются здесь только контейнером: xlsx это zip (PK), а xls —
+# старый OLE2; нам достаточно знать, что это один из разрешённых.
+_FILE_SIGNATURES: tuple[tuple[bytes, str], ...] = (
+    # Без дефиса: настоящие файлы начинаются «%PDF-1.x», но пятый байт для
+    # опознания ничего не добавляет, а лишнюю строгость легко получить зря.
+    (b"%PDF", "application/pdf"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"PK\x03\x04", "application/vnd.openxmlformats-officedocument"
+                     ".spreadsheetml.sheet"),
+    (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", "application/vnd.ms-excel"),
+)
+
+
+def sniff_mime(content: bytes) -> str | None:
+    """Тип файла по его началу. None — ни одна из разрешённых подписей."""
+    for signature, mime in _FILE_SIGNATURES:
+        if content.startswith(signature):
+            return mime
+    return None
+
+
+def validate_file(
+    mime_type: str | None, file_size: int | None, content: bytes | None = None
+) -> None:
+    """Проверяет тип и размер прикреплённого файла счёта.
+
+    Тип, ЗАЯВЛЕННЫЙ клиентом, — не доказательство: в multipart его пишет сам
+    отправитель, и «Content-Type: application/pdf» можно поставить чему угодно.
+    06.09.2026 так и вышло: .exe с четырьмя байтами MZ проехал проверку,
+    улёгся в папку счетов и получил от Google тип application/x-dosexec —
+    финансист, кликнув по ссылке, скачал бы исполняемый файл.
+
+    Поэтому, если байты на руках, смотрим на них: файл обязан НАЧИНАТЬСЯ
+    сигнатурой одного из разрешённых форматов. Без байтов (чат-форма получает
+    от Telegram только file_id) остаётся прежняя проверка по заявленному типу.
+    """
     if mime_type not in ALLOWED_MIME_TYPES:
         raise ValidationError(
             "Неподдерживаемый формат файла. Пришлите счёт в PDF, JPG, PNG или XLSX."
+        )
+    if content is not None and sniff_mime(content) is None:
+        raise ValidationError(
+            "Файл не похож на PDF, JPG, PNG или XLSX — похоже, у него просто "
+            "переименовано расширение. Пришлите настоящий документ."
         )
     if file_size is not None and file_size > MAX_FILE_SIZE_BYTES:
         raise ValidationError("Файл больше 20 МБ — Telegram не позволит его скачать.")

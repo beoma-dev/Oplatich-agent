@@ -211,6 +211,47 @@ class TestExtraDocuments:
         assert resp.status_code == 422
         assert "virus.exe" in resp.json()["detail"]
 
+    async def test_renamed_executable_is_refused(self, api, monkeypatch):
+        """Заявленный клиентом тип — не доказательство, смотрим на байты.
+
+        В multipart Content-Type пишет сам отправитель. 06.09.2026 .exe с
+        четырьмя байтами MZ проехал проверку под видом application/pdf, лёг
+        в папку счетов и получил от Google тип application/x-dosexec —
+        финансист, кликнув по ссылке, скачал бы исполняемый файл.
+        """
+        client, _ = api
+        _allow(monkeypatch)
+        # has_invoice=1 обязателен: без него файл вообще не разбирается.
+        resp = await client.post(
+            "/api/invoice",
+            data=_form(has_invoice="1"),
+            files=[("file", ("schet.pdf", b"MZ\x90\x00", "application/pdf"))],
+            headers=_auth(),
+        )
+        assert resp.status_code == 422, resp.text
+        assert "расширение" in resp.json()["detail"], resp.text
+
+        # И тем же путём — дополнительный документ.
+        resp = await client.post(
+            "/api/invoice",
+            data=_form(),
+            files=[("extra_files", ("dogovor.pdf", b"MZ\x90\x00", "application/pdf"))],
+            headers=_auth(),
+        )
+        assert resp.status_code == 422, resp.text
+
+    async def test_real_formats_still_pass(self, api, monkeypatch):
+        """Настоящие PDF, JPG, PNG и xlsx проходят — проверка не параноик."""
+        from bot.validators import sniff_mime
+
+        assert sniff_mime(b"%PDF-1.4 ...") == "application/pdf"
+        assert sniff_mime(b"\xff\xd8\xff\xe0abc") == "image/jpeg"
+        assert sniff_mime(b"\x89PNG\r\n\x1a\nabc") == "image/png"
+        assert sniff_mime(b"PK\x03\x04abc").endswith("spreadsheetml.sheet")
+        assert sniff_mime(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1") == "application/vnd.ms-excel"
+        assert sniff_mime(b"MZ\x90\x00") is None
+        assert sniff_mime(b"") is None
+
     async def test_name_cannot_escape_the_storage_dir(self, api, monkeypatch):
         """Имя приходит от пользователя — через него ходят в соседние каталоги."""
         client, _ = api
