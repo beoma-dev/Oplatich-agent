@@ -112,9 +112,10 @@ def test_styling_applied_once_by_frozen_marker(svc, sheets, tmp_paths):
     # Смотрим ВСЕ вызовы, а не последний: после append идёт ещё один batchUpdate —
     # он снимает с новой строки формат, унаследованный от строки выше
     # (см. _clear_inherited_format). Раньше здесь хватало call_args.
-    requests = [
-        r for call in batch.call_args_list for r in call.kwargs["body"]["requests"]
-    ]
+    # Берём ПЕРВЫЙ вызов — он и есть оформление. Дальше идут ещё вызовы:
+    # снятие унаследованного формата со свежей строки, а на первой строке
+    # реестра — ещё и возврат уехавшего диапазона раскраски.
+    requests = batch.call_args_list[0].kwargs["body"]["requests"]
     kinds = [next(iter(r)) for r in requests]
     assert "setBasicFilter" in kinds
     assert kinds.count("addConditionalFormatRule") == 6  # 5 статусов + «Срочно»
@@ -316,6 +317,43 @@ def test_short_columns_are_not_wrapped():
         assert SHEET_HEADERS.index(short) not in wrapped, short
     for long in ("Контрагент", "Комментарий", "Закрывающие документы"):
         assert SHEET_HEADERS.index(long) in wrapped, long
+
+
+def test_drifted_status_colours_are_put_back(svc, tmp_paths):
+    """Уехавший диапазон раскраски статусов считается «лист не оформлен».
+
+    INSERT_ROWS вставляет строку под шапку, когда реестр пуст, — над
+    диапазоном условного форматирования. Google сдвигает диапазон вниз, и
+    свежие заявки остаются без цвета: правила НА МЕСТЕ, но смотрят не туда,
+    и прежний маркер («условные форматы есть») этого не замечал. Поймано на
+    боевом 06.09.2026, сразу после чистки реестра под запуск.
+    """
+    gb._checked_style = False
+    svc.spreadsheets.return_value.get.return_value.execute.return_value = {
+        "sheets": [{
+            "properties": {"sheetId": 7, "title": "Реестр",
+                           "gridProperties": {"frozenRowCount": 1}},
+            # Правила есть, но начинаются с четвёртой строки — уехали.
+            "conditionalFormats": [
+                {"ranges": [{"startRowIndex": 3, "endRowIndex": 966}]}
+            ],
+            "bandedRanges": [{"bandedRangeId": 1}],
+        }]
+    }
+    gb._ensure_style_sync()
+
+    batch = svc.spreadsheets.return_value.batchUpdate
+    assert batch.called, "оформление не вернулось на место"
+    requests = [r for call in batch.call_args_list for r in call.kwargs["body"]["requests"]]
+    kinds = [next(iter(r)) for r in requests]
+    assert "deleteConditionalFormatRule" in kinds, "старые правила не сняли — будут дубли"
+    assert kinds.count("addConditionalFormatRule") == 6
+
+
+def test_rules_on_the_first_row_are_left_alone():
+    """Диапазон со строки заявок — оформление трогать не надо."""
+    assert gb._rules_reach_first_row([{"ranges": [{"startRowIndex": 1}]}]) is True
+    assert gb._rules_reach_first_row([{"ranges": [{"startRowIndex": 3}]}]) is False
 
 
 def test_client_is_not_shared_between_threads(monkeypatch):

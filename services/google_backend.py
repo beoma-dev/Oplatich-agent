@@ -304,6 +304,26 @@ def _header_styled(sheet_id: int) -> bool:
         return False
 
 
+def _rules_reach_first_row(rules: list[dict]) -> bool:
+    """Дотягивается ли раскраска статусов до ПЕРВОЙ строки заявок.
+
+    INSERT_ROWS вставляет строку под шапку, когда реестр пуст, — то есть НАД
+    диапазоном условного форматирования. Google в таком случае сдвигает
+    диапазон вниз, и свежие заявки остаются без цвета: правила начинались со
+    строки 2, а после двух вставок — с четвёртой. Поймано на боевом
+    06.09.2026, сразу после того как реестр вычистили под запуск.
+
+    Проверяем начало диапазона, а не его наличие: правила НА МЕСТЕ, они просто
+    смотрят не туда, и прежний маркер («условные форматы есть») этого не видел.
+    """
+    for rule in rules:
+        for rng in rule.get("ranges") or []:
+            # 0 — шапка, 1 — первая строка заявок. Всё, что ниже, уже уехало.
+            if rng.get("startRowIndex", 0) > 1:
+                return False
+    return True
+
+
 def _ensure_style_sync() -> None:
     """Оформляет лист один раз.
 
@@ -337,12 +357,19 @@ def _ensure_style_sync() -> None:
         {},
     )
     frozen = props.get("gridProperties", {}).get("frozenRowCount", 0) >= 1
-    if frozen and props.get("conditionalFormats") and _header_styled(sheet_id):
+    rules = props.get("conditionalFormats") or []
+    if frozen and rules and _header_styled(sheet_id) and _rules_reach_first_row(rules):
         _checked_style = True
         return
+    # Старые правила снимаем перед тем, как положить новые: иначе к уехавшим
+    # добавятся ещё шесть, и лист обрастёт дублями.
+    drop = [
+        {"deleteConditionalFormatRule": {"sheetId": sheet_id, "index": 0}}
+        for _ in rules
+    ]
     _sheets().spreadsheets().batchUpdate(
         spreadsheetId=settings.google_sheet_id,
-        body={"requests": _style_requests(
+        body={"requests": drop + _style_requests(
             sheet_id, with_banding=not props.get("bandedRanges")
         )},
     ).execute()
@@ -665,6 +692,17 @@ def append_invoice_sync(request: InvoiceRequest) -> int:
         row = int(m.group(1)) if m else 0
         number = max(row - 1, 1)  # минус строка заголовков
         _clear_inherited_format(row)
+        if row <= 2:
+            # Эта вставка была ПОД шапку, в пустой реестр, — значит диапазон
+            # раскраски статусов Google только что сдвинул вниз, и текущая
+            # строка осталась без цвета. Возвращаем правила на место сразу,
+            # а не «к следующей заявке»: цвет нужен этой.
+            global _checked_style
+            _checked_style = False
+            try:
+                _ensure_style_sync()
+            except Exception:  # noqa: BLE001 — оформление вторично
+                log.exception("Не удалось вернуть раскраску статусов")
         if request.extra_files:
             _apply_link_runs(row, "Дополнительные документы",
                              "\n".join(request.extra_files))
@@ -702,9 +740,21 @@ def _clear_inherited_format(row: int) -> None:
                 },
                 # Пустой userEnteredFormat + маска = «очистить эти поля».
                 "cell": {"userEnteredFormat": {}},
+                # Поля перечислены поимённо, и textFormat ЦЕЛИКОМ сюда не
+                # входит: Google хранит автоссылку внутри него
+                # (textFormat.link), и очистка всего textFormat превращала
+                # «Ссылка на счет» в простой текст. Поймано на боевом
+                # 06.09.2026 сразу после выката.
                 "fields": (
                     "userEnteredFormat.backgroundColor,"
-                    "userEnteredFormat.textFormat"
+                    "userEnteredFormat.textFormat.bold,"
+                    "userEnteredFormat.textFormat.italic,"
+                    "userEnteredFormat.textFormat.underline,"
+                    "userEnteredFormat.textFormat.strikethrough,"
+                    "userEnteredFormat.textFormat.foregroundColor,"
+                    "userEnteredFormat.textFormat.foregroundColorStyle,"
+                    "userEnteredFormat.textFormat.fontSize,"
+                    "userEnteredFormat.textFormat.fontFamily"
                 ),
             }}]},
         ).execute()
