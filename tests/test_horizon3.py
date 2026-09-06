@@ -343,6 +343,33 @@ class TestNotifications:
         bot.send_message.assert_not_awaited()
         bot.send_document.assert_not_awaited()
 
+    def test_created_at_is_written_in_russian_order(self):
+        """«Дата внесения» — ДД.ММ.ГГГГ, как «Плановая дата оплаты».
+
+        В одном реестре стояли два порядка сразу: ISO у одной колонки и
+        русский у другой, и глаз читал их вразнобой. Время оставлено: по нему
+        видно, когда заявка пришла, а разборщики дат отбрасывают его сами.
+        """
+        from datetime import datetime
+
+        from bot.models import SHEET_HEADERS
+
+        request = make_request()
+        request.created_at = datetime(2026, 9, 6, 21, 26)
+        cell = request.as_sheet_row()[SHEET_HEADERS.index("Дата внесения в реестр")]
+        assert cell == "06.09.2026 21:26", cell
+
+    def test_created_at_still_parses_after_the_change(self):
+        """Новый формат должны понимать и аналитика, и признак просрочки."""
+        from api.routes import _parse_registry_date
+        from services.analytics import _submitted
+
+        row = {"Дата внесения в реестр": "06.09.2026 21:26"}
+        assert _submitted(row).isoformat() == "2026-09-06"
+        assert _parse_registry_date("06.09.2026 21:26").isoformat() == "2026-09-06"
+        # Строки, записанные до 06.09.2026, читаются по-прежнему.
+        assert _parse_registry_date("2026-08-04 22:43").isoformat() == "2026-08-04"
+
     def test_card_states_extra_docs_without_listing_them(self):
         """Карточка говорит, что документы приложены, но не перечисляет их.
 

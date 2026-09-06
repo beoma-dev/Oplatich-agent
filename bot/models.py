@@ -122,7 +122,10 @@ class InvoiceRequest:
 
     def as_sheet_row(self) -> list[str]:
         """Строка реестра. Порядок строго совпадает с SHEET_HEADERS."""
-        created = self.created_at.strftime("%Y-%m-%d %H:%M") if self.created_at else ""
+        # ДД.ММ.ГГГГ, как у «Плановой даты оплаты»: в одном реестре два разных
+        # порядка (ISO и русский) читались вразнобой. Время оставлено — по нему
+        # видно, когда заявка пришла, а разборщики дат его отбрасывают сами.
+        created = self.created_at.strftime("%d.%m.%Y %H:%M") if self.created_at else ""
         planned = self.planned_date.strftime("%d.%m.%Y") if self.planned_date else ""
         return [
             created,                                        # Дата внесения в реестр

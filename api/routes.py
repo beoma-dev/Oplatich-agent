@@ -316,7 +316,8 @@ FINANCE_PAGE_LIMIT = 100
 def _parse_registry_date(value: str) -> date | None:
     """«2026-08-04 22:43» или «04.08.2026» → date (None — не разобрать)."""
     raw = (value or "").strip()
-    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d", "%d.%m.%Y"):
+    # Первым — текущий формат; ISO оставлен ради строк, записанных до 06.09.2026.
+    for fmt in ("%d.%m.%Y %H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%d.%m.%Y"):
         try:
             return datetime.strptime(raw[: len(fmt) + 2].strip(), fmt).date()
         except ValueError:

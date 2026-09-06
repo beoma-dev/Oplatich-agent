@@ -56,7 +56,8 @@ def _totals(rows: list[dict[str, str]]) -> dict[str, str]:
 
 def _submitted(row: dict[str, str]) -> date | None:
     raw = str(row.get("Дата внесения в реестр", "")).strip()
-    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d", "%d.%m.%Y"):
+    # Первым — текущий формат; ISO оставлен ради строк, записанных до 06.09.2026.
+    for fmt in ("%d.%m.%Y %H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%d.%m.%Y"):
         try:
             return datetime.strptime(raw[: len(fmt) + 2].strip(), fmt).date()
         except ValueError:

@@ -313,9 +313,12 @@ def test_short_columns_are_not_wrapped():
         and r["repeatCell"]["cell"]["userEnteredFormat"].get("wrapStrategy") == "WRAP"
         and r["repeatCell"]["range"].get("startRowIndex") == 1
     }
-    for short in ("Статус оплаты", "Срочность", "Валюта", "Сумма", "Ссылка на счет"):
+    for short in ("Статус оплаты", "Срочность", "Валюта", "Сумма"):
         assert SHEET_HEADERS.index(short) not in wrapped, short
-    for long in ("Контрагент", "Комментарий", "Закрывающие документы"):
+    # «Ссылка на счет» переехала к переносимым 06.09.2026: адрес Drive в ячейку
+    # не влезал и обрезался многоточием, а по обрезку не видно, куда он ведёт.
+    for long in ("Контрагент", "Комментарий", "Закрывающие документы",
+                 "Ссылка на счет"):
         assert SHEET_HEADERS.index(long) in wrapped, long
 
 
