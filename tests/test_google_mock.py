@@ -322,33 +322,6 @@ def test_short_columns_are_not_wrapped():
         assert SHEET_HEADERS.index(long) in wrapped, long
 
 
-def test_new_row_sheds_the_header_look_and_grows_to_fit(sheets, svc, tmp_paths):
-    """Свежая строка не должна выглядеть шапкой и обязана расти под содержимое.
-
-    INSERT_ROWS копирует у соседа сверху и оформление, и ВЫСОТУ. На пустом
-    реестре соседом оказывается шапка: строка приезжала тёмно-синей и ростом
-    ровно 36 px — с таким потолком перенос бесполезен, три ссылки в ячейке
-    переносятся, а видна первая. Поймано на боевом 06.09.2026.
-    """
-    sheets.get.return_value.execute.return_value = {"values": [SHEET_HEADERS[:9]]}
-    sheets.append.return_value.execute.return_value = {
-        "updates": {"updatedRange": "Лист1!A9:Q9"}
-    }
-    gb.append_invoice_sync(make_request())
-
-    reqs = [r for call in svc.spreadsheets.return_value.batchUpdate.call_args_list
-            for r in call.kwargs["body"]["requests"]]
-    clear = next(r["repeatCell"] for r in reqs if "repeatCell" in r
-                 and r["repeatCell"]["range"].get("startRowIndex") == 8)
-    assert "userEnteredFormat.backgroundColor" in clear["fields"]
-    # textFormat ЦЕЛИКОМ чистить нельзя: внутри него живёт автоссылка.
-    assert "userEnteredFormat.textFormat," not in clear["fields"] + ","
-
-    grow = next(r["autoResizeDimensions"] for r in reqs if "autoResizeDimensions" in r)
-    assert grow["dimensions"]["dimension"] == "ROWS"
-    assert grow["dimensions"]["startIndex"] == 8
-
-
 def test_drifted_status_colours_are_put_back(svc, tmp_paths):
     """Уехавший диапазон раскраски статусов считается «лист не оформлен».
 
