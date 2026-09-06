@@ -118,7 +118,9 @@ def test_styling_applied_once_by_frozen_marker(svc, sheets, tmp_paths):
     requests = batch.call_args_list[0].kwargs["body"]["requests"]
     kinds = [next(iter(r)) for r in requests]
     assert "setBasicFilter" in kinds
-    assert kinds.count("addConditionalFormatRule") == 6  # 5 статусов + «Срочно»
+    # 5 статусов + 2 срочности: у «Срочно» и «Обычной» с 06.09.2026 свои чипы,
+    # как у статусов, — раньше срочная была просто красным текстом.
+    assert kinds.count("addConditionalFormatRule") == 7
     freeze = next(r for r in requests if "updateSheetProperties" in r)
     assert freeze["updateSheetProperties"]["properties"]["gridProperties"]["frozenRowCount"] == 1
     # Оформление адресовано листу реестра (gid 7), а не первому в книге (gid 0).
@@ -350,7 +352,7 @@ def test_drifted_status_colours_are_put_back(svc, tmp_paths):
     requests = [r for call in batch.call_args_list for r in call.kwargs["body"]["requests"]]
     kinds = [next(iter(r)) for r in requests]
     assert "deleteConditionalFormatRule" in kinds, "старые правила не сняли — будут дубли"
-    assert kinds.count("addConditionalFormatRule") == 6
+    assert kinds.count("addConditionalFormatRule") == 7
 
 
 def test_rules_on_the_first_row_are_left_alone():

@@ -202,22 +202,37 @@ def _style_requests(sheet_id: int, with_banding: bool = True) -> list[dict]:
                 "index": 0,
             }
         })
-    requests.append({
-        "addConditionalFormatRule": {
-            "rule": {
-                "ranges": [{"sheetId": sheet_id, "startRowIndex": 1,
-                            "startColumnIndex": _URGENCY_IDX,
-                            "endColumnIndex": _URGENCY_IDX + 1}],
-                "booleanRule": {
-                    "condition": {"type": "TEXT_EQ",
-                                  "values": [{"userEnteredValue": "Срочно"}]},
-                    "format": {"textFormat": {"bold": True,
-                                              "foregroundColor": _rgb("C62828")}},
+    # Срочность — теми же чипами, что и статус: раньше «Срочно» был просто
+    # красным текстом без заливки, а «Обычная» не отмечалась никак, и колонка
+    # читалась как полупустая. Красный у срочной НЕ повторяет красный
+    # «Отклонена» (FAD2CF/A50E0E) — тона соседние, но разные: колонки рядом,
+    # и одинаковая заливка сливала бы два разных смысла в один.
+    urgency_colors = [
+        ("Срочно", "FCE8E6", "C5221F"),
+        # Обычная — серым: это «ничего особенного». Тот же серый, что у
+        # отозванной заявки, и по той же причине — не тянуть на себя взгляд.
+        ("Обычная", "E8EAED", "5F6368"),
+    ]
+    urgency_range = {"sheetId": sheet_id, "startRowIndex": 1,
+                     "startColumnIndex": _URGENCY_IDX,
+                     "endColumnIndex": _URGENCY_IDX + 1}
+    for value, back, fore in urgency_colors:
+        requests.append({
+            "addConditionalFormatRule": {
+                "rule": {
+                    "ranges": [urgency_range],
+                    "booleanRule": {
+                        "condition": {"type": "TEXT_EQ",
+                                      "values": [{"userEnteredValue": value}]},
+                        "format": {
+                            "backgroundColor": _rgb(back),
+                            "textFormat": {"bold": True, "foregroundColor": _rgb(fore)},
+                        },
+                    },
                 },
-            },
-            "index": 0,
-        }
-    })
+                "index": 0,
+            }
+        })
     # Чередование строк: в реестре на сотню строк глаз теряет строку при
     # горизонтальном чтении, а колонок здесь семнадцать.
     # Полосатость добавляем, только если её ещё нет: повторный addBanding
