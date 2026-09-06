@@ -26,7 +26,7 @@ import time
 
 from telegram import Bot
 
-from services import alerts, tg_retry
+from services import alerts, failover, tg_retry
 from services import runtime_settings as rs
 
 log = logging.getLogger(__name__)
@@ -159,6 +159,12 @@ async def probe_once(bot: Bot, healthy: bool) -> bool:
                 sent=False, bump=True, details=f"{type(exc).__name__}: {exc}"
             )
         down = down_for() or 0.0
+        # Запасной канал: если он есть и порог пройден, процесс уходит на
+        # перезапуск — живой подмены клиента внутри PTB нет, см. failover.
+        # Решение принято — дальше в этом такте делать нечего, процесс уже
+        # завершается, а сообщение о провале всё равно не ушло бы: канал молчит.
+        if await failover.maybe_switch(down):
+            return False
         if not _down_reported and down >= _grace_seconds():
             # Единственная попытка на провал: повторять бессмысленно — канал
             # тот же самый.
