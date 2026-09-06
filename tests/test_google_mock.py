@@ -109,7 +109,12 @@ def test_styling_applied_once_by_frozen_marker(svc, sheets, tmp_paths):
 
     batch = svc.spreadsheets.return_value.batchUpdate
     assert batch.called
-    requests = batch.call_args.kwargs["body"]["requests"]
+    # Смотрим ВСЕ вызовы, а не последний: после append идёт ещё один batchUpdate —
+    # он снимает с новой строки формат, унаследованный от строки выше
+    # (см. _clear_inherited_format). Раньше здесь хватало call_args.
+    requests = [
+        r for call in batch.call_args_list for r in call.kwargs["body"]["requests"]
+    ]
     kinds = [next(iter(r)) for r in requests]
     assert "setBasicFilter" in kinds
     assert kinds.count("addConditionalFormatRule") == 6  # 5 статусов + «Срочно»

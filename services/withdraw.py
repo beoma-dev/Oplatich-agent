@@ -20,7 +20,7 @@ from telegram.constants import ParseMode
 from bot.models import STATUS_NEW, STATUS_WITHDRAWN
 from config import settings
 from services import audit, cards, storage
-from services.notifier import resolved_finance_ids
+from services.notifier import card_recipients
 
 log = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ async def _notify_finance(
         "Оплачивать не нужно."
     )
     delivered = 0
-    for chat_id in resolved_finance_ids():
+    for chat_id in card_recipients():
         try:
             await bot.send_message(chat_id=chat_id, text=text, parse_mode=ParseMode.HTML)
             delivered += 1

@@ -29,7 +29,7 @@ from telegram.ext import ApplicationHandlerStop, ContextTypes
 from bot.models import REQUEST_ID_RE, REQUEST_STATUSES, STATUS_WITHDRAWN
 from services import audit
 from services import cards as cards_store
-from services.notifier import resolved_finance_ids
+from services.notifier import card_recipients
 from services.status_change import apply_status
 from services.storage import get_request
 
@@ -71,7 +71,7 @@ async def status_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # Кнопки живут в личке финансиста, но на всякий случай сверяем явно.
     user = update.effective_user
-    if user is None or user.id not in resolved_finance_ids():
+    if user is None or user.id not in card_recipients():
         if user is not None:
             await audit.log_event(
                 audit.STATUS_DENIED, user.id, _who(user), f"{request_id} → {key}"

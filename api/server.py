@@ -117,6 +117,25 @@ def _handle_google_failures(app: FastAPI) -> None:
     """
     from googleapiclient.errors import HttpError
 
+    from services.google_backend import GoogleUnavailable
+
+    @app.exception_handler(GoogleUnavailable)
+    async def google_connection_lost(request, exc: GoogleUnavailable) -> JSONResponse:
+        """Соединение с Google оборвалось и повтор не помог — это 503.
+
+        httplib2 держит TLS-соединение открытым и не замечает, что Google его
+        закрыл: первый вызов после паузы падает BrokenPipeError или
+        «UNEXPECTED_EOF_WHILE_READING». 06.09.2026 это выходило наружу голым
+        «Internal Server Error», и заявка не сохранялась вовсе.
+        """
+        log.warning("Google недоступен (обрыв соединения): %s", exc)
+        return JSONResponse(
+            {"detail": "Связь с Google оборвалась. Повторите отправку — "
+                       "заявка не сохранена.", "retry_after": 10},
+            status_code=503,
+            headers={"Retry-After": "10"},
+        )
+
     @app.exception_handler(HttpError)
     async def google_unavailable(request, exc: HttpError) -> JSONResponse:
         status = getattr(getattr(exc, "resp", None), "status", 0)

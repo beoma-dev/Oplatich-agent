@@ -14,9 +14,8 @@ from telegram.constants import ParseMode
 from bot.models import InvoiceRequest
 from bot.validators import has_profanity
 from services import alerts, audit, dedup, notifier, storage, tg_retry
-from services.notifier import notify_finance
+from services.notifier import card_recipients, notify_finance
 from services.pdf_report import build_request_pdf
-from services.runtime_settings import effective_finance_recipients
 
 # Прикладывать ли НАШ сгенерированный PDF заявки к сообщениям в Telegram.
 # Выключено 03.09.2026 по просьбе заказчика: в переписке он только утяжеляет
@@ -174,7 +173,7 @@ async def finalize_submission(
         # и переслать её потом нечем. Раньше об этом знал только лог — так и
         # потерялась заявка при двухминутном провале WARP. Сообщаем АДМИНУ,
         # а не автору: чинить это ему, а не сотруднику.
-        if effective_finance_recipients():
+        if card_recipients():
             title = "Карточка заявки не дошла ни одному финансисту"
             details = (
                 f"{request.request_id}: {request.amount:.2f} {request.currency}, "

@@ -343,6 +343,35 @@ class TestNotifications:
         bot.send_message.assert_not_awaited()
         bot.send_document.assert_not_awaited()
 
+    def test_admin_gets_cards_without_being_a_financier(self, tmp_paths, monkeypatch):
+        """Админ получает карточки заявок наравне с финансистами.
+
+        Он и так видит все заявки в панели, меняет статусы и читает аналитику —
+        прятать от него карточку непоследовательно. До 06.09.2026 получать их
+        он мог, только записавшись в финансисты, а это разные роли: список
+        финансистов решает ещё и адресатов напоминаний о просрочке, где выбор
+        «админам / финансистам / обоим» НАМЕРЕННО различает эти две группы.
+        """
+        from services import notifier
+        from services import runtime_settings as rs
+
+        settings.__dict__.pop("finance_recipients", None)
+        monkeypatch.setattr(settings, "finance_chat_ids_raw", "555")
+        monkeypatch.setattr(rs, "effective_admin_ids", lambda: [777])
+
+        assert notifier.resolved_finance_ids() == [555], "список финансистов поехал"
+        assert notifier.card_recipients() == [555, 777], "админ не получает карточки"
+
+    def test_admin_in_both_lists_gets_one_card(self, tmp_paths, monkeypatch):
+        """Он же и финансист — карточка всё равно одна, не две."""
+        from services import notifier
+        from services import runtime_settings as rs
+
+        settings.__dict__.pop("finance_recipients", None)
+        monkeypatch.setattr(settings, "finance_chat_ids_raw", "777")
+        monkeypatch.setattr(rs, "effective_admin_ids", lambda: [777])
+        assert notifier.card_recipients() == [777]
+
     async def test_admin_is_alerted_when_the_card_reached_nobody(self, tmp_paths, monkeypatch):
         """Заявка записана, карточки нет — тишины быть не должно.
 
@@ -351,7 +380,9 @@ class TestNotifications:
         """
         from services import alerts
 
-        monkeypatch.setattr(intake, "effective_finance_recipients", lambda: ["7"])
+        # Получатели карточек — финансисты И админы (см. notifier.card_recipients):
+        # алерт «карточка не дошла» отличает «некому» от «не дошло».
+        monkeypatch.setattr(intake, "card_recipients", lambda: [7])
         seen = {}
 
         async def fake_alert(bot, title, details="", *, signature=None, kind=None, **_kw):
@@ -368,7 +399,7 @@ class TestNotifications:
     async def test_admin_is_alerted_when_no_financiers_configured(self, tmp_paths, monkeypatch):
         from services import alerts
 
-        monkeypatch.setattr(intake, "effective_finance_recipients", lambda: [])
+        monkeypatch.setattr(intake, "card_recipients", lambda: [])
         seen = {}
 
         async def fake_alert(bot, title, details="", *, signature=None, kind=None, **_kw):

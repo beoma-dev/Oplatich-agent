@@ -142,7 +142,13 @@ def build_card_keyboard(
 
 
 def resolved_finance_ids() -> list[int]:
-    """Финансисты (.env + добавленные админом), приведённые к chat_id (без дублей)."""
+    """Финансисты (.env + добавленные админом), приведённые к chat_id (без дублей).
+
+    Именно ФИНАНСИСТЫ, а не «все получатели»: по этому списку решается ещё и
+    «финансист ли он» (bot.access.is_financier) и кому слать напоминания о
+    просрочке, где у админа и финансистов НАМЕРЕННО разные адресаты. Кому
+    уходят карточки — см. card_recipients().
+    """
     chat_ids: list[int] = []
     for entry in effective_finance_recipients():
         rid = resolve(entry)
@@ -155,6 +161,29 @@ def resolved_finance_ids() -> list[int]:
         if rid not in chat_ids:
             chat_ids.append(rid)
     return chat_ids
+
+
+def card_recipients() -> list[int]:
+    """Кому уходят СООБЩЕНИЯ о заявках: финансисты И админы.
+
+    Админ и так видит все заявки в панели, меняет им статусы и читает
+    аналитику — прятать от него карточку непоследовательно (то же
+    рассуждение, что у api.routes._may_see_requests). До 06.09.2026 админ мог
+    получать их, только записавшись в финансисты, а это разные роли: список
+    финансистов решает ещё и адресатов напоминаний о просрочке.
+
+    Не нравится поток — у админа есть личный тумблер «Присылать мне
+    что-либо» и выбор «только срочные». Выключить себе он мог всегда,
+    включить — только теперь.
+
+    Админы идут ПОСЛЕ финансистов и без дублей: карточка у человека одна,
+    даже если он и там и там.
+    """
+    ids = list(resolved_finance_ids())
+    for admin_id in rs.effective_admin_ids():
+        if admin_id > 0 and admin_id not in ids:
+            ids.append(admin_id)
+    return ids
 
 
 def _clip(text: str, limit: int) -> str:
@@ -239,7 +268,7 @@ async def closing_docs_notify(
         f"{e(row.get('Сумма', '—'))} {e(row.get('Валюта', ''))}"
     )
     delivered = 0
-    for chat_id in resolved_finance_ids():
+    for chat_id in card_recipients():
         if rs.is_silent(chat_id):
             continue
         btn = open_button(bot, request_id, chat_id)
@@ -291,7 +320,7 @@ async def overdue_nudge(
         f"📅 Плановая дата: {e(row.get('Плановая дата оплаты', '—'))}"
     )
     delivered = 0
-    for chat_id in resolved_finance_ids():
+    for chat_id in card_recipients():
         if rs.is_silent(chat_id):
             continue
         # Клавиатура своя на каждого: в личке кнопка web_app, в группе ссылка.
@@ -325,7 +354,7 @@ def recipients_for(request: InvoiceRequest) -> list[int]:
     """
     # Тишина главнее срочности: «не присылайте мне ничего» значит ничего,
     # иначе тумблер был бы наполовину тумблером.
-    ids = [i for i in resolved_finance_ids() if not rs.is_silent(i)]
+    ids = [i for i in card_recipients() if not rs.is_silent(i)]
     if request.urgency.is_urgent:
         return ids
     return [
@@ -341,7 +370,7 @@ def suppressed_by_choice(request: InvoiceRequest) -> bool:
     лишь срочные, а заявка обычная. Пустой список финансистов сюда НЕ
     относится: это настоящая дыра, и о ней админа будить надо.
     """
-    return bool(resolved_finance_ids()) and not recipients_for(request)
+    return bool(card_recipients()) and not recipients_for(request)
 
 
 async def notify_finance(
@@ -363,14 +392,14 @@ async def notify_finance(
     Ошибка отправки одному получателю не срывает остальных и не срывает
     основной сценарий (заявка уже сохранена).
     """
-    if not effective_finance_recipients():
+    if not card_recipients():
         if request.urgency.is_urgent:
             log.warning("Срочная заявка %s, но финансисты не настроены", request.request_id)
         return 0
 
     chat_ids = recipients_for(request)
     if not chat_ids:
-        if resolved_finance_ids():
+        if card_recipients():
             # Не сбой: обычную заявку никто не захотел получать карточкой.
             # Она в реестре и видна в панели — будить админа незачем.
             log.info(

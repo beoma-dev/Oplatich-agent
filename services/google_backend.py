@@ -11,10 +11,15 @@
 """
 from __future__ import annotations
 
+import functools
+import http.client
 import io
 import logging
 import re
+import socket
+import ssl
 import threading
+import time
 from collections import Counter
 
 from bot.models import (
@@ -365,13 +370,92 @@ _clients = threading.local()
 _append_lock = threading.Lock()
 
 
+# Сколько клиент живёт без дела. httplib2 держит TLS-соединение открытым и
+# НЕ замечает, что противоположная сторона его закрыла: Google рвёт idle-сессии
+# через несколько минут, и первый же вызов после паузы падает — BrokenPipeError
+# на отправке или «UNEXPECTED_EOF_WHILE_READING» на чтении ответа. Поймано на
+# боевом 06.09.2026: между прогоном и следующей заявкой прошёл 21 минут, и обе
+# попытки подать заявку вернули 500, не сохранив ничего. Заявки идут редко,
+# так что протухшее соединение — это НОРМА, а не редкий случай.
+#
+# Минута выбрана с запасом: под нагрузкой соединение переиспользуется и
+# остаётся тёплым, а после паузы клиент строится заново — лишнее рукопожатие
+# (~300 мс) на фоне 7–11 секунд подачи не заметно.
+_CLIENT_TTL = 60.0
+
+
 def _per_thread(name: str, make):
-    """Клиент этого потока: создаётся при первом обращении и живёт с потоком."""
-    client = getattr(_clients, name, None)
-    if client is None:
-        client = make()
-        setattr(_clients, name, client)
+    """Клиент этого потока: свежий, если предыдущий залежался.
+
+    Своим у потока он обязан быть из-за segfault (см. выше), а недолгим — из-за
+    протухания. Оба свойства нужны одновременно.
+    """
+    got = getattr(_clients, name, None)
+    now = time.monotonic()
+    if got is not None:
+        client, born = got
+        if now - born < _CLIENT_TTL:
+            return client
+    client = make()
+    setattr(_clients, name, (client, now))
     return client
+
+
+def _drop_clients() -> None:
+    """Выбрасывает клиентов ЭТОГО потока: следующий вызов возьмёт свежих."""
+    for name in ("credentials", "sheets", "drive_credentials", "drive"):
+        if hasattr(_clients, name):
+            delattr(_clients, name)
+
+
+# Обрыв соединения — не ошибка Google, а мёртвый сокет на нашей стороне.
+# HttpError сюда НЕ входит намеренно: 429/403/404 повтором не лечатся.
+_STALE_ERRORS = (
+    ssl.SSLError,
+    BrokenPipeError,
+    ConnectionError,
+    socket.timeout,
+    http.client.HTTPException,
+)
+
+
+class GoogleUnavailable(RuntimeError):
+    """Соединение с Google оборвалось и повтор не помог.
+
+    Свой тип, а не голый OSError: обработчик в api/server превращает его в
+    честный 503, и при этом не ловит заодно всякий FileNotFoundError — тот
+    тоже OSError, но означает баг, а не недоступность Google.
+    """
+
+
+def _retry_stale(fn):
+    """Повтор ОДИН раз на протухшем соединении, со свежим клиентом.
+
+    Вешается только на чтения и на загрузку файла в Drive. На дописывание
+    строки НЕ вешается сознательно: обрыв при чтении ответа не говорит, дошла
+    запись или нет, и повтор мог бы дать ВТОРУЮ строку в реестре — то есть
+    счёт, который увидят и оплатят дважды. Там лучше честная ошибка.
+    Лишний файл в Диске такой цены не имеет: на него просто никто не сошлётся.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except _STALE_ERRORS as exc:
+            log.warning(
+                "Соединение с Google протухло (%s) — переоткрываю и повторяю %s",
+                type(exc).__name__, fn.__name__,
+            )
+            _drop_clients()
+            try:
+                return fn(*args, **kwargs)
+            except _STALE_ERRORS as again:
+                raise GoogleUnavailable(
+                    f"{type(again).__name__}: {again}"
+                ) from again
+
+    return wrapper
 
 
 def _new_credentials():
@@ -580,11 +664,52 @@ def append_invoice_sync(request: InvoiceRequest) -> int:
         m = re.search(r"[A-Z]+(\d+)", cell_ref)
         row = int(m.group(1)) if m else 0
         number = max(row - 1, 1)  # минус строка заголовков
+        _clear_inherited_format(row)
         if request.extra_files:
             _apply_link_runs(row, "Дополнительные документы",
                              "\n".join(request.extra_files))
     log.info("Заявка %s записана в Google Sheets (№%s)", request.request_id, number)
     return number
+
+
+def _clear_inherited_format(row: int) -> None:
+    """Снимает с новой строки формат, унаследованный от строки выше.
+
+    INSERT_ROWS вставляет строку и КОПИРУЕТ в неё прямое оформление соседа
+    сверху. На пустом реестре соседом оказывается шапка — и первая же заявка
+    приезжала тёмно-синей, белым жирным по синему (поймано на боевом
+    06.09.2026). Именно этого опасался прежний OVERWRITE, и опасался
+    справедливо; только платой за него была ПОТЕРЯННАЯ строка при
+    одновременной подаче, а это дороже.
+
+    Чистим ровно два поля — фон и начертание. Полосатость и статусные цвета
+    от этого не страдают: они лежат отдельными слоями (banding и условное
+    форматирование), а прямой формат ячейки их перекрывал. Перенос строк,
+    числовой формат суммы и проверку данных не трогаем — их ставит
+    _style_requests на весь столбец.
+    """
+    sheet_id = _target_sheet()[0]
+    try:
+        _sheets().spreadsheets().batchUpdate(
+            spreadsheetId=settings.google_sheet_id,
+            body={"requests": [{"repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": row - 1,
+                    "endRowIndex": row,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": len(SHEET_HEADERS),
+                },
+                # Пустой userEnteredFormat + маска = «очистить эти поля».
+                "cell": {"userEnteredFormat": {}},
+                "fields": (
+                    "userEnteredFormat.backgroundColor,"
+                    "userEnteredFormat.textFormat"
+                ),
+            }}]},
+        ).execute()
+    except Exception:  # noqa: BLE001 — оформление вторично, заявка уже записана
+        log.exception("Не удалось снять унаследованный формат со строки %s", row)
 
 
 def set_status_sync(request_id: str, status_text: str) -> dict[str, str] | None:
@@ -622,6 +747,7 @@ def set_status_sync(request_id: str, status_text: str) -> dict[str, str] | None:
     return None
 
 
+@_retry_stale
 def _all_rows_sync() -> list[list[str]]:
     """Все строки реестра без шапки, дополненные до ширины SHEET_HEADERS.
 
@@ -716,6 +842,7 @@ def set_cell_sync(request_id: str, header: str, value: str) -> dict[str, str] | 
     return None
 
 
+@_retry_stale
 def get_request_sync(request_id: str) -> dict[str, str] | None:
     """Заявка по ID в формате SHEET_HEADERS (None — такой заявки нет)."""
     for row in _all_rows_sync():
@@ -759,6 +886,7 @@ def delete_request_sync(request_id: str) -> bool:
     return False
 
 
+@_retry_stale
 def recent_requests_sync(limit: int) -> list[dict[str, str]]:
     """Последние заявки ВСЕХ авторов — панель финансиста (новые сверху)."""
     rows = _all_rows_sync()
@@ -809,6 +937,7 @@ def recent_counterparties_sync(limit: int) -> list[str]:
     return ordered[:limit]
 
 
+@_retry_stale
 def upload_invoice_file_sync(content: bytes, filename: str) -> str:
     """Загружает файл счёта в папку Drive. Возвращает webViewLink.
 
@@ -835,6 +964,7 @@ def upload_invoice_file_sync(content: bytes, filename: str) -> str:
     return link
 
 
+@_retry_stale
 def all_request_ids_sync() -> list[str]:
     """Все ID заявок из таблицы — для сверки с xlsx-зеркалом."""
     col = SHEET_HEADERS.index("ID заявки")
