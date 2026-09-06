@@ -107,3 +107,20 @@ test("чат возврата берётся из initData, иначе из quer
   assert.equal(lib.startParamFrom("", "?tgWebAppStartParam=-1004467808639"), "-1004467808639");
   assert.equal(lib.startParamFrom("", ""), "");
 });
+
+test("посторонний символ внутри числа — отказ, как и на сервере", () => {
+  // «1O0» с латинской O раньше становилось 10, «12з45» — 1245: буква между
+  // цифрами вычищалась молча, и опечатка меняла СУММУ ПЛАТЕЖА. Зеркало
+  // bot/validators.py::parse_amount — расхождение здесь значит, что форма
+  // покажет одно, а сервер запишет другое.
+  for (const bad of ["1O0", "1О0", "12з45", "1e10", "1x000"]) {
+    assert.equal(lib.parseAmount(bad), null, `прошло: ${bad}`);
+  }
+  // Слова и валюта вокруг числа — нормальный ввод, они остаются.
+  assert.equal(lib.parseAmount("125 000,50 руб"), 125000.5);
+  assert.equal(lib.parseAmount("125000₽"), 125000);
+  assert.equal(lib.parseAmount("10 000 (десять тысяч)"), 10000);
+  // Минус не срезается: «-5» должно отбиваться, а не превращаться в 5.
+  assert.equal(lib.parseAmount("-5"), null);
+  assert.equal(lib.parseAmount("\u22125"), null);
+});

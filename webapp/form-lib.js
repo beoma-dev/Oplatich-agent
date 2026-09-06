@@ -9,8 +9,14 @@
 /* ---------- Сумма (зеркало bot/validators.py::parse_amount) ---------- */
 
 function parseAmount(raw) {
+  // Хвосты и приставки («125 000,50 руб», «125000₽») убираем молча, а вот
+  // посторонний символ ВНУТРИ числа — отказ: раньше его тоже вычищало, и
+  // «1O0» с латинской O превращалось в 10, «12з45» — в 1245. Опечатка молча
+  // меняла сумму. Зеркало bot/validators.py::parse_amount, править парой.
+  var core = String(raw).replace(/^[^\d\-\u2212]+|[^\d]+$/g, "").trim();
+  if (!core || /[^\d.,\s\-\u2212]/.test(core)) return null;
   // Последний разделитель — десятичный; тысячи — только корректные группы по 3.
-  var cleaned = String(raw).replace(/[^\d,.\-]/g, "");
+  var cleaned = core.replace(/\s/g, "").replace(/\u2212/g, "-");
   var hasDot = cleaned.indexOf(".") !== -1, hasComma = cleaned.indexOf(",") !== -1;
   function isThousands(str, sep) {
     return new RegExp("^\\d{1,3}(\\" + sep + "\\d{3})+$").test(str);

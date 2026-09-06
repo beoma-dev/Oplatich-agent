@@ -23,6 +23,38 @@ from bot.validators import (
 TODAY = date(2026, 8, 3)
 
 
+class TestAmountTypos:
+    """Посторонний символ ВНУТРИ числа — отказ, а не молчаливая другая сумма.
+
+    Хвосты и приставки («125 000,50 руб», «125000₽») по-прежнему убираются:
+    это нормальный человеческий ввод. А вот буква между цифрами раньше тоже
+    вычищалась, и «1O0» с латинской O становилось 10, «12з45» — 1245,
+    «1e10» — 110. Опечатка молча меняла СУММУ ПЛАТЕЖА. Поймано прогоном на
+    дыры 06.09.2026; зеркало — webapp/form-lib.js::parseAmount.
+    """
+
+    @pytest.mark.parametrize("raw", ["1O0", "1О0", "12з45", "1e10", "1x000", "5,5s5"])
+    def test_letter_inside_the_number_is_refused(self, raw):
+        with pytest.raises(ValidationError):
+            parse_amount(raw)
+
+    @pytest.mark.parametrize("raw,expected", [
+        ("125 000,50 руб", "125000.50"),
+        ("125000₽", "125000.00"),
+        ("1 234,56 USD", "1234.56"),
+        ("10 000 (десять тысяч)", "10000.00"),
+        ("\u00a0125\u202f000,50\u00a0", "125000.50"),
+    ])
+    def test_words_and_symbols_around_the_number_still_pass(self, raw, expected):
+        assert parse_amount(raw) == Decimal(expected)
+
+    @pytest.mark.parametrize("raw", ["-5", "\u22125", "0", "-0,01"])
+    def test_zero_and_negative_still_refused(self, raw):
+        """Минус не срезается: «-5» обязан дойти до «сумма больше нуля»."""
+        with pytest.raises(ValidationError):
+            parse_amount(raw)
+
+
 class TestParseAmount:
     @pytest.mark.parametrize(
         ("raw", "expected"),
