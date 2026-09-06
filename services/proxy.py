@@ -85,15 +85,21 @@ async def pick_working_proxy(token: str, candidates: list[str]) -> str | None:
     None — не ответил ни один (решение, как стартовать, за вызывающим).
     """
     for url in candidates:
-        bot = Bot(
-            token,
-            request=HTTPXRequest(
-                proxy=url,
-                connect_timeout=PROBE_TIMEOUT,
-                read_timeout=PROBE_TIMEOUT,
-            ),
-        )
+        # Клиент строится ВНУТРИ try. Снаружи он ронял старт целиком: httpx
+        # проверяет схему прямо в конструкторе, и опечатка вроде «sock5://»
+        # выбрасывала ValueError мимо перебора — бот не поднимался, хотя
+        # рабочий запасной канал стоял следующим в том же списке. Кривой
+        # логин или пароль так не ловятся (URL разбирается, отказ приходит
+        # от прокси), но схему человек путает первым делом.
         try:
+            bot = Bot(
+                token,
+                request=HTTPXRequest(
+                    proxy=url,
+                    connect_timeout=PROBE_TIMEOUT,
+                    read_timeout=PROBE_TIMEOUT,
+                ),
+            )
             async with bot:
                 await bot.get_me()
         except Exception as exc:  # noqa: BLE001 — прокси мёртв, пробуем следующий

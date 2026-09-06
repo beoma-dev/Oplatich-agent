@@ -64,6 +64,35 @@ async def test_all_dead_returns_none(fake_bot):
     assert await proxy_mod.pick_working_proxy("t", CANDIDATES) is None
 
 
+async def test_broken_url_falls_through_instead_of_killing_startup(monkeypatch):
+    """Опечатка в PROXY_URL не должна ронять бота при запасном канале рядом.
+
+    httpx проверяет схему прямо в конструкторе клиента: «sock5://» вместо
+    «socks5://» выбрасывало ValueError, и раньше это происходило ВНЕ перебора —
+    бот не поднимался вовсе, хотя рабочий прокси стоял следующим в списке.
+    Проверено на живом httpx: кривой пароль так не ловится (URL разбирается,
+    отказ приходит позже), а вот схему путают первым делом.
+    """
+    class _PickyRequest(_FakeRequest):
+        def __init__(self, proxy: str | None = None, **kwargs):
+            if not str(proxy).startswith(("socks5://", "http://", "https://")):
+                raise ValueError(f"Unknown scheme for proxy URL {proxy!r}")
+            super().__init__(proxy=proxy, **kwargs)
+
+    monkeypatch.setattr(proxy_mod, "Bot", _FakeBot)
+    monkeypatch.setattr(proxy_mod, "HTTPXRequest", _PickyRequest)
+    good = "socks5://warp:1080"
+    _FakeBot.alive = {good}
+
+    chosen = await proxy_mod.pick_working_proxy("t", ["sock5://typo:50101", good])
+    assert chosen == good, "опечатка в первом кандидате унесла с собой весь старт"
+
+
+async def test_credentials_never_reach_the_log():
+    """В логах адрес прокси только без user:pass — там пароль."""
+    assert proxy_mod.masked("socks5://user:s3cret@1.2.3.4:50101") == "1.2.3.4:50101"
+
+
 def test_masked_hides_credentials():
     assert proxy_mod.masked("socks5://user:pass@host:1080") == "host:1080"
     assert proxy_mod.masked("socks5://host:1080") == "socks5://host:1080"
