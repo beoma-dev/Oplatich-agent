@@ -343,6 +343,25 @@ class TestNotifications:
         bot.send_message.assert_not_awaited()
         bot.send_document.assert_not_awaited()
 
+    def test_card_states_extra_docs_without_listing_them(self):
+        """Карточка говорит, что документы приложены, но не перечисляет их.
+
+        Было «📁 Ещё документов: 2» и следом «документ 1», «документ 2» —
+        безымянные ссылки, которые ничего не сообщают, зато съедают по строке
+        на файл в подписи (у неё потолок 1024 символа). Открывать их удобнее
+        из реестра или из приложения, кнопка туда под карточкой и так есть.
+        Ровно это решение уже принято для сообщения о закрывающих документах.
+        """
+        from services import notifier
+
+        request = make_request()
+        request.extra_files = ["https://drive.google.com/file/d/AAA/view",
+                               "https://drive.google.com/file/d/BBB/view"]
+        text = notifier._format_card(request, row_number=2)
+        assert "Приложены документы: 2" in text, text
+        assert "документ 1" not in text, "перечисление вернулось"
+        assert "drive.google.com" not in text, "ссылки на документы вернулись в карточку"
+
     def test_admin_gets_cards_without_being_a_financier(self, tmp_paths, monkeypatch):
         """Админ получает карточки заявок наравне с финансистами.
 

@@ -218,16 +218,16 @@ def _format_card(request: InvoiceRequest, row_number: int) -> str:
     planned = (
         request.planned_date.strftime("%d.%m.%Y") if request.planned_date else "—"
     )
-    # Дополнительные документы: ссылками, а не вложениями. Подпись к документу
-    # ограничена 1024 символами, и пять файлов в одном сообщении её съедят;
-    # к тому же вложение можно отправить только одно — им идёт счёт.
+    # Дополнительные документы: только ФАКТ и число. Ссылки на каждый НЕ
+    # перечисляем — они были безымянными («документ 1, документ 2») и ничего
+    # не говорили, зато занимали по строке на файл в подписи, которая
+    # ограничена 1024 символами. Открывать их удобнее из строки реестра или
+    # из приложения, где рядом виден и сам платёж; кнопка «Открыть в
+    # приложении» под карточкой и так есть. То же решение уже принято для
+    # сообщения о закрывающих документах — см. closing_docs_notice.
     extras_part = ""
     if request.extra_files:
-        links = "\n".join(
-            f'  <a href="{e(url)}">документ {i}</a>'
-            for i, url in enumerate(request.extra_files, start=1)
-        )
-        extras_part = f"\n📁 Ещё документов: {len(request.extra_files)}\n{links}"
+        extras_part = f"\n📁 Приложены документы: {len(request.extra_files)}"
     return (
         f"{header}\n\n"
         f"💰 Сумма: <b>{e(f'{request.amount:,.2f}')} {e(request.currency)}</b>\n"
