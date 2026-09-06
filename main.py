@@ -58,7 +58,12 @@ from bot.my_requests import CB_WITHDRAW, my_command, withdraw_callback
 from config import settings
 from services import alerts, backup, health, reminders
 from services.access_requests import CB_ASK
-from services.proxy import build_requests, masked, pick_working_proxy
+from services.proxy import (
+    build_requests,
+    masked,
+    pick_working_proxy,
+    set_active,
+)
 from services.user_directory import remember
 
 logging.basicConfig(
@@ -176,6 +181,9 @@ def build_application(proxy_url: str | None = None) -> Application:
     )
     if proxy_url is None:
         proxy_url = settings.proxy_urls[0] if settings.proxy_urls else ""
+    # Отсюда канал знает весь процесс: суточная проверка пина ходит ровно тем
+    # же путём, что и бот, а не гадает по сырой строке PROXY_URL.
+    set_active(proxy_url)
     # Свои клиенты вместо .proxy(): в них зашит повтор вызовов, которые до
     # Telegram не дошли (services/proxy.RetryingRequest). Канал теряет
     # единицы процентов вызовов, и без повтора это видно человеку как

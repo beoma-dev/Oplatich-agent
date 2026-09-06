@@ -88,6 +88,47 @@ async def test_broken_url_falls_through_instead_of_killing_startup(monkeypatch):
     assert chosen == good, "опечатка в первом кандидате унесла с собой весь старт"
 
 
+def test_pin_check_uses_the_chosen_channel_not_the_raw_setting(monkeypatch):
+    """Суточная проверка пина ходит выбранным каналом, а не сырым PROXY_URL.
+
+    В PROXY_URL может стоять НЕСКОЛЬКО адресов через запятую. Такую строку
+    httpx принимает за один адрес, соединение не встаёт — и проверка делала
+    ложный вывод «прибитый адрес не отвечает, бот замолчит целиком».
+    Поймано 06.09.2026 при включении платного прокси вторым каналом.
+    """
+    import httpx
+
+    from services import dns_pin
+    from services import proxy as proxy_mod
+
+    monkeypatch.setattr(
+        settings, "proxy_url",
+        "socks5://user:pass@1.2.3.4:50101,socks5://warp:1080", raising=False,
+    )
+    proxy_mod.set_active("socks5://warp:1080")
+
+    seen = {}
+
+    class _Client:
+        def __init__(self, proxy=None, **_kw):
+            seen["proxy"] = proxy
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def get(self, _url):
+            return None
+
+    monkeypatch.setattr(httpx, "Client", _Client)
+    assert dns_pin.reachable() is True
+    assert seen["proxy"] == "socks5://warp:1080", (
+        "проверка снова взяла сырую строку с двумя адресами"
+    )
+
+
 async def test_credentials_never_reach_the_log():
     """В логах адрес прокси только без user:pass — там пароль."""
     assert proxy_mod.masked("socks5://user:s3cret@1.2.3.4:50101") == "1.2.3.4:50101"

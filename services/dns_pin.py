@@ -27,6 +27,8 @@ import socket
 import httpx
 
 from config import settings
+from services import proxy
+from services.proxy import masked
 
 log = logging.getLogger(__name__)
 
@@ -51,7 +53,10 @@ def reachable() -> bool:
     Любой ответ HTTP годится — нам важен факт соединения, а не код.
     """
     try:
-        with httpx.Client(proxy=settings.proxy_url or None, timeout=PROBE_TIMEOUT) as c:
+        # Ровно тот канал, который выбрал бот. НЕ settings.proxy_url: там сырая
+        # строка, и при нескольких кандидатах через запятую httpx принимает её
+        # за один адрес, не соединяется — и проверка врала «пин не отвечает».
+        with httpx.Client(proxy=proxy.active() or None, timeout=PROBE_TIMEOUT) as c:
             c.get(f"https://{TELEGRAM_HOST}/")
         return True
     except Exception:  # noqa: BLE001 — любой отказ означает «не дошли»
@@ -72,10 +77,13 @@ def check() -> tuple[bool, str]:
             note = f" (DNS сейчас отдаёт {', '.join(live)})"
         return True, f"Пин {pinned} отвечает{note}."
 
+    channel = masked(proxy.active()) or "прямое подключение"
     return False, (
-        f"Прибитый адрес {pinned} не отвечает через прокси. Бот замолчит "
-        f"целиком: gost ходит только по нему. Подберите адрес, до которого "
-        f"WARP доходит, и поправьте extra_hosts у warp в docker-compose.yml "
-        f"вместе с TELEGRAM_PINNED_IP в .env. Живой DNS: "
-        f"{', '.join(resolve_v4()) or 'не ответил'}."
+        f"Telegram не отвечает по имени через текущий канал ({channel}). "
+        f"Если канал — WARP, виноват прибитый адрес {pinned}: gost ходит "
+        f"только по нему, и бот замолчит целиком. Подберите адрес, до "
+        f"которого WARP доходит, и поправьте extra_hosts у warp в "
+        f"docker-compose.yml вместе с TELEGRAM_PINNED_IP в .env. Если канал "
+        f"платный прокси — пин ни при чём, проверяйте сам прокси. "
+        f"Живой DNS: {', '.join(resolve_v4()) or 'не ответил'}."
     )
