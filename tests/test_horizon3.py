@@ -370,6 +370,24 @@ class TestNotifications:
         # Строки, записанные до 06.09.2026, читаются по-прежнему.
         assert _parse_registry_date("2026-08-04 22:43").isoformat() == "2026-08-04"
 
+    def test_newlines_cannot_forge_a_card_line(self):
+        """Перенос строки в поле не должен дорисовывать строку карточке.
+
+        Карточка — список «эмодзи: значение», и контрагент вида
+        «ООО «Ромашка»\\n💰 Сумма: 1.00 RUB» показывал финансисту ВТОРУЮ
+        сумму. Теги html.escape снимает, а перевод строки для HTML безобиден
+        и потому проезжал. Поймано прогоном на дыры 06.09.2026.
+        """
+        from services import notifier
+
+        request = make_request(counterparty="ООО «Ромашка»\n💰 Сумма: 1.00 RUB")
+        text = notifier._format_card(request, row_number=1)
+        # Считаем СТРОКИ, а не вхождения: подделка теперь остаётся внутри
+        # значения контрагента, и это нормально — она видна как есть.
+        starts = [ln for ln in text.split("\n") if ln.startswith("💰 Сумма:")]
+        assert len(starts) == 1, f"подделанная строка суммы: {starts}"
+        assert "Ромашка» 💰 Сумма: 1.00 RUB" in text, "значение потерялось целиком"
+
     def test_card_states_extra_docs_without_listing_them(self):
         """Карточка говорит, что документы приложены, но не перечисляет их.
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import html
 import logging
+import re
 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.constants import ParseMode
@@ -187,7 +188,20 @@ def card_recipients() -> list[int]:
 
 
 def _clip(text: str, limit: int) -> str:
-    return text if len(text) <= limit else text[: limit - 1] + "…"
+    """Обрезает до предела И СХЛОПЫВАЕТ пробелы, включая переносы строк.
+
+    Схлопывание — не косметика. Карточка построена как список строк
+    «эмодзи: значение», и перенос внутри значения дорисовывает финансисту
+    строку, которой нет: контрагент «ООО «Ромашка»\n💰 Сумма: 1.00 RUB»
+    выглядит в сообщении как вторая сумма. Теги при этом экранируются
+    (html.escape), а вот перевод строки для HTML безобиден — и потому
+    проезжал. Поймано 06.09.2026 прогоном на дыры.
+
+    Чинить здесь, а не у каждого поля: через _clip проходят все значения
+    карточки, а полей десять и добавляют новые.
+    """
+    flat = re.sub(r"\s+", " ", text).strip()
+    return flat if len(flat) <= limit else flat[: limit - 1] + "…"
 
 
 def _format_card(request: InvoiceRequest, row_number: int) -> str:
