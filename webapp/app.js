@@ -2655,6 +2655,11 @@
       }
     });
   }
+  var groupPanel = typeof buildGroupPanel === "function" ? buildGroupPanel({
+    $: $, setSeg: setSeg, bindSeg: bindSeg, showError: showError,
+    initData: initData, tg: tg,
+  }) : null;
+
   var maintPanel = typeof buildMaintPanel === "function" ? buildMaintPanel({
     $: $, setSeg: setSeg, bindFilterSeg: bindFilterSeg,
     showMsg: showAdminMsg, initData: function () { return initData; }
@@ -2678,6 +2683,7 @@
         renderList("wl-list", d.allowed || [], "wl");
         if (d.backup) fillBackup(d.backup);
         if (d.maintenance && maintPanel) maintPanel.fill(d.maintenance);
+        if (d.group_summary && groupPanel) groupPanel.fill(d.group_summary);
         if (alertsPanel) alertsPanel.fill(d);
         setSeg("autofill-seg", d.autofill === false ? "off" : "on");
         // Google-режим: прямые ссылки на живую таблицу и на папку Диска с

@@ -370,6 +370,63 @@ class TestNotifications:
         # Строки, записанные до 06.09.2026, читаются по-прежнему.
         assert _parse_registry_date("2026-08-04 22:43").isoformat() == "2026-08-04"
 
+    async def test_configured_group_gets_the_summary_from_a_private_chat(
+        self, tmp_paths, monkeypatch
+    ):
+        """Сводка уходит в заданную группу, даже когда форму открыли из лички.
+
+        До 08.09.2026 адрес брался ТОЛЬКО из ссылки, по которой открыли форму:
+        подал из личного чата — в группе тихо. То есть увидит группа заявку
+        или нет, решал маршрут пользователя.
+        """
+        from services import runtime_settings as rs
+
+        rs.set_group_summary(enabled=True, chat_id=-1001481050579)
+        bot = self._bot()
+        # Автор НЕ участник группы: get_chat_member отвечает «left».
+        gone = MagicMock()
+        gone.status = "left"
+        bot.get_chat_member = AsyncMock(return_value=gone)
+
+        await intake.finalize_submission(bot, make_request(), invoice_file=None)
+
+        куда = [c.kwargs.get("chat_id") for c in bot.send_message.await_args_list]
+        assert -1001481050579 in куда, f"сводка не дошла: {куда}"
+
+    async def test_link_chat_still_checks_membership(self, tmp_paths, monkeypatch):
+        """А вот чат ИЗ ССЫЛКИ по-прежнему проверяется: его можно подделать.
+
+        Разница принципиальная. Заданную группу выбрал админ — проверять
+        нечего. Чат из ссылки называет отправитель, и без проверки чужую
+        группу завалили бы сводками о чужих платежах.
+        """
+        from services import runtime_settings as rs
+
+        rs.set_group_summary(enabled=False, chat_id=0)
+        bot = self._bot()
+        gone = MagicMock()
+        gone.status = "left"
+        bot.get_chat_member = AsyncMock(return_value=gone)
+
+        await intake.finalize_submission(
+            bot, make_request(), invoice_file=None, return_chat_id=-100999
+        )
+        куда = [c.kwargs.get("chat_id") for c in bot.send_message.await_args_list]
+        assert -100999 not in куда, "сводка ушла в чужой чат без проверки"
+
+    async def test_same_group_gets_one_message_not_two(self, tmp_paths, monkeypatch):
+        """Подали ИЗ той же группы, что настроена, — сообщение одно."""
+        from services import runtime_settings as rs
+
+        rs.set_group_summary(enabled=True, chat_id=-1001481050579)
+        bot = self._bot()
+        await intake.finalize_submission(
+            bot, make_request(), invoice_file=None, return_chat_id=-1001481050579
+        )
+        сколько = [c.kwargs.get("chat_id") for c in bot.send_message.await_args_list
+                   ].count(-1001481050579)
+        assert сколько == 1, f"сводок в группу: {сколько}"
+
     def test_newlines_cannot_forge_a_card_line(self):
         """Перенос строки в поле не должен дорисовывать строку карточке.
 

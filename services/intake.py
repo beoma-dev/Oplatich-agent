@@ -14,6 +14,7 @@ from telegram.constants import ParseMode
 from bot.models import InvoiceRequest
 from bot.validators import has_profanity
 from services import alerts, audit, dedup, notifier, storage, tg_retry
+from services import runtime_settings as rs
 from services.notifier import card_recipients, notify_finance
 from services.pdf_report import build_request_pdf
 
@@ -213,10 +214,29 @@ async def finalize_submission(
         summary_in_group=return_chat_id is not None,
     )
 
-    if return_chat_id is not None:
-        await _post_group_summary(bot, request, return_chat_id)
+    # Сводка в общий чат. Две дороги, и они не должны сложиться в два
+    # сообщения об одной заявке:
+    #   return_chat_id — чат, ИЗ КОТОРОГО открыли форму (приходит из ссылки);
+    #   настроенный    — чат, который админ задал в панели, для всех заявок.
+    for chat_id, from_link in _summary_targets(return_chat_id):
+        await _post_group_summary(bot, request, chat_id, verify_member=from_link)
 
     return row_number
+
+
+def _summary_targets(return_chat_id: int | None) -> list[tuple[int, bool]]:
+    """Куда слать сводку: [(chat_id, пришёл ли чат из ссылки)], без повторов.
+
+    Настроенный чат и чат из ссылки часто совпадают — человек открыл форму
+    из той же группы, куда админ и просил слать. Тогда сообщение одно.
+    """
+    targets: list[tuple[int, bool]] = []
+    if return_chat_id is not None:
+        targets.append((return_chat_id, True))
+    cfg = rs.group_summary_config()
+    if cfg["enabled"] and cfg["chat_id"] not in {c for c, _ in targets}:
+        targets.append((cfg["chat_id"], False))
+    return targets
 
 
 async def _send_user_confirmation(
@@ -301,13 +321,21 @@ async def _user_in_chat(bot: Bot, chat_id: int, user_id: int) -> bool:
         return False
 
 
-async def _post_group_summary(bot: Bot, request: InvoiceRequest, chat_id: int) -> None:
+async def _post_group_summary(
+    bot: Bot, request: InvoiceRequest, chat_id: int, *, verify_member: bool = True
+) -> None:
     """Публикует в группе краткое уведомление о созданной заявке.
 
-    Итог публикуется только если автор заявки — участник этой группы:
-    return_chat_id приходит из deep-link/URL и может быть подделан.
+    verify_member=True — чат пришёл ИЗ ССЫЛКИ, а её можно подделать: сначала
+    убеждаемся, что автор действительно состоит в этом чате, иначе чужую
+    группу завалили бы сводками о чужих платежах.
+
+    verify_member=False — чат задал админ в панели. Проверять нечего: адрес
+    выбран не отправителем. Проверка здесь была бы прямо вредна — автор
+    вполне может не состоять в общем чате (так и бывало), а сводка всё равно
+    должна дойти: её ждут получатели, а не автор.
     """
-    if not await _user_in_chat(bot, chat_id, request.telegram_id):
+    if verify_member and not await _user_in_chat(bot, chat_id, request.telegram_id):
         log.warning(
             "Итог заявки %s не отправлен в чат %s: автор не участник чата",
             request.request_id, chat_id,

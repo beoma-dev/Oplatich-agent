@@ -53,6 +53,11 @@ _DEFAULTS: dict = {
     # задержаться. Блокировка была бы отдельным решением: молча не принять
     # заполненную форму хуже, чем принять её во время работ.
     "maintenance": {},
+    # Сводка о каждой заявке в общий чат: {"chat_id": -100…, "enabled": true}.
+    # До 08.09.2026 сводка уходила ТОЛЬКО в тот чат, из которого открыли форму,
+    # то есть попадание в группу зависело от пути пользователя, а не от
+    # решения админа: подал из лички — в группе тихо.
+    "group_summary": {},
     "autofill": {},
     # Личный выключатель чтения счёта: {"<id>": true|false}. Общая настройка
     # остаётся значением по умолчанию — бета есть бета, и человек, которому
@@ -99,6 +104,7 @@ def _load_locked() -> dict:
                         for k, v in raw.get("reminders_by_user", {}).items()
                     },
                     "maintenance": dict(raw.get("maintenance", {})),
+                    "group_summary": dict(raw.get("group_summary", {})),
                     "autofill": dict(raw.get("autofill", {})),
                     "autofill_by_user": dict(raw.get("autofill_by_user", {})),
                     "alerts": dict(raw.get("alerts", {})),
@@ -557,6 +563,36 @@ def set_maintenance(*, enabled: bool, text: str | None = None) -> dict:
         _save_locked()
     log.warning("Технические работы: плашка %s", "включена" if enabled else "снята")
     return maintenance_config()
+
+
+def group_summary_config() -> dict:
+    """Куда слать сводку о каждой заявке: чат и включено ли.
+
+    chat_id = 0 означает «не задан»: слать некуда, и включённый выключатель
+    без чата ничего не делает — поэтому enabled считаем только вместе с ним.
+    """
+    with _lock:
+        own = dict(_load_locked()["group_summary"])
+    try:
+        chat_id = int(own.get("chat_id") or 0)
+    except (TypeError, ValueError):
+        chat_id = 0
+    return {"chat_id": chat_id, "enabled": bool(own.get("enabled")) and bool(chat_id)}
+
+
+def set_group_summary(*, enabled: bool | None = None, chat_id: int | None = None) -> dict:
+    """Меняет чат сводок и/или выключатель. None — поле не трогаем."""
+    with _lock:
+        data = _load_locked()
+        if chat_id is not None:
+            data["group_summary"]["chat_id"] = int(chat_id)
+        if enabled is not None:
+            data["group_summary"]["enabled"] = bool(enabled)
+        _save_locked()
+    cfg = group_summary_config()
+    log.info("Сводки в группу: чат %s, %s",
+             cfg["chat_id"] or "не задан", "включены" if cfg["enabled"] else "выключены")
+    return cfg
 
 
 def personal_card_urgency(user_id: int) -> str:

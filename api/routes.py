@@ -834,6 +834,7 @@ async def admin_settings(request: Request) -> dict:
         # Плашка работ — тем же ответом: отдельный запрос ради двух полей
         # не нужен, а читать состояние методом POST было бы просто неверно.
         "maintenance": rs.maintenance_config(),
+        "group_summary": rs.group_summary_config(),
         "reminders": rs.reminders_config(),
         "registry_url": registry_url,
         "drive_url": drive_url,
@@ -1304,6 +1305,47 @@ async def save_my_reminders(request: Request) -> dict:
                 "заявки — только срочные. Они по-прежнему в реестре и в панели."
             )
     return {"ok": True, "message": message, "reminders": cfg}
+
+
+@router.post("/admin/group-summary")
+async def admin_group_summary(request: Request) -> dict:
+    """Сводки в общий чат: {"enabled": bool, "chat_id": -100…}.
+
+    chat_id обязан быть ОТРИЦАТЕЛЬНЫМ: у групп и каналов он такой, у людей —
+    положительный. Без этой проверки сводку обо всех платежах компании можно
+    было бы случайно направить в личку одному человеку.
+    """
+    await _require_admin(request)
+    body = await request.json()
+
+    chat_id = None
+    if "chat_id" in body:
+        raw = str(body.get("chat_id") or "").strip()
+        if raw in ("", "0"):
+            chat_id = 0                      # «не задан» — сводки никуда не идут
+        else:
+            try:
+                chat_id = int(raw)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Нужен числовой id чата, например -1001481050579.",
+                ) from exc
+            if chat_id >= 0:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Это похоже на личный чат. У группы id отрицательный.",
+                )
+
+    enabled = bool(body["enabled"]) if "enabled" in body else None
+    cfg = await asyncio.to_thread(rs.set_group_summary, enabled=enabled, chat_id=chat_id)
+    if cfg["enabled"]:
+        message = "Сводки о заявках идут в этот чат."
+    elif cfg["chat_id"]:
+        message = "Сводки выключены — чат сохранён."
+    else:
+        message = "Чат не задан: сводки никуда не идут."
+    return {"ok": True, "message": message, "group_summary": cfg}
 
 
 @router.post("/admin/maintenance")

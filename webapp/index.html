@@ -665,6 +665,19 @@
       </div>
     </div>
     <div class="card">
+      <div class="card-title">📢 Сводки в общий чат <button type="button" class="help-q" data-help-title="Сводки в общий чат" data-help="Короткий итог о КАЖДОЙ поданной заявке уходит в указанную группу: номер, автор, сумма, контрагент, статья, сроки, комментарий. Файла счёта там нет.&#10;&#10;Без этой настройки сводка попадала в группу, только если человек открыл форму по ссылке ИЗ неё: подал из лички — в группе тихо. Теперь адрес задаёте вы, и путь пользователя больше ничего не решает.&#10;&#10;Автору НЕ обязательно состоять в этой группе — сводку ждут получатели, а не он.&#10;&#10;id группы отрицательный (например -1001481050579); у личного чата он положительный, туда слать нельзя. Бота нужно добавить в группу и разрешить ему писать. Если заявку подали из той же группы, сообщение всё равно придёт одно.">?</button></div>
+      <div class="seg seg-even" id="group-sum-seg">
+        <button type="button" data-value="on">Слать</button>
+        <button type="button" data-value="off" class="active">Не слать</button>
+      </div>
+      <div class="add-row">
+        <input type="text" id="group-sum-input" placeholder="-1001481050579" autocomplete="off" inputmode="numeric">
+        <button type="button" class="add-btn" id="group-sum-save">✓</button>
+      </div>
+      <div class="counter" style="text-align:left" id="group-sum-note"></div>
+    </div>
+
+    <div class="card">
       <div class="card-title">💼 Финансисты <button type="button" class="help-q" data-help-title="Финансисты" data-help="Получают карточку каждой заявки с файлом счёта и кнопкой «Открыть в приложении» — статус (Оплачено/Отложено/Отклонено) ставится в панели 📊. @username сработает после того, как человек хотя бы раз написал боту.">?</button></div>
       <div id="fin-list"></div>
       <div class="add-row">
@@ -1021,6 +1034,7 @@
 <script src="restore-panel.js"></script>
 <script src="reminders-panel.js"></script>
 <script src="maint-panel.js"></script>
+<script src="group-panel.js"></script>
 <script src="closing-panel.js"></script>
 <script src="nudge-panel.js"></script>
 <script src="list-tools.js"></script>

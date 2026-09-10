@@ -984,6 +984,7 @@ def test_split_files_stay_reasonably_small():
                         ("alerts-panel.js", 330), ("restore-panel.js", 200),
                         ("reminders-panel.js", 200),
                         ("maint-panel.js", 150),
+                        ("group-panel.js", 110),
                         ("closing-panel.js", 150),
                         ("nudge-panel.js", 100),
                         ("list-tools.js", 200), ("busy-banner.js", 80),
