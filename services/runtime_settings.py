@@ -58,6 +58,10 @@ _DEFAULTS: dict = {
     # форму, то есть решал путь пользователя, а не решение админа: подал из
     # лички — в группе тихо.
     "summary_chats": [],
+    # Названия чатов сводок: {"<id>": "BEOMA | Счета"}. Кэш, а не истина:
+    # адрес — это id, а имя спрашивается у Telegram и хранится рядом,
+    # чтобы панель открывалась и тогда, когда Telegram не отвечает.
+    "summary_chat_names": {},
     "autofill": {},
     # Личный выключатель чтения счёта: {"<id>": true|false}. Общая настройка
     # остаётся значением по умолчанию — бета есть бета, и человек, которому
@@ -108,6 +112,10 @@ def _load_locked() -> dict:
                         int(x) for x in raw.get("summary_chats", [])
                         if str(x).lstrip("-").isdigit()
                     ],
+                    "summary_chat_names": {
+                        str(k): str(v)
+                        for k, v in dict(raw.get("summary_chat_names", {})).items()
+                    },
                     "autofill": dict(raw.get("autofill", {})),
                     "autofill_by_user": dict(raw.get("autofill_by_user", {})),
                     "alerts": dict(raw.get("alerts", {})),
@@ -131,6 +139,8 @@ def _load_locked() -> dict:
     _cache.setdefault("autofill_by_user", {})
     _cache.setdefault("alerts", {})
     _cache.setdefault("incidents", [])
+    _cache.setdefault("summary_chats", [])
+    _cache.setdefault("summary_chat_names", {})
     return _cache
 
 
@@ -593,14 +603,37 @@ def add_summary_chat(chat_id: int) -> bool:
 
 
 def remove_summary_chat(chat_id: int) -> bool:
-    """Убирает чат сводок. False — такого и не было."""
+    """Убирает чат сводок вместе с его названием. False — такого и не было."""
     with _lock:
         data = _load_locked()
         if chat_id not in data["summary_chats"]:
             return False
         data["summary_chats"].remove(chat_id)
+        data["summary_chat_names"].pop(str(chat_id), None)
         _save_locked()
     log.info("Сводки о заявках: убран чат %s", chat_id)
+    return True
+
+
+def summary_chat_names() -> dict[str, str]:
+    """Известные названия чатов сводок: {"<id>": "BEOMA | Счета"}."""
+    with _lock:
+        return dict(_load_locked()["summary_chat_names"])
+
+
+def set_summary_chat_name(chat_id: int, title: str) -> bool:
+    """Запоминает название чата. False — оно и так было таким.
+
+    Пишем только при изменении: панель открывают часто, а группу
+    переименовывают раз в год — незачем трогать файл на каждом открытии.
+    """
+    key, title = str(chat_id), title.strip()
+    with _lock:
+        data = _load_locked()
+        if not title or data["summary_chat_names"].get(key) == title:
+            return False
+        data["summary_chat_names"][key] = title
+        _save_locked()
     return True
 
 

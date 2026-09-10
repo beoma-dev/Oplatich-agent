@@ -46,6 +46,7 @@ from services import (
     analytics,
     audit,
     backup,
+    chat_names,
     dedup,
     invoice_check,
     invoice_extract,
@@ -834,7 +835,9 @@ async def admin_settings(request: Request) -> dict:
         # Плашка работ — тем же ответом: отдельный запрос ради двух полей
         # не нужен, а читать состояние методом POST было бы просто неверно.
         "maintenance": rs.maintenance_config(),
-        "summary_chats": rs.summary_chats(),
+        "summary_chats": await chat_names.entries(
+            request.app.state.bot, rs.summary_chats()
+        ),
         "reminders": rs.reminders_config(),
         "registry_url": registry_url,
         "drive_url": drive_url,
@@ -1333,13 +1336,26 @@ async def admin_summary_chats(request: Request) -> dict:
             status_code=422, detail="Это похоже на личный чат. У группы id отрицательный."
         )
 
+    bot = request.app.state.bot
     if action == "add":
+        # Спрашиваем ДО записи: чат, куда бот не может писать, в списке
+        # выглядел бы настроенным, а сводки бы не приходили — и виновата
+        # была бы «сломанная рассылка», а не пропущенный шаг «позвать бота».
+        try:
+            title = await chat_names.resolve(bot, chat_id)
+        except chat_names.ChatUnreachable as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         changed = await asyncio.to_thread(rs.add_summary_chat, chat_id)
-        message = "Чат добавлен — сводки пойдут туда." if changed else "Уже в списке."
+        await asyncio.to_thread(rs.set_summary_chat_name, chat_id, title)
+        message = f"«{title}» добавлен — сводки пойдут туда." if changed else "Уже в списке."
     else:
         changed = await asyncio.to_thread(rs.remove_summary_chat, chat_id)
         message = "Чат убран." if changed else "Такого чата в списке нет."
-    return {"ok": changed, "message": message, "summary_chats": rs.summary_chats()}
+    return {
+        "ok": changed,
+        "message": message,
+        "summary_chats": await chat_names.entries(bot, rs.summary_chats()),
+    }
 
 
 @router.post("/admin/maintenance")

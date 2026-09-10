@@ -26,12 +26,27 @@ function buildGroupPanel(ctx) {
       box.appendChild(empty);
       return;
     }
-    chats.forEach(function (chatId) {
+    chats.forEach(function (chat) {
+      // Сервер присылает {id, title}; голое число терпим на случай, когда в
+      // открытом WebView остался старый файл, а сервер уже новый.
+      var chatId = chat && chat.id !== undefined ? chat.id : chat;
+      var title = (chat && chat.title) || "";
       var row = document.createElement("div");
       row.className = "row-item";
       var name = document.createElement("span");
       name.style.flex = "1";
-      name.textContent = String(chatId);
+      if (title) {
+        // Имя крупно, id под ним: адресует всё равно id, и когда чатов
+        // несколько с похожими названиями, различает их только он.
+        name.textContent = title;
+        var num = document.createElement("div");
+        num.className = "counter";
+        num.style.textAlign = "left";
+        num.textContent = String(chatId);
+        name.appendChild(num);
+      } else {
+        name.textContent = String(chatId);
+      }
       var kill = document.createElement("button");
       kill.type = "button";
       kill.className = "add-btn btn-ghost";

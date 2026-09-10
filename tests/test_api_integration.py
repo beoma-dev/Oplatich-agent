@@ -507,6 +507,142 @@ class TestDedupAndRateLimit:
         assert resp.status_code == 429
 
 
+class TestSummaryChats:
+    """Список чатов, куда уходит сводка: имена, а не только id."""
+
+    @staticmethod
+    def _sees(bot, title: str = "BEOMA | Счета") -> None:
+        chat = MagicMock()
+        chat.title = title
+        bot.get_chat = AsyncMock(return_value=chat)
+
+    async def test_added_chat_shows_its_name(self, api, monkeypatch):
+        """id длинный и на вид одинаковый у всех групп — списку нужно имя."""
+        client, bot = api
+        _admins(monkeypatch, "42")
+        self._sees(bot)
+
+        resp = await client.post(
+            "/api/admin/summary-chats",
+            json={"action": "add", "entry": "-1001481050579"},
+            headers=_auth(),
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["summary_chats"] == [
+            {"id": -1001481050579, "title": "BEOMA | Счета"}
+        ]
+        # Имя сохранено: панель откроется и когда Telegram не отвечает.
+        assert rs.summary_chat_names()["-1001481050579"] == "BEOMA | Счета"
+
+    async def test_unknown_chat_is_refused_before_it_is_saved(self, api, monkeypatch):
+        """Бота в чат не позвали — отказываем словами, а не молчанием сводок.
+
+        Раньше такой чат ложился в список как настроенный, сводки в него не
+        приходили, и выглядело это поломкой рассылки, а не пропущенным шагом.
+        """
+        from telegram.error import BadRequest
+
+        client, bot = api
+        _admins(monkeypatch, "42")
+        bot.get_chat = AsyncMock(side_effect=BadRequest("Chat not found"))
+
+        resp = await client.post(
+            "/api/admin/summary-chats",
+            json={"action": "add", "entry": "-1009999999999"},
+            headers=_auth(),
+        )
+        assert resp.status_code == 422
+        assert "бот" in resp.json()["detail"].lower()
+        assert rs.summary_chats() == [], "чат записан, хотя бот его не видит"
+
+    async def test_chat_without_the_right_to_write_is_refused(self, api, monkeypatch):
+        """Бот в чате есть, но говорить ему там не дают — толку от адреса нет."""
+        client, bot = api
+        _admins(monkeypatch, "42")
+        self._sees(bot)
+        kicked = MagicMock()
+        kicked.status = "left"
+        bot.get_chat_member = AsyncMock(return_value=kicked)
+
+        resp = await client.post(
+            "/api/admin/summary-chats",
+            json={"action": "add", "entry": "-1001481050579"},
+            headers=_auth(),
+        )
+        assert resp.status_code == 422
+        assert rs.summary_chats() == []
+
+    async def test_settings_show_the_new_name_after_a_rename(self, api, monkeypatch):
+        """Группу переименовали — панель показывает новое имя, не вчерашнее."""
+        client, bot = api
+        _admins(monkeypatch, "42")
+        self._sees(bot)
+        await client.post(
+            "/api/admin/summary-chats",
+            json={"action": "add", "entry": "-1001481050579"},
+            headers=_auth(),
+        )
+        self._sees(bot, "BEOMA | Оплаты")
+
+        body = (await client.get("/api/admin/settings", headers=_auth())).json()
+        assert body["summary_chats"] == [
+            {"id": -1001481050579, "title": "BEOMA | Оплаты"}
+        ]
+        assert rs.summary_chat_names()["-1001481050579"] == "BEOMA | Оплаты"
+
+    async def test_silent_telegram_keeps_the_saved_name(self, api, monkeypatch):
+        """Telegram не ответил — показываем сохранённое имя, а не пустоту.
+
+        Настройки обязаны открываться и в такую минуту: имя тут украшение
+        поверх id, а не условие доступа к панели.
+        """
+        from telegram.error import TimedOut
+
+        client, bot = api
+        _admins(monkeypatch, "42")
+        self._sees(bot)
+        await client.post(
+            "/api/admin/summary-chats",
+            json={"action": "add", "entry": "-1001481050579"},
+            headers=_auth(),
+        )
+        bot.get_chat = AsyncMock(side_effect=TimedOut())
+
+        body = (await client.get("/api/admin/settings", headers=_auth())).json()
+        assert body["summary_chats"] == [
+            {"id": -1001481050579, "title": "BEOMA | Счета"}
+        ]
+
+    async def test_removing_forgets_the_name_too(self, api, monkeypatch):
+        """Убрали чат — имя не остаётся висеть в настройках."""
+        client, bot = api
+        _admins(monkeypatch, "42")
+        self._sees(bot)
+        await client.post(
+            "/api/admin/summary-chats",
+            json={"action": "add", "entry": "-1001481050579"},
+            headers=_auth(),
+        )
+        resp = await client.post(
+            "/api/admin/summary-chats",
+            json={"action": "remove", "entry": "-1001481050579"},
+            headers=_auth(),
+        )
+        assert resp.json()["summary_chats"] == []
+        assert rs.summary_chat_names() == {}
+
+    async def test_only_admins_may_look(self, api, monkeypatch):
+        """Адреса чатов — часть админской панели, не общая настройка."""
+        client, _ = api
+        _allow(monkeypatch)
+        resp = await client.post(
+            "/api/admin/summary-chats",
+            json={"action": "add", "entry": "-1001481050579"},
+            headers=_auth(),
+        )
+        assert resp.status_code == 403
+
+
 class TestAdminEndpoints:
     async def test_settings_403_for_non_admin(self, api, monkeypatch):
         client, _ = api
