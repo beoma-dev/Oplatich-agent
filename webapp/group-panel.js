@@ -1,35 +1,52 @@
-/* Сводки о заявках в общий чат: адрес задаёт админ, а не путь пользователя.
+/* Чаты, куда уходит сводка о каждой заявке.
  *
  * До 08.09.2026 сводка попадала в группу, ТОЛЬКО если человек открыл форму по
  * ссылке из неё: подал того же бота из лички — в группе тихо. Получалось, что
  * увидит группа заявку или нет, решал маршрут пользователя, а не решение
- * админа. Здесь чат задаётся один раз и работает для всех заявок.
+ * админа. Здесь адреса задаются один раз и работают для всех заявок.
  *
- * Своим файлом, как остальные панели: app.js у своего потолка строк, и
- * очередная несвязанная тема там его переполняет.
+ * Выключателя нет намеренно: пустой список и есть «не слать». Два способа
+ * выключить одно и то же рано или поздно разойдутся — один выключен, второй
+ * забыт, и почему тихо, непонятно.
+ *
+ * Своим файлом, как остальные панели: app.js у своего потолка строк.
  */
 function buildGroupPanel(ctx) {
   var $ = ctx.$;
-  if (!$("group-sum-seg")) return null;
+  if (!$("sum-list")) return null;
 
-  function fill(cfg) {
-    ctx.setSeg("group-sum-seg", cfg.enabled ? "on" : "off");
-    $("group-sum-input").value = cfg.chat_id ? String(cfg.chat_id) : "";
-    var note = $("group-sum-note");
-    // Три разных состояния, и молчать ни об одном нельзя: «выключено» и «чат
-    // не задан» выглядят одинаково, а means разное — во втором случае
-    // включение ничего не даст.
-    if (!cfg.chat_id) {
-      note.textContent = "Чат не задан — сводки никуда не идут.";
-    } else if (cfg.enabled) {
-      note.textContent = "Итог каждой заявки уходит в чат " + cfg.chat_id + ".";
-    } else {
-      note.textContent = "Выключено. Чат " + cfg.chat_id + " сохранён.";
+  function fill(chats) {
+    var box = $("sum-list");
+    box.textContent = "";
+    if (!chats || !chats.length) {
+      var empty = document.createElement("div");
+      empty.className = "counter";
+      empty.style.textAlign = "left";
+      empty.textContent = "Список пуст — сводки никуда не идут.";
+      box.appendChild(empty);
+      return;
     }
+    chats.forEach(function (chatId) {
+      var row = document.createElement("div");
+      row.className = "row-item";
+      var name = document.createElement("span");
+      name.style.flex = "1";
+      name.textContent = String(chatId);
+      var kill = document.createElement("button");
+      kill.type = "button";
+      kill.className = "add-btn btn-ghost";
+      kill.textContent = "Убрать";
+      kill.addEventListener("click", function () {
+        save({ action: "remove", entry: String(chatId) });
+      });
+      row.appendChild(name);
+      row.appendChild(kill);
+      box.appendChild(row);
+    });
   }
 
   function save(body) {
-    return fetch("/api/admin/group-summary", {
+    return fetch("/api/admin/summary-chats", {
       method: "POST",
       headers: {
         "X-Telegram-Init-Data": ctx.initData,
@@ -46,7 +63,8 @@ function buildGroupPanel(ctx) {
           ctx.showError(res.d.detail || "Не удалось сохранить.");
           return;
         }
-        fill(res.d.group_summary);
+        fill(res.d.summary_chats);
+        $("sum-input").value = "";
         if (ctx.tg && ctx.tg.HapticFeedback) {
           ctx.tg.HapticFeedback.notificationOccurred("success");
         }
@@ -54,9 +72,9 @@ function buildGroupPanel(ctx) {
       .catch(function () { ctx.showError("Сеть недоступна."); });
   }
 
-  ctx.bindSeg("group-sum-seg", function (v) { save({ enabled: v === "on" }); });
-  $("group-sum-save").addEventListener("click", function () {
-    save({ chat_id: $("group-sum-input").value.trim() });
+  $("sum-add").addEventListener("click", function () {
+    var value = $("sum-input").value.trim();
+    if (value) save({ action: "add", entry: value });
   });
 
   // Состояние приезжает вместе с остальными настройками админа

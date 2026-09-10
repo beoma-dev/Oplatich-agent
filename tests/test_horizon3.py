@@ -381,7 +381,7 @@ class TestNotifications:
         """
         from services import runtime_settings as rs
 
-        rs.set_group_summary(enabled=True, chat_id=-1001481050579)
+        rs.add_summary_chat(-1001481050579)
         bot = self._bot()
         # Автор НЕ участник группы: get_chat_member отвечает «left».
         gone = MagicMock()
@@ -400,9 +400,8 @@ class TestNotifications:
         нечего. Чат из ссылки называет отправитель, и без проверки чужую
         группу завалили бы сводками о чужих платежах.
         """
-        from services import runtime_settings as rs
 
-        rs.set_group_summary(enabled=False, chat_id=0)
+        # список пуст — сводки никуда не идут
         bot = self._bot()
         gone = MagicMock()
         gone.status = "left"
@@ -414,11 +413,22 @@ class TestNotifications:
         куда = [c.kwargs.get("chat_id") for c in bot.send_message.await_args_list]
         assert -100999 not in куда, "сводка ушла в чужой чат без проверки"
 
-    async def test_same_group_gets_one_message_not_two(self, tmp_paths, monkeypatch):
-        """Подали ИЗ той же группы, что настроена, — сообщение одно."""
+    async def test_two_chats_both_get_it(self, tmp_paths, monkeypatch):
+        """Чатов может быть несколько — сводка уходит в каждый."""
         from services import runtime_settings as rs
 
-        rs.set_group_summary(enabled=True, chat_id=-1001481050579)
+        rs.add_summary_chat(-1001481050579)
+        rs.add_summary_chat(-1002222222222)
+        bot = self._bot()
+        await intake.finalize_submission(bot, make_request(), invoice_file=None)
+        куда = [c.kwargs.get("chat_id") for c in bot.send_message.await_args_list]
+        assert -1001481050579 in куда and -1002222222222 in куда, куда
+
+    async def test_same_group_gets_one_message_not_two(self, tmp_paths, monkeypatch):
+        """Подали ИЗ того же чата, что настроен, — сообщение одно."""
+        from services import runtime_settings as rs
+
+        rs.add_summary_chat(-1001481050579)
         bot = self._bot()
         await intake.finalize_submission(
             bot, make_request(), invoice_file=None, return_chat_id=-1001481050579

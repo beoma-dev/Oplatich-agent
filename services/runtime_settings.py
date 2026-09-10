@@ -53,11 +53,11 @@ _DEFAULTS: dict = {
     # задержаться. Блокировка была бы отдельным решением: молча не принять
     # заполненную форму хуже, чем принять её во время работ.
     "maintenance": {},
-    # Сводка о каждой заявке в общий чат: {"chat_id": -100…, "enabled": true}.
-    # До 08.09.2026 сводка уходила ТОЛЬКО в тот чат, из которого открыли форму,
-    # то есть попадание в группу зависело от пути пользователя, а не от
-    # решения админа: подал из лички — в группе тихо.
-    "group_summary": {},
+    # Чаты, куда уходит сводка о КАЖДОЙ заявке: [-1001481050579, …].
+    # До 08.09.2026 сводка попадала только в тот чат, из которого открыли
+    # форму, то есть решал путь пользователя, а не решение админа: подал из
+    # лички — в группе тихо.
+    "summary_chats": [],
     "autofill": {},
     # Личный выключатель чтения счёта: {"<id>": true|false}. Общая настройка
     # остаётся значением по умолчанию — бета есть бета, и человек, которому
@@ -104,7 +104,10 @@ def _load_locked() -> dict:
                         for k, v in raw.get("reminders_by_user", {}).items()
                     },
                     "maintenance": dict(raw.get("maintenance", {})),
-                    "group_summary": dict(raw.get("group_summary", {})),
+                    "summary_chats": [
+                        int(x) for x in raw.get("summary_chats", [])
+                        if str(x).lstrip("-").isdigit()
+                    ],
                     "autofill": dict(raw.get("autofill", {})),
                     "autofill_by_user": dict(raw.get("autofill_by_user", {})),
                     "alerts": dict(raw.get("alerts", {})),
@@ -565,34 +568,40 @@ def set_maintenance(*, enabled: bool, text: str | None = None) -> dict:
     return maintenance_config()
 
 
-def group_summary_config() -> dict:
-    """Куда слать сводку о каждой заявке: чат и включено ли.
+def summary_chats() -> list[int]:
+    """Чаты, куда уходит сводка о каждой заявке. Пустой список — никуда.
 
-    chat_id = 0 означает «не задан»: слать некуда, и включённый выключатель
-    без чата ничего не делает — поэтому enabled считаем только вместе с ним.
+    Список, а не один чат: сегодня это общий чат по счетам, завтра может
+    понадобиться второй — бухгалтерии или руководству. Отдельного выключателя
+    нет намеренно: убрать последний чат и значит «не слать», а два способа
+    выключить одно и то же рано или поздно разойдутся.
     """
     with _lock:
-        own = dict(_load_locked()["group_summary"])
-    try:
-        chat_id = int(own.get("chat_id") or 0)
-    except (TypeError, ValueError):
-        chat_id = 0
-    return {"chat_id": chat_id, "enabled": bool(own.get("enabled")) and bool(chat_id)}
+        return list(_load_locked()["summary_chats"])
 
 
-def set_group_summary(*, enabled: bool | None = None, chat_id: int | None = None) -> dict:
-    """Меняет чат сводок и/или выключатель. None — поле не трогаем."""
+def add_summary_chat(chat_id: int) -> bool:
+    """Добавляет чат сводок. False — уже был."""
     with _lock:
         data = _load_locked()
-        if chat_id is not None:
-            data["group_summary"]["chat_id"] = int(chat_id)
-        if enabled is not None:
-            data["group_summary"]["enabled"] = bool(enabled)
+        if chat_id in data["summary_chats"]:
+            return False
+        data["summary_chats"].append(int(chat_id))
         _save_locked()
-    cfg = group_summary_config()
-    log.info("Сводки в группу: чат %s, %s",
-             cfg["chat_id"] or "не задан", "включены" if cfg["enabled"] else "выключены")
-    return cfg
+    log.info("Сводки о заявках: добавлен чат %s", chat_id)
+    return True
+
+
+def remove_summary_chat(chat_id: int) -> bool:
+    """Убирает чат сводок. False — такого и не было."""
+    with _lock:
+        data = _load_locked()
+        if chat_id not in data["summary_chats"]:
+            return False
+        data["summary_chats"].remove(chat_id)
+        _save_locked()
+    log.info("Сводки о заявках: убран чат %s", chat_id)
+    return True
 
 
 def personal_card_urgency(user_id: int) -> str:

@@ -227,15 +227,17 @@ async def finalize_submission(
 def _summary_targets(return_chat_id: int | None) -> list[tuple[int, bool]]:
     """Куда слать сводку: [(chat_id, пришёл ли чат из ссылки)], без повторов.
 
-    Настроенный чат и чат из ссылки часто совпадают — человек открыл форму
+    Настроенные чаты и чат из ссылки часто совпадают — человек открыл форму
     из той же группы, куда админ и просил слать. Тогда сообщение одно.
     """
     targets: list[tuple[int, bool]] = []
     if return_chat_id is not None:
         targets.append((return_chat_id, True))
-    cfg = rs.group_summary_config()
-    if cfg["enabled"] and cfg["chat_id"] not in {c for c, _ in targets}:
-        targets.append((cfg["chat_id"], False))
+    seen = {c for c, _ in targets}
+    for chat_id in rs.summary_chats():
+        if chat_id not in seen:
+            targets.append((chat_id, False))
+            seen.add(chat_id)
     return targets
 
 
