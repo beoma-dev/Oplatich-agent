@@ -630,6 +630,10 @@ def set_summary_chat_name(chat_id: int, title: str) -> bool:
     key, title = str(chat_id), title.strip()
     with _lock:
         data = _load_locked()
+        # Имя без адреса — мусор: чат убрали, а его название осталось бы
+        # копиться в файле навсегда.
+        if chat_id not in data["summary_chats"]:
+            return False
         if not title or data["summary_chat_names"].get(key) == title:
             return False
         data["summary_chat_names"][key] = title

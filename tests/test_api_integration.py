@@ -631,6 +631,11 @@ class TestSummaryChats:
         assert resp.json()["summary_chats"] == []
         assert rs.summary_chat_names() == {}
 
+    async def test_name_of_a_chat_outside_the_list_is_not_kept(self, api, monkeypatch):
+        """Имя без адреса не хранится: убрали чат — не должно копиться."""
+        assert rs.set_summary_chat_name(-1005555555555, "Посторонний") is False
+        assert rs.summary_chat_names() == {}
+
     async def test_only_admins_may_look(self, api, monkeypatch):
         """Адреса чатов — часть админской панели, не общая настройка."""
         client, _ = api
