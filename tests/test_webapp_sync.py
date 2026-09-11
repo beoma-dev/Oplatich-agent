@@ -934,6 +934,10 @@ def test_form_sends_what_was_attached_not_what_the_switch_says():
     assert "state.hasInvoice && state.file" not in JS, "файл снова зависит от тумблера"
     assert '<script src="carry-note.js"></script>' in MARKUP
     assert 'id="carry-note"' in MARKUP
+    # И словами: переключатель выглядит как «или-или», и без подписи человек
+    # так его и понимает — ровно из-за этого счёт и потерялся.
+    assert "какое поле показать, а не что отправить" in MARKUP
+    assert "Одно другому не мешает" in MARKUP
 
 
 def test_split_files_stay_reasonably_small():

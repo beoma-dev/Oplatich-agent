@@ -783,7 +783,7 @@ test("без флага инструкция остаётся текстовой
     "тур построился без флага");
   // Текст на месте — он и есть инструкция, когда анимации нет.
   assert.ok(await page.evaluate(() =>
-    document.getElementById("help-view").textContent.indexOf("Счёт или реквизиты") !== -1));
+    document.getElementById("help-view").textContent.indexOf("Счёт и реквизиты") !== -1));
   await page.close();
 });
 
