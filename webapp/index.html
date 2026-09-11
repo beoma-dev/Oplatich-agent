@@ -305,7 +305,7 @@
   </div>
 
   <div class="card">
-    <div class="card-title">📎 Счёт</div>
+    <div class="card-title">🧾 Счёт</div>
     <div id="file-warn" class="hidden" role="alert"></div>
     <div id="autofill" class="autofill hidden">
       <div class="autofill-head">
@@ -323,12 +323,12 @@
       </div>
     </div>
     <div class="seg" id="invoice-seg">
-      <button type="button" data-value="1" class="active">📎 Файл счёта</button>
+      <button type="button" data-value="1" class="active">🧾 Файл счёта</button>
       <button type="button" data-value="0">✍️ Реквизиты</button>
     </div>
     <div class="counter" style="text-align:left; margin-top:6px">
-      Переключатель выбирает, какое поле показать, а не что отправить: можно приложить счёт
-      <b>и</b> вписать реквизиты — уйдёт и то, и другое. Оба необязательны: примем заявку и без них.
+      Выбирает поле, а не то, что отправить: можно приложить счёт <b>и</b> вписать
+      реквизиты — уйдёт и то, и другое. Оба необязательны.
     </div>
     <!-- Что уйдёт с заявкой, но спрятано текущим положением переключателя.
          Без этой строки скрытое уходило бы молча — ровно так же молча, как
@@ -342,7 +342,7 @@
               data-tip="Убрать файл">✕</button>
         <div class="drop-inner">
           <span class="drop-icon" id="drop-icon">📄</span>
-          <span id="drop-text">Нажмите, чтобы выбрать файл</span>
+          <span id="drop-text">Нажмите, чтобы приложить счёт</span>
           <small id="drop-hint">PDF, JPG, PNG, XLSX · до 20 МБ</small>
         </div>
       </div>
@@ -359,14 +359,6 @@
       <div class="req-warn hidden" id="req-warnings"></div>
     </div>
 
-    <div id="extra-block">
-      <label class="field-label">📎 Дополнительные документы <span class="optional-mark">необязательно</span></label>
-      <button type="button" class="add-btn btn-ghost" id="extra-pick" style="width:100%">Прикрепить файлы</button>
-      <input type="file" id="extra-input" class="hidden" multiple
-             accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,application/pdf,image/jpeg,image/png">
-      <div id="extra-list"></div>
-      <div class="counter" style="text-align:left" id="extra-note">Договор, акт, спецификация — до 5 файлов, каждый до 20 МБ.</div>
-    </div>
   </div>
 
   <div class="card">
@@ -418,6 +410,15 @@
     <div class="card-title">💬 Комментарий <span class="optional-mark">необязательно</span></div>
     <textarea id="comment" maxlength="500" placeholder="Например: аренда офиса за июль, договор №А-42"></textarea>
     <div class="counter"><span id="comment-count">0</span>/500</div>
+  </div>
+
+  <div class="card" id="extra-block">
+    <div class="card-title">📎 Документы к заявке <span class="optional-mark">необязательно</span></div>
+    <button type="button" class="add-btn btn-ghost" id="extra-pick" style="width:100%">Добавить документы</button>
+    <input type="file" id="extra-input" class="hidden" multiple
+           accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,application/pdf,image/jpeg,image/png">
+    <div id="extra-list"></div>
+    <div class="counter" style="text-align:left" id="extra-note">Договор, акт, спецификация — до 5 файлов, каждый до 20 МБ. Счёт сюда класть не нужно — для него поле выше.</div>
   </div>
 
   <button type="button" id="form-reset">Очистить форму</button>

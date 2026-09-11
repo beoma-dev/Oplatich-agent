@@ -916,7 +916,6 @@
   }
   .extra-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #extra-block { margin-top: 14px; }
-  #extra-block .field-label { margin-bottom: 8px; }
 
   .row-del {
     flex: 0 0 auto;

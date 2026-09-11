@@ -936,7 +936,7 @@ def test_form_sends_what_was_attached_not_what_the_switch_says():
     assert 'id="carry-note"' in MARKUP
     # И словами: переключатель выглядит как «или-или», и без подписи человек
     # так его и понимает — ровно из-за этого счёт и потерялся.
-    assert "какое поле показать, а не что отправить" in MARKUP
+    assert "Выбирает поле, а не то, что отправить" in MARKUP
     assert "Одно другому не мешает" in MARKUP
 
 
