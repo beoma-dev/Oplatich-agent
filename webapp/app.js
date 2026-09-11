@@ -537,7 +537,7 @@
     showAutofill(null);
     dropZone.classList.remove("has-file");
     $("drop-icon").textContent = "📄";
-    $("drop-text").textContent = "Нажмите, чтобы приложить счёт";
+    $("drop-text").textContent = "Нажмите, чтобы выбрать файл";
     $("drop-hint").textContent = "PDF, JPG, PNG, XLSX · до 20 МБ";
   }
 
@@ -969,7 +969,7 @@
     });
     $("extra-pick").textContent = state.extras.length
       ? "Добавить ещё (" + state.extras.length + " из " + MAX_EXTRA_FILES + ")"
-      : "Добавить документы";
+      : "Прикрепить файлы";
   }
 
   $("extra-pick").addEventListener("click", function () { $("extra-input").click(); });
