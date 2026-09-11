@@ -742,3 +742,50 @@ test("без файла поле file вообще не отправляется
   assert.ok(!keys.includes("file"), `поле file всё-таки отправлено: ${keys}`);
   await page.close();
 });
+
+test("приложенный файл виден, даже когда переключились на «Реквизиты»", async () => {
+  // 11.09.2026: файл приложили, переключились на «Реквизиты», и он молча не
+  // ушёл. Теперь уходит — и форма обязана про это сказать, иначе тишина
+  // просто поменяла сторону.
+  const page = await openApp(browser, { routes: HINTS });
+  await page.setInputFiles("#file-input", {
+    name: "IMG_4712.jpeg", mimeType: "image/jpeg", buffer: Buffer.from([0xff, 0xd8, 0xff]),
+  });
+  await page.waitForTimeout(200);
+
+  const note = page.locator("#carry-note");
+  assert.ok(await note.isHidden(), "в режиме «Счёт» без реквизитов строки быть не должно");
+
+  await page.click('#invoice-seg button[data-value="0"]');
+  await page.waitForTimeout(150);
+  assert.ok(await note.isVisible(), "про приложенный файл не сказали");
+  assert.match(await note.textContent(), /IMG_4712\.jpeg/);
+
+  await page.click("#carry-undo");
+  await page.waitForTimeout(150);
+  assert.ok(await note.isHidden(), "файл убрали, а строка осталась");
+  const left = await page.evaluate(() => document.getElementById("file-input").files.length);
+  assert.equal(left, 0, "«Убрать файл» не убрал файл");
+  await page.close();
+});
+
+test("заполненные реквизиты видны, когда выбран «Файл счёта»", async () => {
+  const page = await openApp(browser, { routes: HINTS });
+  await page.evaluate(() => {
+    const el = document.getElementById("requisites");
+    el.value = "ИНН 7707083893";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await page.waitForTimeout(150);
+
+  const note = page.locator("#carry-note");
+  assert.ok(await note.isVisible(), "про заполненные реквизиты не сказали");
+  assert.match(await note.textContent(), /Реквизиты заполнены/);
+
+  await page.click("#carry-undo");
+  await page.waitForTimeout(150);
+  const value = await page.evaluate(() => document.getElementById("requisites").value);
+  assert.equal(value, "", "«Очистить» не очистил");
+  assert.ok(await note.isHidden(), "строка осталась после очистки");
+  await page.close();
+});

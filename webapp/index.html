@@ -329,6 +329,11 @@
     <div class="counter" style="text-align:left; margin-top:6px">
       И то, и другое — необязательно: заявку примем и без них. Финансист увидит, что приложено.
     </div>
+    <!-- Что уйдёт с заявкой, но спрятано текущим положением переключателя.
+         Без этой строки скрытое уходило бы молча — ровно так же молча, как
+         раньше НЕ уходил приложенный счёт (11.09.2026). Заполняет
+         carry-note.js. -->
+    <div id="carry-note" class="counter hidden" style="text-align:left; margin-top:8px"></div>
 
     <div id="file-block" style="margin-top:12px">
       <div class="drop" id="drop-zone">
@@ -1031,6 +1036,7 @@
 <script src="reminders-panel.js"></script>
 <script src="maint-panel.js"></script>
 <script src="group-panel.js"></script>
+<script src="carry-note.js"></script>
 <script src="closing-panel.js"></script>
 <script src="nudge-panel.js"></script>
 <script src="list-tools.js"></script>

@@ -279,6 +279,7 @@
     if (!state.hasInvoice) hideFileWarn();
   });
 
+
   // --- Поля ------------------------------------------------------------------
   var amountEl = $("amount"), cpEl = $("counterparty"), commentEl = $("comment"),
       reqEl = $("requisites");
@@ -1108,12 +1109,16 @@
     fd.append("comment", commentEl.value);
     // «Настраиваемая» — это про дату, для реестра срочность обычная.
     fd.append("urgency", state.urgency === "URGENT" ? "URGENT" : "NORMAL");
-    fd.append("has_invoice", state.hasInvoice ? "1" : "0");
-    // Файл прикладываем, ТОЛЬКО если он есть: с 26.08.2026 он необязателен,
-    // а append(null) отправляет строку "null" — сервер не может разобрать её
-    // как файл и отвечает ошибкой валидации со списком в detail.
-    if (state.hasInvoice && state.file) fd.append("file", state.file);
-    if (!state.hasInvoice) fd.append("requisites", reqEl.value);
+    // Уходит то, что человек ПРИЛОЖИЛ и ВПИСАЛ, а не то, куда стоит
+    // переключатель. 11.09.2026: счёт приложили, распознавание подставило из
+    // него реквизиты, человек переключился на «Реквизиты» — и файл молча
+    // остался на телефоне. Форма показывала «✅ файл» до переключения и
+    // ничего не сказала после.
+    // append(null) слать нельзя: он отправляет строку "null", и сервер
+    // отвечает ошибкой валидации — поэтому проверка на наличие.
+    if (state.file) fd.append("file", state.file);
+    if (reqEl.value.trim()) fd.append("requisites", reqEl.value);
+    fd.append("has_invoice", state.file ? "1" : "0");
 
     // Возврат итога в группу/канал: ?return_chat= или start_param прямой
     // ссылки. Берём ТОЛЬКО число: там же ходят «help» и «fin_INV-…» — это

@@ -920,6 +920,22 @@ def test_mini_app_is_split_into_files():
     assert "buildAlertsPanel({" in JS
 
 
+def test_form_sends_what_was_attached_not_what_the_switch_says():
+    """Файл уходит, если он приложен, — независимо от «Счёт / Реквизиты».
+
+    11.09.2026 заявка ушла без счёта: приложили файл, распознавание
+    подставило из него реквизиты, человек переключился на «Реквизиты», и
+    отправка смотрела на положение тумблера, а не на вложение. Молчание в
+    обратную сторону — та же ошибка, поэтому рядом обязана быть строка
+    «это тоже уйдёт».
+    """
+    assert 'if (state.file) fd.append("file", state.file);' in JS
+    assert 'if (reqEl.value.trim()) fd.append("requisites", reqEl.value);' in JS
+    assert "state.hasInvoice && state.file" not in JS, "файл снова зависит от тумблера"
+    assert '<script src="carry-note.js"></script>' in MARKUP
+    assert 'id="carry-note"' in MARKUP
+
+
 def test_split_files_stay_reasonably_small():
     """Порог, чтобы файлы снова не срослись в одну простыню.
 
@@ -985,6 +1001,7 @@ def test_split_files_stay_reasonably_small():
                         ("reminders-panel.js", 200),
                         ("maint-panel.js", 150),
                         ("group-panel.js", 110),
+                        ("carry-note.js", 100),
                         ("closing-panel.js", 150),
                         ("nudge-panel.js", 100),
                         ("list-tools.js", 200), ("busy-banner.js", 80),

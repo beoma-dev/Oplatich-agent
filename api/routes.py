@@ -1766,8 +1766,12 @@ async def submit_invoice(
     # позже» подать было нельзя: человек придумывал реквизиты или прикладывал
     # что попало, лишь бы форма пропустила. Что именно приложено, видно
     # финансисту в карточке — включая случай, когда не приложено ничего.
+    # Приложенный файл принимаем НЕЗАВИСИМО от переключателя «Счёт/Реквизиты»:
+    # 11.09.2026 человек приложил счёт, распознавание подставило из него
+    # реквизиты, она переключилась на «Реквизиты» — и файл молча не ушёл.
+    # Условие смотрело на ВЫБОР в форме, а не на вложение.
     has_file = file is not None and bool(file.filename)
-    if with_invoice and has_file:
+    if has_file:
         content = await _read_limited(file, MAX_FILE_SIZE_BYTES)
         if len(content) > MAX_FILE_SIZE_BYTES:
             raise HTTPException(status_code=422, detail="Файл больше 20 МБ.")
@@ -1785,7 +1789,10 @@ async def submit_invoice(
         # Ссылка (Google Drive) или путь (локально) — колонка «Ссылка на счет».
         invoice.file_url = await storage.save_invoice(content, invoice.file_name)
         invoice_bytes = content
-    elif requisites and requisites.strip():
+    # Не elif: счёт и реквизиты не исключают друг друга. Заявка со счётом,
+    # рядом с которым выписаны реквизиты, — обычное дело, и терять одно
+    # из-за наличия другого незачем.
+    if requisites and requisites.strip():
         # Реквизиты проверяем, только если их прислали: пустые — не ошибка.
         try:
             invoice.requisites = validate_text_field(
@@ -1794,8 +1801,9 @@ async def submit_invoice(
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
     # has_invoice в модели отражает ФАКТ, а не выбор в форме: без файла
-    # карточка не должна обещать финансисту вложение, которого нет.
-    invoice.has_invoice = with_invoice and has_file
+    # карточка не должна обещать финансисту вложение, которого нет — и
+    # наоборот, приложенный счёт обязана назвать, как бы ни стоял тумблер.
+    invoice.has_invoice = has_file
 
     # --- Возврат итога в группу (id пришёл из deep-link, проверяется в intake)
     return_chat_id: int | None = None

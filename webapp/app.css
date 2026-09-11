@@ -1420,7 +1420,7 @@
   /* Сброс черновика: две точки входа, обе почти невесомые — ссылка в
      плашке восстановления (там, где это нужнее всего) и приглушённая
      строка в конце формы (когда плашка уже исчезла). */
-  #draft-clear {
+  #draft-clear, #carry-undo {
     margin-left: 8px;
     border: none;
     background: none;
@@ -1445,7 +1445,7 @@
     cursor: pointer;
   }
   @media (hover: hover) { #form-reset:hover { color: var(--danger); } }
-  #form-reset:focus-visible, #draft-clear:focus-visible {
+  #form-reset:focus-visible, #draft-clear:focus-visible, #carry-undo:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
     border-radius: 8px;

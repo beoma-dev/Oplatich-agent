@@ -129,6 +129,77 @@ class TestWorkDeadline:
         assert resp.status_code == 422
 
 
+class TestInvoiceAndRequisitesTogether:
+    """Счёт и реквизиты не исключают друг друга — и переключатель им не судья.
+
+    11.09.2026 заявка «Смит Лайн групп» ушла БЕЗ счёта: человек приложил
+    файл, распознавание подставило из него реквизиты, он переключился на
+    «Реквизиты» — и файл молча не отправился. Форма и сервер смотрели на
+    ВЫБОР в форме, а не на то, что человек приложил.
+    """
+
+    async def test_attached_file_is_saved_even_with_the_switch_on_requisites(
+        self, api, monkeypatch
+    ):
+        """Приложенный файл сохраняется при has_invoice=0."""
+        from openpyxl import load_workbook
+
+        from bot.models import SHEET_HEADERS
+
+        client, _ = api
+        _allow(monkeypatch)
+        resp = await client.post(
+            "/api/invoice",
+            data=_form(has_invoice="0", requisites="ИНН 7707083893"),
+            files={"file": ("счёт.pdf", b"%PDF-1.4 test", "application/pdf")},
+            headers=_auth(),
+        )
+        assert resp.status_code == 200, resp.text
+        ws = load_workbook(settings.registry_path).active
+        link = ws.cell(2, SHEET_HEADERS.index("Ссылка на счет") + 1).value or ""
+        assert link, "счёт потерян из-за положения переключателя"
+
+    async def test_both_columns_are_filled(self, api, monkeypatch):
+        """И счёт, и реквизиты попадают в реестр — теряется только одно из них."""
+        from openpyxl import load_workbook
+
+        from bot.models import SHEET_HEADERS
+
+        client, _ = api
+        _allow(monkeypatch)
+        await client.post(
+            "/api/invoice",
+            data=_form(has_invoice="1", requisites="ООО «Смит», ИНН 7707083893"),
+            files={"file": ("счёт.pdf", b"%PDF-1.4 test", "application/pdf")},
+            headers=_auth(),
+        )
+        ws = load_workbook(settings.registry_path).active
+        row = {h: ws.cell(2, i + 1).value or "" for i, h in enumerate(SHEET_HEADERS)}
+        assert row["Ссылка на счет"], "счёт не сохранён"
+        assert "Смит" in row["Реквизиты"], "реквизиты затёрлись наличием счёта"
+
+    async def test_card_names_the_file_even_when_the_switch_said_requisites(
+        self, api, monkeypatch
+    ):
+        """Карточка обязана назвать приложенный счёт, как бы ни стоял тумблер."""
+        client, bot = api
+        _allow(monkeypatch)
+        settings.__dict__.pop("finance_recipients", None)
+        monkeypatch.setattr(settings, "finance_chat_ids_raw", "77")
+        await client.post(
+            "/api/invoice",
+            data=_form(has_invoice="0", requisites="ИНН 7707083893"),
+            files={"file": ("счёт.pdf", b"%PDF-1.4 test", "application/pdf")},
+            headers=_auth(),
+        )
+        sent = " ".join(
+            str(c.kwargs.get("text", "")) + str(c.kwargs.get("caption", ""))
+            for c in list(bot.send_message.await_args_list)
+            + list(bot.send_document.await_args_list)
+        )
+        assert "Счёт — этим файлом" in sent, "карточка умолчала о приложенном счёте"
+
+
 class TestExtraDocuments:
     """Дополнительные документы: договор, акт, спецификация.
 
