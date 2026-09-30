@@ -20,6 +20,7 @@ from bot.access import is_bot_admin
 from config import settings
 from services import audit
 from services import runtime_settings as rs
+from services.access_requests import settle_elsewhere
 from services.user_directory import resolve
 
 log = logging.getLogger(__name__)
@@ -230,6 +231,14 @@ async def fin_del_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
 
 
+def _actor(update: Update) -> str:
+    """Как подписать действие админа в карточке заявки на доступ."""
+    user = update.effective_user
+    if user is None:
+        return ""
+    return f"@{user.username}" if user.username else user.full_name
+
+
 def _resolve_user_id(entry: str) -> int | None:
     """id из аргумента: число — как есть, @username — через справочник."""
     if entry.lstrip("-").isdigit():
@@ -252,6 +261,9 @@ async def allow_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
         return
     added = await asyncio.to_thread(rs.add_allowed, uid)
+    # Висящую заявку на доступ закрывает и эта дверь — иначе её карточки
+    # остаются у админов с живыми кнопками поверх уже выданного доступа.
+    await settle_elsewhere(context.bot, uid, True, _actor(update))
     await update.effective_message.reply_text(
         f"✅ Доступ открыт: {entry} (id {uid})." if added else f"{entry} уже в whitelist."
     )
@@ -269,6 +281,7 @@ async def deny_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.effective_message.reply_text(f"Не знаю id пользователя {entry}.")
         return
     removed = await asyncio.to_thread(rs.remove_allowed, uid)
+    await settle_elsewhere(context.bot, uid, False, _actor(update))
     await update.effective_message.reply_text(
         f"🗑 Доступ закрыт: {entry} (id {uid})."
         if removed

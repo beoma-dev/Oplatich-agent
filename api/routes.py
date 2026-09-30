@@ -59,7 +59,7 @@ from services import (
 )
 from services import health as health_pulse
 from services import runtime_settings as rs
-from services.access_requests import request_access
+from services.access_requests import request_access, settle_elsewhere
 from services.deletion import delete_request as delete_request_service
 from services.intake import finalize_submission
 from services.local_storage import build_extra_filename, build_invoice_filename
@@ -1431,7 +1431,7 @@ async def admin_financiers(request: Request) -> dict:
 @router.post("/admin/allowed")
 async def admin_allowed(request: Request) -> dict:
     """Открыть/закрыть доступ: {"action": "add"|"remove", "entry": "@user"|"123"}."""
-    await _require_admin(request)
+    admin = await _require_admin(request)
     body = await request.json()
     action, entry = body.get("action"), str(body.get("entry", "")).strip()
     if action not in ("add", "remove") or not entry:
@@ -1455,6 +1455,11 @@ async def admin_allowed(request: Request) -> dict:
             f"Доступ закрыт (id {uid})." if changed
             else "Нет в динамическом whitelist (записи из .env правятся на сервере)."
         )
+    # Заявка на доступ, если она висела, решена этим же действием: иначе её
+    # карточки остаются у админов с живыми кнопками, и чужое «Отказать»
+    # позже напишет человеку отказ поверх уже выданного доступа.
+    actor = "@" + str(admin["username"]) if admin.get("username") else f"id {admin['id']}"
+    await settle_elsewhere(request.app.state.bot, uid, action == "add", actor)
     return {"ok": changed, "message": message}
 
 

@@ -11,11 +11,14 @@ import asyncio
 import html
 import logging
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 
-from services import audit
+from config import settings
+from services import access_cards, audit
 from services import runtime_settings as rs
 from services.user_directory import remember, username_for
 
@@ -76,12 +79,19 @@ async def request_access(
     delivered = 0
     for admin_id in admins:
         try:
-            await bot.send_message(
+            msg = await bot.send_message(
                 chat_id=admin_id, text=text, parse_mode=ParseMode.HTML, reply_markup=markup
             )
             delivered += 1
         except Exception:  # noqa: BLE001 — недоступный админ не ломает заявку
             log.warning("Заявка на доступ не доставлена админу %s", admin_id)
+            continue
+        # Где лежит карточка — чтобы закрыть её у ВСЕХ, а не только у того,
+        # кто нажал. Номер сообщения бывает не числом (заглушка бота в
+        # тестах); тогда просто не запоминаем — заявка от этого не страдает.
+        message_id = getattr(msg, "message_id", None)
+        if isinstance(message_id, int):
+            await access_cards.save(user_id, admin_id, message_id, text)
     await audit.log_event(audit.ACCESS_REQUESTED, user_id, username or None, who)
     if not delivered:
         # Заявку не снимаем: админ увидит её в панели, когда откроет чат.
@@ -89,13 +99,114 @@ async def request_access(
     return SENT
 
 
+async def _close_cards(
+    bot: Bot,
+    target_id: int,
+    note: str,
+    actor_name: str,
+    fallback_card: dict | None,
+) -> None:
+    """Дописывает итог во ВСЕ карточки заявки и снимает с них кнопки.
+
+    Иначе у остальных админов остаётся живая кнопка по решённому вопросу.
+    Нажатие на неё теперь безвредно (см. resolve_access), но человек всё
+    равно жмёт и не понимает, почему ничего не происходит, — а карточки
+    живут в переписке месяцами.
+
+    fallback_card — та, на которой нажали: страховка для заявок, разосланных
+    до появления таблицы карточек. Сбой одной карточки не срывает остальные:
+    сообщение могли удалить, а решение уже принято и отменять его нечем.
+    """
+    cards = await access_cards.for_target(target_id)
+    if not cards and fallback_card:
+        cards = [fallback_card]
+    tail = f"\n\n<b>{html.escape(note)}</b>"
+    if actor_name:
+        # Подписываем только СВОЁ решение. У запоздалого нажатия решал другой
+        # человек и раньше: поставить тут нажавшего и время нажатия значило бы
+        # соврать в той самой карточке, которая и должна прояснить, что было.
+        stamp = datetime.now(ZoneInfo(settings.timezone)).strftime("%d.%m %H:%M")
+        tail += f" · {html.escape(actor_name)} · {stamp}"
+    for card in cards:
+        try:
+            await bot.edit_message_text(
+                chat_id=card["chat_id"],
+                message_id=card["message_id"],
+                text=(card.get("base_html") or "") + tail,
+                parse_mode=ParseMode.HTML,
+                reply_markup=None,
+            )
+        except Exception:  # noqa: BLE001 — карточки могло уже не быть
+            log.info(
+                "Карточка заявки на доступ %s в чате %s не обновилась",
+                target_id, card["chat_id"],
+            )
+    await access_cards.clear_target(target_id)
+
+
+async def settle_elsewhere(bot: Bot, target_id: int, opened: bool, actor_name: str) -> bool:
+    """Заявку закрыли не кнопкой на карточке, а панелью или командой.
+
+    Доступ выдают тремя дверями: кнопка на карточке, ⚙️ → Доступ и /allow.
+    Снимала висящую заявку только первая, и от этого карточки оставались
+    живыми: человеку уже открыли доступ из панели, а другой админ потом
+    жал на своей карточке «Отказать» — заявка снималась как нерешённая,
+    человек получал «в доступе отказано», а доступ у него оставался.
+    Идемпотентность resolve_access эту дверь не закрывает: заявка-то ещё
+    висела, и нажатие выглядело первым.
+
+    True — заявка висела и снята нами (значит, карточки были и закрыты).
+    """
+    if not rs.clear_access_request(target_id):
+        return False
+    who = username_for(target_id) or f"id {target_id}"
+    note = f"✅ Доступ открыт: {who}" if opened else f"🚫 Доступ закрыт: {who}"
+    await _close_cards(bot, target_id, note, actor_name, None)
+    return True
+
+
 async def resolve_access(
-    bot: Bot, target_id: int, approve: bool, *, actor_id: int, actor_name: str
-) -> str:
-    """Решение админа. Возвращает короткий итог для карточки в чате."""
-    rs.clear_access_request(target_id)
+    bot: Bot,
+    target_id: int,
+    approve: bool,
+    *,
+    actor_id: int,
+    actor_name: str,
+    fallback_card: dict | None = None,
+) -> tuple[bool, str]:
+    """Решение админа: (применено ли, короткий итог для карточки).
+
+    Заявку видят ВСЕ админы, а снять её может только один — и признак
+    победителя в гонке возвращает сам `clear_access_request`. Раньше это
+    значение выбрасывалось, и запоздалое нажатие проходило как полноценное
+    решение. Проверено прогоном 30.09.2026: «Отказать» после чужого
+    «Открыть доступ» оставляло доступ ОТКРЫТЫМ (отзыва тут нет и не надо —
+    в норме отзывать нечего), писало человеку «в доступе отказано» и
+    клало в аудит отказ. Расходились три картины мира разом: у человека,
+    у второго админа и в журнале.
+
+    Побеждает ПЕРВОЕ решение. Отозвать выданный доступ можно явно, в панели
+    (⚙️ → Доступ), а не случайным касанием по карточке месячной давности.
+    """
     # Ник знаем из справочника — в итоге на карточке он читается лучше id.
     who = username_for(target_id) or f"id {target_id}"
+    if not rs.clear_access_request(target_id):
+        opened = target_id in rs.effective_allowed_ids()
+        outcome = "доступ уже открыт" if opened else "решение уже принято"
+        # Отдельным событием, а не ACCESS_RESOLVED: запоздалое нажатие —
+        # это не решение, и в журнале «кто что решил» ему не место. Старые
+        # записи отличались бы только формой details, а этот урок в проекте
+        # уже оплачен (закрывающие документы считались подачей заявки).
+        await audit.log_event(
+            audit.ACCESS_LATE_CLICK,
+            actor_id,
+            actor_name,
+            f"{'approve' if approve else 'reject'} {target_id} · заявка уже закрыта",
+        )
+        late = f"⏳ Заявку уже рассмотрели — {outcome} ({who})."
+        await _close_cards(bot, target_id, late, "", fallback_card)
+        return False, late
+
     if approve:
         rs.add_allowed(target_id)
         note = f"✅ Доступ открыт: {who}"
@@ -113,4 +224,5 @@ async def resolve_access(
     await audit.log_event(
         audit.ACCESS_RESOLVED, actor_id, actor_name, f"{'approve' if approve else 'reject'} {target_id}"
     )
-    return note
+    await _close_cards(bot, target_id, note, actor_name, fallback_card)
+    return True, note

@@ -43,6 +43,7 @@ MAINTENANCE = "MAINTENANCE"                  # админ повесил или 
 ADMIN_ROLE = "ADMIN_ROLE"                    # админ назначен или разжалован
 ACCESS_REQUESTED = "ACCESS_REQUESTED"        # сотрудник попросил доступ
 ACCESS_RESOLVED = "ACCESS_RESOLVED"          # админ решил по заявке на доступ
+ACCESS_LATE_CLICK = "ACCESS_LATE_CLICK"      # нажал по заявке, решённой раньше
 FILE_SUSPICIOUS = "FILE_SUSPICIOUS"          # вложение не похоже на счёт
 REQUEST_WITHDRAWN = "REQUEST_WITHDRAWN"      # автор отозвал свою заявку
 WITHDRAW_DENIED = "WITHDRAW_DENIED"          # попытка отозвать чужую/непустую заявку

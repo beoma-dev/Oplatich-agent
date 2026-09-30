@@ -1833,8 +1833,8 @@ class TestAccessRequests:
         _admins(monkeypatch, "1")
         await client.post("/api/access/request", headers=_auth())
         assert not is_allowed(42)
-        note = await resolve_access(bot, 42, True, actor_id=1, actor_name="@boss")
-        assert "Доступ открыт" in note
+        applied, note = await resolve_access(bot, 42, True, actor_id=1, actor_name="@boss")
+        assert applied and "Доступ открыт" in note
         assert is_allowed(42)
         # Заявка снята — повторная просьба снова дойдёт до админов.
         assert (await client.get("/api/access", headers=_auth())).json()["pending"] is False
@@ -1867,11 +1867,137 @@ class TestAccessRequests:
         await client.post("/api/access/request", headers=_auth())
         assert username_for(42) == "@tester"
 
-        note = await resolve_access(bot, 42, True, actor_id=1, actor_name="@boss")
+        _, note = await resolve_access(bot, 42, True, actor_id=1, actor_name="@boss")
         assert "@tester" in note, "решение админа тоже должно называть человека по нику"
         body = (await client.get("/api/admin/settings", headers=_auth(1))).json()
         rows = [u for u in body["allowed"] if u["id"] == 42]
         assert rows and rows[0]["username"] == "@tester"
+
+
+    async def test_second_admin_cannot_undo_the_first_decision(self, api, monkeypatch):
+        """Побеждает ПЕРВОЕ решение, а не последнее нажатие.
+
+        30.09.2026 прогон показал: «Отказать» по карточке, на которой другой
+        админ уже нажал «Открыть доступ», оставлял доступ ОТКРЫТЫМ (отзыва
+        в этой ветке нет), писал человеку «в доступе отказано» и клал в
+        аудит отказ. Расходились три картины мира: у человека, у второго
+        админа и в журнале.
+        """
+        from bot.access import is_allowed
+        from services.access_requests import resolve_access
+
+        client, bot = api
+        _admins(monkeypatch, "1,2")
+        await client.post("/api/access/request", headers=_auth())
+
+        first, note_a = await resolve_access(bot, 42, True, actor_id=1, actor_name="@a")
+        assert first and is_allowed(42)
+
+        second, note_b = await resolve_access(bot, 42, False, actor_id=2, actor_name="@b")
+        assert second is False, "второе решение применилось поверх первого"
+        assert is_allowed(42), "запоздалый отказ закрыл уже выданный доступ"
+        assert "уже рассмотрели" in note_b, f"второму админу не сказали правду: {note_b}"
+        assert "доступ уже открыт" in note_b
+        # И человеку не ушло второго, противоречащего сообщения.
+        to_user = [c for c in bot.send_message.await_args_list
+                   if c.kwargs.get("chat_id") == 42]
+        assert len(to_user) == 1, "человек получил два решения по одной заявке"
+        assert "Доступ открыт" in str(to_user[0])
+        assert note_a != note_b
+
+    async def test_late_click_is_not_written_down_as_a_decision(self, api, monkeypatch):
+        """Запоздалое нажатие идёт в аудит СВОИМ событием.
+
+        Иначе журнал «кто что решил» отвечает не на свой вопрос: решение
+        было одно, а записей о решениях — две, причём с разным исходом.
+        """
+        from services import audit
+        from services.access_requests import resolve_access
+
+        client, bot = api
+        _admins(monkeypatch, "1,2")
+        await client.post("/api/access/request", headers=_auth())
+        await resolve_access(bot, 42, True, actor_id=1, actor_name="@a")
+        await resolve_access(bot, 42, False, actor_id=2, actor_name="@b")
+
+        rows = await audit.recent_events(50)
+        kinds = [r["event"] for r in rows]
+        assert kinds.count(audit.ACCESS_RESOLVED) == 1, "решений в журнале больше одного"
+        assert audit.ACCESS_LATE_CLICK in kinds, "запоздалое нажатие нигде не осело"
+
+    async def test_decision_closes_the_cards_of_all_admins(self, api, monkeypatch):
+        """Карточку закрывает решение — у ВСЕХ, а не только у нажавшего.
+
+        Тот же урок, что в services/cards.py про карточки заявок: живая
+        кнопка по решённому вопросу зовёт нажать, а карточки лежат в
+        переписке месяцами.
+        """
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        from services.access_requests import resolve_access
+
+        client, bot = api
+        _admins(monkeypatch, "1,2")
+        # Заглушка бота по умолчанию не возвращает номер сообщения и не умеет
+        # редактировать: здесь нужно и то, и другое — проверяем именно правку
+        # карточек, а её адрес и есть (chat_id, message_id).
+        ids = iter(range(900, 999))
+        bot.send_message = AsyncMock(
+            side_effect=lambda **kw: SimpleNamespace(message_id=next(ids))
+        )
+        bot.edit_message_text = AsyncMock()
+        await client.post("/api/access/request", headers=_auth())
+        assert bot.send_message.await_count == 2
+
+        await resolve_access(bot, 42, True, actor_id=1, actor_name="@a")
+
+        edited = {c.kwargs.get("chat_id") for c in bot.edit_message_text.await_args_list}
+        assert edited == {1, 2}, f"закрыты карточки не у всех админов: {edited}"
+        for call in bot.edit_message_text.await_args_list:
+            assert call.kwargs.get("reply_markup") is None, "кнопки остались живыми"
+            assert "Доступ открыт" in call.kwargs.get("text", "")
+
+    async def test_access_opened_in_the_panel_closes_the_pending_request(
+        self, api, monkeypatch
+    ):
+        """Доступ выдали в панели — заявка снята, карточки закрыты.
+
+        Дверей три: кнопка на карточке, ⚙️ → Доступ и /allow. Заявку снимала
+        только первая, и одной идемпотентности resolve_access тут мало —
+        заявка-то ещё висит, и чужое «Отказать» выглядит первым решением.
+        Кончалось это отказом, написанным поверх уже выданного доступа.
+        """
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        from bot.access import is_allowed
+        from services.access_requests import resolve_access
+
+        client, bot = api
+        _admins(monkeypatch, "1,2")
+        ids = iter(range(700, 799))
+        bot.send_message = AsyncMock(
+            side_effect=lambda **kw: SimpleNamespace(message_id=next(ids))
+        )
+        bot.edit_message_text = AsyncMock()
+
+        await client.post("/api/access/request", headers=_auth())
+        assert (await client.get("/api/access", headers=_auth())).json()["pending"] is True
+
+        opened = await client.post(
+            "/api/admin/allowed", json={"action": "add", "entry": "42"}, headers=_auth(1)
+        )
+        assert opened.status_code == 200, opened.text
+        assert is_allowed(42)
+        assert (await client.get("/api/access", headers=_auth())).json()["pending"] is False
+        edited = {c.kwargs.get("chat_id") for c in bot.edit_message_text.await_args_list}
+        assert edited == {1, 2}, f"карточки заявки закрыты не у всех: {edited}"
+
+        # И запоздалое «Отказать» по такой карточке ничего не отнимает.
+        applied, _ = await resolve_access(bot, 42, False, actor_id=2, actor_name="@b")
+        assert applied is False
+        assert is_allowed(42), "отказ по старой карточке закрыл выданный доступ"
 
 
 class TestPersonalReminders:

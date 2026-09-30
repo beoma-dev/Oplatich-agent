@@ -64,20 +64,27 @@ async def resolve_access_callback(update: Update, context: ContextTypes.DEFAULT_
         )
         return
 
-    await query.answer()
     approve = data.startswith(CB_APPROVE)
-    note = await resolve_access(
+    # Карточка, на которой нажали, — резерв для заявок, разосланных до
+    # появления таблицы карточек. Тот же приём, что у кнопок статуса.
+    fallback_card = None
+    message = query.message
+    if message is not None:
+        fallback_card = {
+            "chat_id": message.chat.id,
+            "message_id": message.message_id,
+            "base_html": message.text_html or "",
+        }
+    applied, note = await resolve_access(
         context.bot,
         target_id,
         approve,
         actor_id=actor.id,
         actor_name=f"@{actor.username}" if actor.username else actor.full_name,
+        fallback_card=fallback_card,
     )
-    # Карточка остаётся в чате как след решения — меняем только подпись.
-    try:
-        await query.edit_message_text(
-            (query.message.text_html or "") + f"\n\n<b>{note}</b>",
-            parse_mode="HTML",
-        )
-    except Exception:  # noqa: BLE001 — не критично, решение уже применено
-        await query.message.reply_text(note)
+    # Карточки — и эту, и остальных админов — закрывает resolve_access.
+    # Своя правка здесь переписала бы их второй раз и разошлась бы с ними:
+    # ровно из-за такой пары «каждый правит по-своему» карточки заявок
+    # когда-то показывали разным людям разный статус.
+    await query.answer(note, show_alert=not applied)
