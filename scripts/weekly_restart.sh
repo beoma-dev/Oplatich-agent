@@ -48,8 +48,19 @@ wait_healthy() {   # $1 — имя контейнера
   return 1
 }
 
+# Стенду то же лекарство — но только если он на этой машине есть: скрипт
+# лежит в репозитории и уезжает на установки без стенда. 16.09.2026 стендовый
+# warp умер ровно от того, от чего этот скрипт бережёт боевой: за десять суток
+# дорос до 506 МБ и был убит cgroup при лимите 512. Снаружи стенд выглядел
+# живым — gost перед мёртвым демоном продолжал принимать соединения, — и
+# пролежал так две недели, до 30.09. Порядок тот же: сначала прокси, потом бот.
+TARGETS=(invoice-bot-warp-1 invoice-bot-app-1)
+for extra in invoice-bot-warp-stage-1 invoice-bot-stage-1; do
+  docker inspect "$extra" >/dev/null 2>&1 && TARGETS+=("$extra")
+done
+
 log "=== еженедельный перезапуск ==="
-for name in invoice-bot-warp-1 invoice-bot-app-1; do
+for name in "${TARGETS[@]}"; do
   before=$(docker stats --no-stream --format '{{.MemUsage}}' "$name" 2>/dev/null || echo "?")
   log "$name: было $before"
   if docker restart "$name" >/dev/null 2>&1; then
@@ -62,8 +73,12 @@ done
 # Итог одной строкой: по нему видно, сработало ли, не читая всего лога.
 app=$(docker inspect invoice-bot-app-1 --format '{{.State.Health.Status}}' 2>/dev/null)
 warp=$(docker inspect invoice-bot-warp-1 --format '{{.State.Health.Status}}' 2>/dev/null)
-mem=$(docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' invoice-bot-warp-1 invoice-bot-app-1 2>/dev/null | tr '\n' ' ')
-log "итог: warp=$warp app=$app · $mem"
+mem=$(docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' "${TARGETS[@]}" 2>/dev/null | tr '\n' ' ')
+stage_state=""
+if docker inspect invoice-bot-stage-1 >/dev/null 2>&1; then
+  stage_state=" stage=$(docker inspect invoice-bot-stage-1 --format '{{.State.Health.Status}}' 2>/dev/null)"
+fi
+log "итог: warp=$warp app=$app$stage_state · $mem"
 
 # Лог не должен расти вечно: держим последние 500 строк.
 if [ -f "$LOG" ] && [ "$(wc -l <"$LOG")" -gt 500 ]; then
