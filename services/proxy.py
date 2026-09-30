@@ -97,33 +97,46 @@ def masked(url: str) -> str:
     return url.rsplit("@", 1)[-1]
 
 
+async def probe_proxy(token: str, url: str) -> str:
+    """Отвечает ли Telegram через этот канал. "" — да, иначе причина отказа.
+
+    Одно определение «канал работает» на всех: его спрашивают и выбор канала
+    при старте, и ежедневная проверка запасного (services/spare_channel).
+    Две копии этой пробы разошлись бы, и запасной считался бы живым по более
+    мягкому правилу, чем то, по которому его потом выбирают.
+    """
+    # Клиент строится ВНУТРИ try. Снаружи он ронял старт целиком: httpx
+    # проверяет схему прямо в конструкторе, и опечатка вроде «sock5://»
+    # выбрасывала ValueError мимо перебора — бот не поднимался, хотя
+    # рабочий запасной канал стоял следующим в том же списке. Кривой
+    # логин или пароль так не ловятся (URL разбирается, отказ приходит
+    # от прокси), но схему человек путает первым делом.
+    try:
+        bot = Bot(
+            token,
+            request=HTTPXRequest(
+                proxy=url,
+                connect_timeout=PROBE_TIMEOUT,
+                read_timeout=PROBE_TIMEOUT,
+            ),
+        )
+        async with bot:
+            await bot.get_me()
+    except Exception as exc:  # noqa: BLE001 — причину отдаём строкой, не молчим
+        return type(exc).__name__
+    return ""
+
+
 async def pick_working_proxy(token: str, candidates: list[str]) -> str | None:
     """Первый прокси из списка, через который отвечает api.telegram.org.
 
     None — не ответил ни один (решение, как стартовать, за вызывающим).
     """
     for url in candidates:
-        # Клиент строится ВНУТРИ try. Снаружи он ронял старт целиком: httpx
-        # проверяет схему прямо в конструкторе, и опечатка вроде «sock5://»
-        # выбрасывала ValueError мимо перебора — бот не поднимался, хотя
-        # рабочий запасной канал стоял следующим в том же списке. Кривой
-        # логин или пароль так не ловятся (URL разбирается, отказ приходит
-        # от прокси), но схему человек путает первым делом.
-        try:
-            bot = Bot(
-                token,
-                request=HTTPXRequest(
-                    proxy=url,
-                    connect_timeout=PROBE_TIMEOUT,
-                    read_timeout=PROBE_TIMEOUT,
-                ),
-            )
-            async with bot:
-                await bot.get_me()
-        except Exception as exc:  # noqa: BLE001 — прокси мёртв, пробуем следующий
+        reason = await probe_proxy(token, url)
+        if reason:
             log.warning(
-                "Прокси %s не отвечает (%s) — пробую следующий",
-                masked(url), type(exc).__name__,
+                "Прокси %s не отвечает (%s) — пробую следующий", masked(url), reason
             )
             continue
         log.info("Выбран рабочий прокси: %s", masked(url))

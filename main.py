@@ -56,7 +56,7 @@ from bot.handlers import (
 )
 from bot.my_requests import CB_WITHDRAW, my_command, withdraw_callback
 from config import settings
-from services import alerts, backup, health, reminders
+from services import alerts, backup, health, reminders, spare_channel
 from services.access_requests import CB_ASK
 from services.proxy import (
     build_requests,
@@ -99,7 +99,7 @@ async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def start_background_tasks(application: Application) -> None:
-    """Фоновые задачи: автобэкап, пульс Telegram, напоминания о сроках.
+    """Фоновые задачи: автобэкап, пульс, напоминания, проверка запасного канала.
 
     post_init/post_shutdown PTB срабатывают только в run_polling-режиме,
     поэтому webapp-режим вызывает start/stop вручную (см. _run_bot_with_api).
@@ -113,10 +113,15 @@ async def start_background_tasks(application: Application) -> None:
     application.bot_data["_reminder_task"] = asyncio.create_task(
         reminders.reminder_loop(application.bot)
     )
+    # Пульс следит за АКТИВНЫМ каналом; за запасным не следил никто, а нужен
+    # он ровно тогда, когда активный уже отказал.
+    application.bot_data["_spare_task"] = asyncio.create_task(
+        spare_channel.spare_loop(application.bot)
+    )
 
 
 async def stop_background_tasks(application: Application) -> None:
-    for key in ("_backup_task", "_health_task", "_reminder_task"):
+    for key in ("_backup_task", "_health_task", "_reminder_task", "_spare_task"):
         task = application.bot_data.pop(key, None)
         if task is not None:
             task.cancel()

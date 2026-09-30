@@ -339,3 +339,105 @@ class TestRetryingTransport:
 
         assert pool_size(polling) == 1
         assert pool_size(api) == 256
+
+
+# ---------------------------------------------------------------------------
+# Проверка ЗАПАСНОГО канала: пульс следит за активным, а за резервом — никто
+# ---------------------------------------------------------------------------
+class TestSpareChannel:
+    """Запасной канал нужен ровно тогда, когда активный уже отказал.
+
+    30.09.2026 на стенде такой канал оказался мёртв две недели, и снаружи это
+    выглядело живым: gost перед убитым демоном WARP продолжал принимать
+    соединения. Узнать об этом было неоткуда — resolve_proxy перебирает
+    кандидатов только при старте и останавливается на первом рабочем.
+    """
+
+    @pytest.fixture()
+    def spare(self, monkeypatch):
+        import services.spare_channel as mod
+
+        monkeypatch.setattr(
+            settings, "proxy_url",
+            "socks5://one:1080,socks5://user:s3cret@two:1080",
+        )
+        settings.__dict__.pop("proxy_urls", None)
+        monkeypatch.setattr(proxy_mod, "active", lambda: "socks5://one:1080")
+        return mod
+
+    async def test_dead_spare_raises_an_alert(self, spare, monkeypatch):
+        sent = []
+
+        async def fake_alert(bot, title, details="", **kw):
+            sent.append({"title": title, "details": details, **kw})
+            return 1
+
+        monkeypatch.setattr(spare.alerts, "alert_admins", fake_alert)
+        monkeypatch.setattr(
+            proxy_mod, "probe_proxy", AsyncMock(return_value="ProxyError")
+        )
+
+        result = await spare.check_spares(MagicMock())
+        assert result["dead"] == ["two:1080"]
+        assert len(sent) == 1, "о мёртвом запасном канале не сообщили"
+        assert sent[0]["kind"] == "telegram", "алерт без категории не выключить в панели"
+        assert "two:1080" in sent[0]["details"]
+        # Пароль не должен утечь в сообщение админам.
+        assert "s3cret" not in sent[0]["details"], "пароль прокси уехал админам"
+
+    async def test_live_spare_is_silent(self, spare, monkeypatch):
+        sent = []
+
+        async def fake_alert(*a, **kw):
+            sent.append(kw)
+            return 1
+
+        monkeypatch.setattr(spare.alerts, "alert_admins", fake_alert)
+        monkeypatch.setattr(proxy_mod, "probe_proxy", AsyncMock(return_value=""))
+
+        result = await spare.check_spares(MagicMock())
+        assert result["alive"] == ["two:1080"] and result["dead"] == []
+        assert not sent, "исправный канал не повод беспокоить админов"
+
+    async def test_active_channel_is_not_probed_here(self, spare, monkeypatch):
+        """За активным следит пульс: два источника одного сообщения разойдутся."""
+        probed = []
+
+        async def probe(_token, url):
+            probed.append(url)
+            return ""
+
+        monkeypatch.setattr(spare.alerts, "alert_admins", AsyncMock(return_value=1))
+        monkeypatch.setattr(proxy_mod, "probe_proxy", probe)
+
+        await spare.check_spares(MagicMock())
+        assert probed == ["socks5://user:s3cret@two:1080"], f"проверили лишнее: {probed}"
+
+    async def test_single_channel_means_nothing_to_check(self, monkeypatch):
+        import services.spare_channel as mod
+
+        monkeypatch.setattr(settings, "proxy_url", "socks5://only:1080")
+        settings.__dict__.pop("proxy_urls", None)
+        called = AsyncMock(return_value="ProxyError")
+        monkeypatch.setattr(proxy_mod, "probe_proxy", called)
+        alert = AsyncMock(return_value=1)
+        monkeypatch.setattr(mod.alerts, "alert_admins", alert)
+
+        result = await mod.check_spares(MagicMock())
+        assert result["checked"] == 0 and "запасного канала нет" in result["reason"]
+        called.assert_not_awaited()
+        alert.assert_not_awaited()
+        settings.__dict__.pop("proxy_urls", None)
+
+    async def test_probe_is_the_same_one_that_picks_the_channel(self, fake_bot):
+        """Проверка и выбор канала спрашивают ОДНУ функцию.
+
+        Своя копия пробы разошлась бы: запасной считался бы живым по более
+        мягкому правилу, чем то, по которому его потом выбирают.
+        """
+        _FakeBot.alive = {"socks5://live:1080"}
+        assert await proxy_mod.probe_proxy("t", "socks5://live:1080") == ""
+        assert await proxy_mod.probe_proxy("t", "socks5://dead:1080") == "ConnectionError"
+        # И выбор канала построен на ней же.
+        import inspect
+        assert "probe_proxy" in inspect.getsource(proxy_mod.pick_working_proxy)
