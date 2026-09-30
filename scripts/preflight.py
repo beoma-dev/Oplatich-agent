@@ -31,17 +31,41 @@ def check(name: str, fn) -> None:
 
 
 def check_telegram() -> str:
+    """Канал до Telegram — тем же путём, каким его выбирает бот при старте.
+
+    НЕ settings.proxy_url: там СЫРАЯ строка из .env, а в ней может стоять
+    несколько адресов через запятую. Отданная httpx целиком, она разбирается
+    в мусор («Invalid port: 50101,socks5:»), и проверка падала на совершенно
+    здоровой настройке — с 06.09.2026, когда к платному прокси добавили WARP.
+    Проверка, которая краснеет на живом боевом контуре, перестаёт быть
+    проверкой: её начинают проходить глазами. Тот же урок уже записан в
+    services/dns_pin.reachable(), но до preflight не доехал.
+
+    Выбранный канал кладём в proxy.set_active(): следом за этим идёт проверка
+    пина, и она смотрит именно туда.
+    """
+    import asyncio
+
     import httpx
 
-    proxy = settings.proxy_url or None
-    with httpx.Client(proxy=proxy, timeout=15) as client:
+    from services import proxy as proxy_mod
+
+    candidates = settings.proxy_urls
+    chosen = ""
+    if candidates:
+        chosen = asyncio.run(
+            proxy_mod.pick_working_proxy(settings.telegram_bot_token, candidates)
+        ) or candidates[0]
+        proxy_mod.set_active(chosen)
+    with httpx.Client(proxy=chosen or None, timeout=15) as client:
         resp = client.get(
             f"https://api.telegram.org/bot{settings.telegram_bot_token}/getMe"
         )
     data = resp.json()
     if not data.get("ok"):
         raise RuntimeError(f"getMe: {data.get('description', resp.status_code)}")
-    return f"бот @{data['result']['username']}" + (" (через прокси)" if proxy else "")
+    where = f" (через {proxy_mod.masked(chosen)})" if chosen else ""
+    return f"бот @{data['result']['username']}{where}"
 
 
 def check_telegram_pin() -> str:
