@@ -789,3 +789,123 @@ test("заполненные реквизиты видны, когда выбр�
   assert.ok(await note.isHidden(), "строка осталась после очистки");
   await page.close();
 });
+
+/* ---------- Перетаскивание файлов ---------- */
+
+/** Бросает файлы на элемент так же, как это делает проводник, и возвращает
+ *  defaultPrevented: без него браузер ушёл бы открывать брошенный файл. */
+async function dropOn(page, selector, files) {
+  return page.evaluate(({ selector, files }) => {
+    const dt = new DataTransfer();
+    for (const f of files) {
+      dt.items.add(new File([f.body || "%PDF-1.4"], f.name, { type: f.type || "application/pdf" }));
+    }
+    const ev = new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true });
+    document.querySelector(selector).dispatchEvent(ev);
+    return ev.defaultPrevented;
+  }, { selector, files });
+}
+
+test("счёт перетаскивается из проводника", async () => {
+  const page = await openApp(browser, { routes: HINTS });
+  const prevented = await dropOn(page, "#drop-zone", [{ name: "schet-812.pdf" }]);
+  await page.waitForTimeout(200);
+
+  assert.ok(prevented, "браузер уйдёт открывать файл вместо страницы");
+  const r = await page.evaluate(() => ({
+    имя: document.getElementById("drop-text").textContent,
+    прикреплён: document.getElementById("drop-zone").classList.contains("has-file"),
+    вInput: document.getElementById("file-input").files.length,
+  }));
+  assert.match(r.имя, /schet-812\.pdf/, "имя файла не показано");
+  assert.ok(r.прикреплён, "зона не перешла в состояние «файл есть»");
+  // Файл обязан лежать именно в input: оттуда его читают и отправка, и
+  // carry-note.js. Мимо input он был бы виден только одному из них.
+  assert.equal(r.вInput, 1, "файл положили мимо <input>");
+  await page.close();
+});
+
+test("пачку файлов раскладывает: первый — счёт, остальные в дополнительные", async () => {
+  const page = await openApp(browser, { routes: HINTS });
+  await dropOn(page, "#drop-zone", [
+    { name: "schet.pdf" }, { name: "dogovor.pdf" }, { name: "akt.pdf" },
+  ]);
+  await page.waitForTimeout(250);
+
+  const r = await page.evaluate(() => ({
+    счёт: document.getElementById("drop-text").textContent,
+    доп: [...document.querySelectorAll("#extra-list .extra-item")].map((e) => e.textContent),
+  }));
+  assert.match(r.счёт, /schet\.pdf/, "первый файл не стал счётом");
+  assert.equal(r.доп.length, 2, "остальные файлы потерялись");
+  assert.match(r.доп.join(" "), /dogovor\.pdf/);
+  assert.match(r.доп.join(" "), /akt\.pdf/);
+  await page.close();
+});
+
+test("файлы, брошенные на блок дополнительных, идут только туда", async () => {
+  const page = await openApp(browser, { routes: HINTS });
+  await dropOn(page, "#extra-block", [{ name: "specifikaciya.pdf" }]);
+  await page.waitForTimeout(200);
+
+  const r = await page.evaluate(() => ({
+    доп: document.querySelectorAll("#extra-list .extra-item").length,
+    счёт: document.getElementById("file-input").files.length,
+  }));
+  assert.equal(r.доп, 1, "файл не попал в дополнительные документы");
+  assert.equal(r.счёт, 0, "файл заодно подменил счёт");
+  await page.close();
+});
+
+test("перетащенный файл проходит те же проверки, что и выбранный", async () => {
+  // Формат проверяет обработчик change в app.js. Если перетаскивание пойдёт
+  // мимо него, .exe ляжет в заявку — ровно та дыра, что закрывалась 06.09.2026.
+  const page = await openApp(browser, { routes: HINTS });
+  await dropOn(page, "#drop-zone", [
+    { name: "virus.exe", type: "application/octet-stream", body: "MZ" },
+  ]);
+  await page.waitForTimeout(200);
+
+  const r = await page.evaluate(() => ({
+    ошибка: (document.getElementById("error-banner") || {}).textContent || "",
+    вInput: document.getElementById("file-input").files.length,
+  }));
+  assert.match(r.ошибка, /PDF, JPG, PNG или XLSX/, "про формат не сказали");
+  assert.equal(r.вInput, 0, "чужой формат остался приложенным");
+  await page.close();
+});
+
+test("перетащенный файл виден строке «это тоже уйдёт»", async () => {
+  // Главная причина, по которой файл кладётся в <input>, а не в state:
+  // carry-note.js читает именно files, и мимо него строка бы замолчала.
+  const page = await openApp(browser, { routes: HINTS });
+  await page.click('#invoice-seg button[data-value="0"]');   // режим «Реквизиты»
+  await page.waitForTimeout(150);
+  await dropOn(page, "#drop-zone", [{ name: "schet-iz-pochty.pdf" }]);
+  await page.waitForTimeout(250);
+
+  const note = page.locator("#carry-note");
+  assert.ok(await note.isVisible(), "про перетащенный файл не сказали");
+  assert.match(await note.textContent(), /schet-iz-pochty\.pdf/);
+  await page.close();
+});
+
+test("брошенная ссылка не уводит со страницы и получает объяснение", async () => {
+  const page = await openApp(browser, { routes: HINTS });
+  const prevented = await page.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.setData("text/uri-list", "https://example.com/schet.pdf");
+    const ev = new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true });
+    document.getElementById("drop-zone").dispatchEvent(ev);
+    return ev.defaultPrevented;
+  });
+  await page.waitForTimeout(150);
+
+  assert.ok(prevented, "страница уедет по брошенной ссылке вместе с черновиком");
+  const hint = await page.evaluate(() => {
+    const el = document.querySelector(".drop-drag");
+    return el ? el.textContent : "";
+  });
+  assert.match(hint, /перетащите его из проводника/, "человеку не сказали, почему не вышло");
+  await page.close();
+});

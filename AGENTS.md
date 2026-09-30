@@ -34,10 +34,11 @@ Telegram-бот подачи заявок на оплату счетов. Два
 файлам: `index.html` — только разметка, `app.css` — стили (модальное окно — в `modal.css`, живая инструкция —
 в `tour.css`; оба подключаются ПОСЛЕ и заканчивают каскад), `app.js` — логика
 (один IIFE), `form-lib.js` — чистые функции формы, `skin-field.js` — фон, панели
-(`*-panel.js`), `list-tools.js` и `help-tour.js` — вынесенное из `app.js`.
+(`*-panel.js`), `list-tools.js`, `help-tour.js` и `drop-files.js` — вынесенное из
+`app.js`.
 Стили экранов, добавленных позже, — `modal.css`, `tour.css`, `stats.css`.
 Стили экранов, что подключаются ПОСЛЕ `app.css`: `modal.css`, `tour.css`,
-`stats.css`.
+`stats.css`, `drop.css`.
 Порядок подключения значим: `modal.css` идёт ПОСЛЕ `app.css`,
 `form-lib.js` и `skin-field.js` — ПЕРЕД `app.js`, а ранний выбор темы остаётся инлайном в `<head>` (иначе неон мигнёт
 светлой темой до отрисовки). Краткое описание
@@ -116,6 +117,23 @@ TELEGRAM_BOT_TOKEN=dummy:token python -c "import main, api.server, bot.handlers,
   `tests/test_api_integration.py::TestInvoiceAndRequisitesTogether`,
   `tests/test_webapp_sync.py::test_form_sends_what_was_attached_not_what_the_switch_says`
   и два браузерных теста в `tests/e2e/form.test.cjs`.
+- **Перетащенный файл кладётся в тот же `<input type=file>`**, что и
+  выбранный диалогом (`webapp/drop-files.js`): модуль строит `DataTransfer`,
+  присваивает `input.files` и поднимает `change` — дальше работает штатный
+  обработчик в `app.js`. Мимо input файл увидела бы только отправка:
+  `carry-note.js` читает `fileInput.files`, и строка «это тоже уйдёт»
+  замолчала бы ровно в том случае, ради которого её писали. Там же, в
+  `change`, живут проверка формата, размера и автопроверка «похоже ли на
+  счёт» — своей копии у перетаскивания быть НЕ должно. Пачку раскладывает
+  по тому, как её тащат: первый файл — счёт, остальные — дополнительные;
+  брошенное на `#extra-block` идёт только в дополнительные. `preventDefault`
+  на `drop` обязателен даже когда это не файл: иначе браузер уходит по
+  брошенной ссылке и заполненная форма исчезает вместе с черновиком.
+  Подсказку «или перетащите» модуль рисует СВОИМ элементом и только при
+  `pointer: fine`: `#drop-text` и `#drop-hint` переписывает `app.js` при
+  каждом сбросе, а на телефоне перетаскивать неоткуда. Стерегут
+  `tests/test_webapp_sync.py::test_dropped_file_goes_through_the_same_input`
+  и шесть браузерных проверок в `tests/e2e/form.test.cjs`.
 - **Закрывающие документы** (`closing_files`, колонка «Закрывающие
   документы») дописываются в УЖЕ существующую строку реестра: акт и УПД
   приходят после оплаты, иногда через месяц. Ручка `/api/my/closing-docs`

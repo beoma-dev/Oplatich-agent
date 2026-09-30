@@ -1,0 +1,29 @@
+/*
+ * drop.css — подсветка цели при перетаскивании файла и подсказка в зоне.
+ *
+ * Отдельным файлом, а не строчками в app.css: тот упёрся в свой порог, а
+ * делить его страшнее — там значим порядок правил. Подключается ПОСЛЕ
+ * app.css, поэтому .drag-over перебивает .has-file: пока файл тащат над
+ * зоной, важнее показать, что его примут, а не что там уже лежит.
+ */
+
+  .drop.drag-over {
+    border-style: solid;
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+    color: var(--text);
+  }
+  /* Блок дополнительных документов — своя цель: у него нет рамки, поэтому
+     обводка рисуется снаружи и не двигает содержимое. */
+  #extra-block.drag-over {
+    border-radius: 11px;
+    outline: 2px dashed var(--accent);
+    outline-offset: 4px;
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
+  }
+
+  .drop-drag { color: var(--hint); opacity: .8; }
+  .drop.drag-over .drop-drag { color: var(--accent); opacity: 1; }
+  /* Отказ («это не файл») живёт тут же, а не в общей плашке ошибок: человек
+     смотрит на то место, куда только что бросил. */
+  .drop-drag-warn { color: var(--danger); opacity: 1; }

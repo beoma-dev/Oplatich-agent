@@ -940,6 +940,31 @@ def test_form_sends_what_was_attached_not_what_the_switch_says():
     assert "Одно другому не мешает" in MARKUP
 
 
+def test_dropped_file_goes_through_the_same_input():
+    """Перетащенный файл кладётся в тот же <input>, что и выбранный диалогом.
+
+    Мимо input его не увидел бы никто, кроме самой отправки: carry-note.js
+    читает fileInput.files, и строка «это тоже уйдёт» замолчала бы ровно в
+    том случае, ради которого её писали. Там же, в обработчике change,
+    живут проверка формата, проверка размера и автопроверка «похоже ли на
+    счёт» — своей копии всего этого у перетаскивания быть не должно.
+    """
+    drop = _read("drop-files.js")
+    assert "input.files = dt.files" in drop, "файл кладётся мимо input"
+    assert 'new Event("change"' in drop, "change не поднимается — app.js не узнает"
+    for own in ("state.file", "state.extras"):
+        assert own not in drop, f"перетаскивание полезло в {own} мимо input"
+    for own in ("ALLOWED_EXT", "MAX_FILE_SIZE", "MAX_EXTRA_FILES"):
+        assert own not in drop, f"у перетаскивания завелась своя копия {own}"
+    # Брошенный файл не должен уводить со страницы: заполненная форма тогда
+    # исчезает вместе с черновиком.
+    assert "ev.preventDefault();" in drop
+    assert '<script src="drop-files.js"></script>' in MARKUP
+    assert '<link rel="stylesheet" href="drop.css">' in MARKUP
+    # Порядок каскада: подсветка перебивает .has-file, а не наоборот.
+    assert MARKUP.index('href="app.css"') < MARKUP.index('href="drop.css"')
+
+
 def test_split_files_stay_reasonably_small():
     """Порог, чтобы файлы снова не срослись в одну простыню.
 
@@ -1006,6 +1031,7 @@ def test_split_files_stay_reasonably_small():
                         ("maint-panel.js", 150),
                         ("group-panel.js", 110),
                         ("carry-note.js", 100),
+                        ("drop-files.js", 160), ("drop.css", 60),
                         ("closing-panel.js", 150),
                         ("nudge-panel.js", 100),
                         ("list-tools.js", 200), ("busy-banner.js", 80),
