@@ -10,7 +10,7 @@
     "brand": "node scripts/render_brand.mjs"
   },
   "devDependencies": {
-    "playwright": "^1.62.1"
+    "playwright": "^1.63.0"
   },
   "private": true
 }
