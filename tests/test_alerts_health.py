@@ -200,7 +200,16 @@ class TestLinkPulse:
             box.append((title, details))
             return 1
 
+        async def _recovered(_bot, text, targets, markup=None):
+            import html
+            import re
+
+            title = html.unescape(re.search(r"<b>(.*?)</b>", text).group(1))
+            box.append((title, html.unescape(text)))
+            return 1
+
         monkeypatch.setattr(alerts, "alert_admins", _fake)
+        monkeypatch.setattr(alerts, "_deliver", _recovered)
         return box
 
     async def test_short_blink_is_silent(self, sent):

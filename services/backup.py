@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 from telegram import Bot
 
 from config import settings
-from services import alerts, dns_pin, registry_check, tg_retry
+from services import alerts, dns_pin, recovery, registry_check, tg_retry
 from services import runtime_settings as rs
 from services.runtime_settings import effective_admin_ids
 
@@ -113,7 +113,18 @@ def create_backup_sync() -> Path:
 
 async def run_backup(bot: Bot) -> tuple[Path, int]:
     """Собирает бэкап и рассылает его админам. Возвращает (путь, доставлено)."""
-    path = await asyncio.to_thread(create_backup_sync)
+    try:
+        path = await asyncio.to_thread(create_backup_sync)
+    except Exception:
+        await alerts.alert_admins(
+            bot, "Не удалось создать бэкап", "Новый архив не создан; детали в логах.",
+            kind="backup", signature="backup-create", recovery_key="backup-create",
+        )
+        raise
+    await recovery.recover(
+        bot, "backup-create", "Создание бэкапа восстановлено",
+        "Новый архив успешно собран. Доставка архива проверяется отдельно.",
+    )
     size = path.stat().st_size
 
     if size > MAX_SEND_BYTES:
@@ -122,10 +133,15 @@ async def run_backup(bot: Bot) -> tuple[Path, int]:
             "Бэкап собран, но слишком велик для Telegram",
             f"{path} · {size // (1024 * 1024)} МБ — заберите с сервера",
             signature="backup-too-big",
+            recovery_key="backup-size",
             kind="backup",
         )
         return path, 0
 
+    await recovery.recover(
+        bot, "backup-size", "Размер бэкапа снова допустим для Telegram",
+        "Новый архив укладывается в лимит. Прежний большой архив остаётся на сервере.",
+    )
     data = await asyncio.to_thread(path.read_bytes)
     delivered = 0
     for admin_id in effective_admin_ids():
@@ -145,8 +161,17 @@ async def run_backup(bot: Bot) -> tuple[Path, int]:
                 pauses=tg_retry.PATIENT_PAUSES,
             )
             delivered += 1
+            await recovery.recover(
+                bot, f"backup-delivery:{admin_id}", "Доставка бэкапа восстановлена",
+                f"Новый архив успешно доставлен админу id {admin_id}.",
+            )
         except Exception:  # noqa: BLE001 — не срываем остальных получателей
             log.warning("Не удалось отправить бэкап админу %s", admin_id)
+            await alerts.alert_admins(
+                bot, "Бэкап не доставлен админу", f"Получатель: id {admin_id}.",
+                kind="backup", signature=f"backup-delivery:{admin_id}",
+                recovery_key=f"backup-delivery:{admin_id}",
+            )
     return path, delivered
 
 
@@ -154,6 +179,9 @@ async def alert_if_pin_stale(bot: Bot) -> bool:
     """Сверяет прибитый IPv4 Telegram с DNS. True — всё совпадает."""
     ok, message = await asyncio.to_thread(dns_pin.check)
     if ok:
+        await recovery.recover(
+            bot, "telegram-pin", "Проверка адреса Telegram снова проходит", message
+        )
         log.info("Пин адреса Telegram: %s", message)
         return True
     log.error("Пин адреса Telegram протух: %s", message)
@@ -162,6 +190,7 @@ async def alert_if_pin_stale(bot: Bot) -> bool:
         "Адрес Telegram сменился, а пин остался старым",
         message,
         signature="telegram-pin-stale",
+        recovery_key="telegram-pin",
         kind="telegram",
         hint="Пока не поправите, бот стучится в никуда и замолчит целиком.",
     )
@@ -211,19 +240,31 @@ async def backup_loop(bot: Bot) -> None:
             # Раз в сутки заодно сверяем реестр с зеркалом: обе задачи про
             # целостность данных, и второго планировщика ради этого заводить
             # незачем. Выключен бэкап — сверка остаётся в админ-панели.
-            await registry_check.alert_if_diverged(bot)
+            mirror = await registry_check.alert_if_diverged(bot)
             # И заодно — не протух ли прибитый адрес Telegram. Пин молчит,
             # пока Telegram не сменит IP; сверка с живой DNS-выдачей — та
             # единственная причина, по которой пин вообще допустим.
-            await alert_if_pin_stale(bot)
+            pin_ok = await alert_if_pin_stale(bot)
+            if pin_ok and mirror.get("ok") and (
+                mirror.get("checked") or mirror.get("reason") in (
+                    "зеркало не настроено", "файла зеркала ещё нет",
+                )
+            ):
+                await recovery.recover(
+                    bot, "backup-cycle", "Плановый цикл бэкапа снова выполняется",
+                    "Создание архива и последующие проверки выполнены без ошибки. "
+                    "Недоставленные архивы этим не считаются доставленными.",
+                )
         except Exception:  # noqa: BLE001 — цикл должен пережить любой сбой
             log.exception("Сбой планового бэкапа")
             await alerts.alert_admins(
                 bot,
-                "Сбой планового бэкапа",
+                "Сбой цикла бэкапа или последующих проверок",
                 "детали в логах",
                 signature="backup-failed",
+                recovery_key="backup-cycle",
                 kind="backup",
-                hint="Проверьте место на диске и журнал контейнера app.",
+                hint=("Создание архива и его доставка проверяются отдельно. "
+                      "Исправление цикла подтвердит следующий успешный полный прогон."),
             )
         await asyncio.sleep(61)  # не сработать дважды в ту же минуту

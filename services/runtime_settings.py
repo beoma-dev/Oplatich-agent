@@ -897,6 +897,7 @@ def record_incident(
             same = item.get("kind") == kind and item.get("title") == title
             if same and when - float(item.get("ts", 0.0)) < INCIDENT_MERGE_WINDOW:
                 item["ts"] = when
+                item.pop("recovered_ts", None)
                 if bump:
                     item["count"] = int(item.get("count", 1)) + 1
                 item["sent"] = bool(item.get("sent")) or sent
@@ -953,3 +954,14 @@ def clear_incidents() -> int:
             data["incidents"] = []
             _save_locked()
     return removed
+
+
+def resolve_incident(kind: str, title: str) -> None:
+    """Отметить подтверждённое восстановление, не увеличивая число сбоев."""
+    import time
+
+    with _lock:
+        for item in _load_locked().get("incidents", []):
+            if item.get("kind") == kind and item.get("title") == title:
+                item["recovered_ts"] = time.time()
+        _save_locked()

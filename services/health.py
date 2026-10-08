@@ -26,7 +26,7 @@ import time
 
 from telegram import Bot
 
-from services import alerts, failover, tg_retry
+from services import alerts, failover, proxy, recovery, tg_retry
 from services import runtime_settings as rs
 
 log = logging.getLogger(__name__)
@@ -153,6 +153,7 @@ async def probe_once(bot: Bot, healthy: bool) -> bool:
             log.warning("Telegram API недоступен: %s", exc)
             _down_since = time.monotonic()
             _down_reported = False
+            await recovery.fail("telegram-link", "telegram", LINK_DOWN_TITLE)
             # Текст исключения — та самая строка, по которой видно, что
             # виноват прокси, а не Telegram: «ProxyError: Host unreachable».
             _record_link_down(
@@ -186,15 +187,33 @@ async def probe_once(bot: Bot, healthy: bool) -> bool:
     record_ok()
     if not healthy:
         log.info("Telegram API снова доступен")
+    try:
+        item = await asyncio.to_thread(recovery.get_sync, "telegram-link")
         down = down_for() or 0.0
-        if down >= _grace_seconds():
-            await _safe_alert(
-                bot,
-                "Связь с Telegram восстановлена",
-                f"Провал длился {_minutes(down)} мин. Заявки, поданные в это "
-                "время, карточку финансисту могли не отдать — проверьте реестр.",
-                "tg-link-up",
+        if item and item["resolved"] is None:
+            down = max(down, time.time() - item["started"])
+            if down >= _grace_seconds():
+                await recovery.recover(
+                    bot, "telegram-link", "Связь с Telegram восстановлена",
+                    f"Провал длился {_minutes(down)} мин. Telegram отвечает через текущий канал. "
+                    "Карточки, не доставленные во время сбоя, автоматически не пересылаются: "
+                    "проверьте реестр.",
+                )
+            else:
+                # Короткое моргание закрываем без звонка, в том числе после рестарта.
+                await asyncio.to_thread(recovery.resolve_sync, "telegram-link", "", "")
+                closed = await asyncio.to_thread(recovery.get_sync, "telegram-link")
+                await asyncio.to_thread(recovery.acknowledge_sync, closed, [], True)
+                await asyncio.to_thread(rs.resolve_incident, "telegram", LINK_DOWN_TITLE)
+        active = proxy.active()
+        if active:
+            await recovery.recover(
+                bot, "proxy:" + proxy.masked(active), "Канал до Telegram восстановлен",
+                f"Основной прокси {proxy.masked(active)} отвечает на getMe.",
             )
+        await recovery.flush(bot)
+    except Exception:  # noqa: BLE001 — очередь уведомлений не роняет пульс
+        log.exception("Не удалось обработать сохранённое состояние восстановления")
     _down_since = None
     _down_reported = False
     return True

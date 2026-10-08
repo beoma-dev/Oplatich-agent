@@ -19,7 +19,7 @@ from telegram.constants import ParseMode
 from telegram.error import NetworkError
 
 from config import settings
-from services import alerts
+from services import alerts, recovery
 
 log = logging.getLogger(__name__)
 
@@ -142,6 +142,7 @@ async def update_all(
         card_list = [fallback]
     updated = 0
     stale = 0
+    incomplete = False
     for card in card_list:
         markup = keyboard(card["chat_id"]) if callable(keyboard) else keyboard
         try:
@@ -175,6 +176,7 @@ async def update_all(
                 request_id, card["chat_id"],
             )
         except Exception:  # noqa: BLE001 — карточка удалена, не изменилась и т.п.
+            incomplete = True
             log.debug(
                 "Карточка заявки %s в чате %s не обновлена",
                 request_id, card["chat_id"], exc_info=True,
@@ -188,7 +190,13 @@ async def update_all(
             f"{request_id}: не обновилось карточек — {stale}. "
             "Кнопки на них ещё живы, статус показан прежний.",
             signature=f"card-stale-{request_id}",
+            recovery_key=f"card-stale:{request_id}",
             kind="delivery",
             hint="Статус в реестре верный. Карточку проще удалить в чате.",
+        )
+    if card_list and not stale and not incomplete:
+        await recovery.recover(
+            bot, f"card-stale:{request_id}", "Карточки заявки обновлены",
+            f"Все найденные карточки заявки {request_id} успешно обновлены.",
         )
     return updated

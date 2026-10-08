@@ -17,7 +17,7 @@ import logging
 import openpyxl
 
 from bot.models import SHEET_HEADERS
-from services import alerts, storage
+from services import alerts, recovery, storage
 
 log = logging.getLogger(__name__)
 
@@ -117,6 +117,7 @@ async def alert_if_diverged(bot) -> dict:
                 "Реестр и xlsx-зеркало разошлись",
                 details,
                 signature="registry-mirror-diverged",
+                recovery_key="registry-mirror",
                 kind="mirror",
                 hint=(
                     "Истина — в реестре, зеркало вторично. Оно догонит на "
@@ -125,4 +126,8 @@ async def alert_if_diverged(bot) -> dict:
             )
         except Exception:  # noqa: BLE001 — алерт не должен ломать сверку
             log.exception("Не удалось сообщить о расхождении реестра")
+    if result.get("checked") and result.get("ok"):
+        await recovery.recover(
+            bot, "registry-mirror", "Реестр и зеркало снова совпадают", describe(result)
+        )
     return result

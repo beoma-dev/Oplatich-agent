@@ -178,7 +178,7 @@ function buildAlertsPanel(ctx) {
       var who = document.createElement("div");
       who.className = "who";
       var main = document.createElement("div");
-      main.textContent = it.title + (it.count > 1 ? " ×" + it.count : "");
+      main.textContent = (it.recovered_ts ? "✅ Устранено: " : "") + it.title + (it.count > 1 ? " ×" + it.count : "");
       who.appendChild(main);
       // Период вместо точки: «×18» без него не говорит, шло это минуту
       // или трое суток. Хвост ошибки — то, по чему видно, к кому идти.
@@ -186,7 +186,8 @@ function buildAlertsPanel(ctx) {
         ? stamp(it.first_ts) + " → " + stamp(it.ts) : stamp(it.ts);
       var sub = document.createElement("div");
       sub.className = "sub";
-      sub.textContent = span + (it.details ? " · " + it.details : "");
+      sub.textContent = span + (it.details ? " · " + it.details : "")
+        + (it.recovered_ts ? " · восстановлено " + stamp(it.recovered_ts) : "");
       if (it.details) sub.title = it.details;
       who.appendChild(sub);
       if (!it.sent) {

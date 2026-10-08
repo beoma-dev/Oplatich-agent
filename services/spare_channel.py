@@ -30,7 +30,8 @@ import logging
 from telegram import Bot
 
 from config import settings
-from services import alerts, proxy
+from services import alerts, proxy, recovery
+from services import runtime_settings as rs
 
 log = logging.getLogger(__name__)
 
@@ -41,11 +42,8 @@ CHECK_INTERVAL = 24 * 3600.0
 # в ту же секунду только удлиняет старт.
 FIRST_DELAY = 300.0
 
-TITLE = "Запасной канал до Telegram не отвечает"
-HINT = (
-    "Основной работает, заявки идут. Но если он откажет, переключаться "
-    "будет некуда: при старте бот перебирает PROXY_URL заново."
-)
+TITLE = "Резервный канал до Telegram недоступен"
+HINT = "Проверьте резерв: до успешной проверки этот адрес нельзя считать рабочим."
 
 
 async def check_spares(bot: Bot) -> dict:
@@ -66,10 +64,33 @@ async def check_spares(bot: Bot) -> dict:
         if url == active:
             continue
         reason = await proxy.probe_proxy(settings.telegram_bot_token, url)
+        for delay in (2, 4):
+            if not reason:
+                break
+            await asyncio.sleep(delay)
+            reason = await proxy.probe_proxy(settings.telegram_bot_token, url)
+        key = "proxy:" + proxy.masked(url)
+        # Перенос последнего явного алерта старой версии: адрес берём только
+        # из действующей настройки. Заменённый прокси не объявляем исправленным.
+        if await asyncio.to_thread(recovery.get_sync, key) is None:
+            for incident in await asyncio.to_thread(rs.recent_incidents, 60):
+                if (incident.get("title") in (TITLE, "Запасной канал до Telegram не отвечает")
+                        and proxy.masked(url) in incident.get("details", "")
+                        and not incident.get("recovered_ts")):
+                    await asyncio.to_thread(
+                        recovery.fail_sync, key, "telegram", incident["title"],
+                        incident.get("first_ts", incident["ts"]),
+                    )
+                    break
         if reason:
+            await recovery.fail(key, "telegram", TITLE)
             dead.append((proxy.masked(url), reason))
         else:
             alive.append(proxy.masked(url))
+            await recovery.recover(
+                bot, key, "Канал до Telegram восстановлен",
+                f"Прокси {proxy.masked(url)} снова отвечает на getMe.",
+            )
 
     result = {
         "checked": len(alive) + len(dead),
@@ -86,8 +107,9 @@ async def check_spares(bot: Bot) -> dict:
     await alerts.alert_admins(
         bot,
         TITLE,
-        f"Проверка запасных каналов:\n{lines}\n\nСейчас работаем через {where}.",
+        f"Не отвечает резерв:\n{lines}\n\nОсновной канал: {where}. Его доступность проверяет отдельный пульс.",
         kind="telegram",
+        icon="⚠️",
         # Своя подпись: троттлинг по умолчанию считает повтором похожий текст,
         # а нам важно, чтобы напоминание приходило по КАЖДОМУ мёртвому каналу
         # и повторялось, пока его не починят.

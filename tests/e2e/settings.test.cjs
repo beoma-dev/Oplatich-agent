@@ -890,3 +890,20 @@ test("тумблер тишины гасит остальные настройк
   assert.deepEqual(page.errors, []);
   await page.close();
 });
+
+test("устранённый инцидент явно отмечен в журнале", async () => {
+  const cfg = JSON.parse(JSON.stringify(ADMIN));
+  cfg["/api/admin/settings"].incidents = [{
+    kind: "telegram", title: "Связь с Telegram пропала", count: 1, sent: true,
+    ts: Math.floor(Date.now() / 1000) - 600,
+    recovered_ts: Math.floor(Date.now() / 1000) - 60,
+  }];
+  const page = await openApp(browser, { routes: cfg });
+  await page.click('#admin-btn');
+  await page.click('#tab-health');
+  await page.waitForTimeout(200);
+  const text = await page.locator('#alerts-log').textContent();
+  assert.match(text, /✅ Устранено/);
+  assert.match(text, /восстановлено/);
+  await page.close();
+});

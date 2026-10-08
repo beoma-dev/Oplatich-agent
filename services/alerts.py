@@ -173,6 +173,8 @@ async def alert_admins(
     kind: str | None = None,
     hint: str = "",
     journal: bool = True,
+    recovery_key: str | None = None,
+    icon: str = "🚨",
 ) -> int:
     """Шлёт алерт всем админам. Возвращает число доставленных сообщений.
 
@@ -183,6 +185,18 @@ async def alert_admins(
     записано РАНЬШЕ попытки дозвона (пульс связи пишет обрыв с первой
     неудачной пробы), иначе один провал попал бы в журнал дважды.
     """
+    if kind == "error" and not recovery_key:
+        hint = (hint + " " if hint else "") + (
+            "Исправление требует проверки той же операции. Перезапуск бота "
+            "или отсутствие новых ошибок не подтверждает устранение этой ошибки."
+        )
+    if kind == "moderation":
+        icon = "⚠️"
+        hint = "Это событие модерации, а не сбой сервиса. Разбор и исправление — вручную."
+    if recovery_key:
+        from services import recovery
+
+        await recovery.fail(recovery_key, kind or "other", title)
     admins = effective_admin_ids()
     if not admins:
         log.warning("Алерт «%s» не отправлен: ADMIN_IDS пуст", title)
@@ -203,7 +217,7 @@ async def alert_admins(
         return 0
 
     delivered = await _deliver(
-        bot, _format(title, details, hint=hint), admins, _buttons(kind)
+        bot, _format(title, details, hint=hint, icon=icon), admins, _buttons(kind)
     )
     if journal:
         _journal(

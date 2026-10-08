@@ -13,7 +13,7 @@ from telegram.constants import ParseMode
 
 from bot.models import InvoiceRequest
 from bot.validators import has_profanity
-from services import alerts, audit, dedup, notifier, storage, tg_retry
+from services import alerts, audit, dedup, notifier, recovery, storage, tg_retry
 from services import runtime_settings as rs
 from services.notifier import card_recipients, notify_finance
 from services.pdf_report import build_request_pdf
@@ -93,6 +93,7 @@ async def finalize_submission(
             "Заявка НЕ сохранилась в реестр",
             _recovery_note(request),
             signature="request-failed",
+            recovery_key="registry-write",
             kind="storage",
             hint=(
                 "Заявка отклонена и автору не видна. Проверьте доступность "
@@ -101,6 +102,11 @@ async def finalize_submission(
         )
         raise
 
+    await recovery.recover(
+        bot, "registry-write", "Запись заявок в реестр восстановлена",
+        "Новая заявка успешно записана. Ранее отклонённые заявки не восстановлены: "
+        "авторы должны подать их повторно.",
+    )
     await audit.log_event(
         audit.REQUEST_SUBMITTED,
         request.telegram_id,
@@ -191,6 +197,7 @@ async def finalize_submission(
             await alerts.alert_admins(
                 bot, title, details,
                 signature="finance-undelivered",
+                recovery_key="finance-delivery",
                 kind="delivery",
                 hint=(
                     "Заявка в реестре есть, а карточки у финансиста нет — "
@@ -199,6 +206,14 @@ async def finalize_submission(
             )
         except Exception:  # noqa: BLE001 — алерт не должен ломать подачу
             log.exception("Сбой алерта о недоставленной карточке")
+
+    if notified > 0:
+        await recovery.recover(
+            bot, "finance-delivery", "Рассылка карточек снова работает",
+            "Карточка новой заявки доставлена хотя бы одному финансисту. "
+            "Прежние недоставленные карточки автоматически не пересланы; "
+            "доставка всем получателям этим не подтверждается.",
+        )
 
     # Заявка подана из группы — итог уже уходит туда, и личное подтверждение
     # автору было бы ровно тем же текстом второй раз. Дублировать не нужно,

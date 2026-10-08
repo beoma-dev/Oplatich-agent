@@ -945,6 +945,7 @@ async def admin_restore(
                 f"{summary['made_at']}. Копия прежнего состояния: "
                 f"{summary['safety_backup']}.",
                 signature="restore-applied",
+                icon="✅",
                 kind="storage",
                 hint="Если это не вы — состояние до восстановления лежит в data/backups/.",
             )
