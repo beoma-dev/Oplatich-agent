@@ -27,7 +27,7 @@ reportlab==4.2.5
 num2words==0.5.13
 
 # Автопроверка «похож ли файл на счёт»: текст PDF + OCR (tesseract в Docker)
-pypdf==6.16.1
+pypdf==6.19.0
 pytesseract==0.3.13
 pdf2image==1.17.0
 Pillow==12.3.0
