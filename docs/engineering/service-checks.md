@@ -27,7 +27,8 @@ python3.11 -m venv .venv
 
 Ruff, pytest, smoke imports, pip-audit, npm unit, Chromium E2E и Docker build.
 `./check python`, `./check web`, `./check image` — отдельные части того же набора;
-CI запускает все три параллельно. Сборка создаёт локальный образ invoice-bot:check.
+CI запускает все три параллельно. Сборка создаёт локальный образ invoice-bot:check; remote Docker host/context
+отклоняется до build (приоритет контекста учитывается).
 На Linux один раз установи системные библиотеки браузера: `npm ci && npx playwright install-deps chromium`.
 Аудит обращается к базе уязвимостей, npm/Chromium/Docker могут загружать зависимости.
 

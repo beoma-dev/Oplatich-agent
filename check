@@ -25,7 +25,7 @@ web_checks() {
   npx playwright install chromium
   npm run test:e2e
 }
-image_checks() { docker build -t invoice-bot:check .; }
+image_checks() { "$PYTHON" tools/check_image.py; }
 case "${1:-all}" in
   all) python_checks; web_checks; image_checks ;;
   python) python_checks ;;
