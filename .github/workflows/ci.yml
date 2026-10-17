@@ -26,24 +26,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt ruff pytest pytest-asyncio pip-audit
 
-      # Уязвимости в зависимостях. Раньше проверялось руками и, значит,
-      # когда вспомнишь: pypdf и Pillow разбирают ЗАГРУЖЕННЫЕ пользователем
-      # файлы, и новая CVE там — это чужой файл в нашем процессе. Падение
-      # сборки на этом шаге и есть смысл: увидеть в день публикации.
-      - name: Audit dependencies (pip-audit)
-        run: pip-audit -r requirements.txt
-
-      - name: Lint (ruff)
-        run: ruff check .
-
-      - name: Tests (pytest)
-        # Токен подставляет tests/conftest.py — внешний не нужен.
-        run: pytest -q
-
-      - name: Smoke imports
-        env:
-          TELEGRAM_BOT_TOKEN: "dummy:token"
-        run: python -c "import main, api.server, api.routes, bot.handlers, services.intake"
+      - name: Shared Python check
+        run: ./check python
 
   # Mini App: чистые функции формы и браузерные проверки. Своя установка Node
   # и Chromium — каскад CSS и раскладку из исходника не видно, а именно там
@@ -53,6 +37,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - uses: actions/setup-node@v4
         with:
@@ -61,20 +48,10 @@ jobs:
           node-version: "22"
           cache: npm
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Unit (node --test)
-        # Глоб в package.json стоит БЕЗ кавычек — его разворачивает оболочка,
-        # и это единственный вариант, работающий и на 20, и на 22 (замерено):
-        # каталог принимает только 20, глоб в кавычках — только 22.
-        run: npm test
-
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: E2E (node --test)
-        run: npm run test:e2e
+      - name: Install Chromium system dependencies
+        run: npm ci && npx playwright install-deps chromium
+      - name: Shared Mini App check
+        run: ./check web
 
   # Образ собирается тем же Dockerfile, что и на сервере.
   image:
@@ -82,5 +59,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
       - name: Build
-        run: docker build -t invoice-bot:ci .
+        run: ./check image
