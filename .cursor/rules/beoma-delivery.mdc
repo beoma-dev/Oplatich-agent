@@ -8,3 +8,8 @@ alwaysApply: true
 первый анализ, проработка каждого вопроса автором, повторная проверка ответов,
 исправлений и полного итогового diff. Сохрани журнал и точный base/head.
 Доменные проверки: docs/engineering/service-checks.md. Защиту main не включать.
+
+Каталог задач и skills: docs/engineering/skills.md. Выбирай релевантный skill;
+для реализации — beoma-change, для схемы — beoma-db-change, UI — beoma-ui-check,
+публикации — beoma-release. Если установлен специальный service skill,
+используй его при соответствующей задаче. Все навыки не запускать для каждой правки.

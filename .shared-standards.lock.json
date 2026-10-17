@@ -2,18 +2,27 @@
   "bundles": [
     "common"
   ],
-  "commit": "88a35da855e306b406d117e964f619bf5845d986",
+  "commit": "b12f7376b107ab0fabc2dd89fa9850a8e5c5c932",
   "files": {
+    ".agents/skills/beoma-change/SKILL.md": "0d98dc7f94787e42a14cab3c3d1b10abf0e9cbbda7a22789e580120f18d6098f",
+    ".agents/skills/beoma-db-change/SKILL.md": "04bd08bf3e05409ecbfa822b66722b1b9655e4211c1d08497198c20edd794752",
+    ".agents/skills/beoma-release/SKILL.md": "e61e777d24cac6ee8465574f9063941e3b7e055f47163982faa2d161e999adac",
     ".agents/skills/beoma-review/SKILL.md": "5e8438f72346583592c865945f07968042ec1ebe7246f93ffc89c2e4534d4666",
+    ".agents/skills/beoma-ui-check/SKILL.md": "2e43a554ea4b542e0cdc6bb90c8c26737b86f79d42a79a5412bb5973da79fd91",
+    ".claude/skills/beoma-change/SKILL.md": "0d98dc7f94787e42a14cab3c3d1b10abf0e9cbbda7a22789e580120f18d6098f",
+    ".claude/skills/beoma-db-change/SKILL.md": "04bd08bf3e05409ecbfa822b66722b1b9655e4211c1d08497198c20edd794752",
+    ".claude/skills/beoma-release/SKILL.md": "e61e777d24cac6ee8465574f9063941e3b7e055f47163982faa2d161e999adac",
     ".claude/skills/beoma-review/SKILL.md": "5e8438f72346583592c865945f07968042ec1ebe7246f93ffc89c2e4534d4666",
-    ".cursor/rules/beoma-delivery.mdc": "c3bd5932280a060d3238735424982c0f580fcdf1fc2a8c759600ffe0190ae5bc",
-    "docs/engineering/agent-workflow.md": "509239f854f752ad1f8b076d5289b8b801d8a223a329068c2717ae81d9bb4467",
-    "docs/engineering/shared-standards.md": "8e7edd82420c81e207ce551499c015da8c3115ad1db363e1f7b773beec618594",
-    "tools/shared_standards.py": "9ebd8ea99037fa90b6a1b3f90895d25fb39715d67805454bcc1918360dc8ad50"
+    ".claude/skills/beoma-ui-check/SKILL.md": "2e43a554ea4b542e0cdc6bb90c8c26737b86f79d42a79a5412bb5973da79fd91",
+    ".cursor/rules/beoma-delivery.mdc": "3e6239460944a3add7235fff1919b817af17d22e19d828266b0ceb6fc47bb2df",
+    "docs/engineering/agent-workflow.md": "5f804fb8b4939b0125b6e6be2f3839e12b2caf3f91e0de2743837889de803dca",
+    "docs/engineering/shared-standards.md": "59298493921e4b9c46ed0d2637d2fd00dc7a90ba0be09a6ddebc7f4ef22c2738",
+    "docs/engineering/skills.md": "8aa96a03db3c442853e3fb15c573cd239b92afd0da4720aa30c570b35b19120d",
+    "tools/shared_standards.py": "ef27a809f8e10c401e8142095609de0a1fbc982a6cc1231196457bd1a77e217f"
   },
-  "manifest_sha256": "b9a5b0bfdb2b3728077050984322c20c2d2789aba7ea75f28c1b5adb04765b26",
+  "manifest_sha256": "7efdac14cf78add7fb62d52db53aee601d4d9580a99999c7214e31cb451a3e37",
   "repository": "Oplatich-agent",
-  "schema": 1,
+  "schema": 2,
   "source": "https://github.com/beoma-dev/engineering",
-  "version": "1.0.0"
+  "version": "2.0.0"
 }
