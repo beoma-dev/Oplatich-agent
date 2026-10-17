@@ -1,0 +1,19 @@
+{
+  "bundles": [
+    "common"
+  ],
+  "commit": "88a35da855e306b406d117e964f619bf5845d986",
+  "files": {
+    ".agents/skills/beoma-review/SKILL.md": "5e8438f72346583592c865945f07968042ec1ebe7246f93ffc89c2e4534d4666",
+    ".claude/skills/beoma-review/SKILL.md": "5e8438f72346583592c865945f07968042ec1ebe7246f93ffc89c2e4534d4666",
+    ".cursor/rules/beoma-delivery.mdc": "c3bd5932280a060d3238735424982c0f580fcdf1fc2a8c759600ffe0190ae5bc",
+    "docs/engineering/agent-workflow.md": "509239f854f752ad1f8b076d5289b8b801d8a223a329068c2717ae81d9bb4467",
+    "docs/engineering/shared-standards.md": "8e7edd82420c81e207ce551499c015da8c3115ad1db363e1f7b773beec618594",
+    "tools/shared_standards.py": "9ebd8ea99037fa90b6a1b3f90895d25fb39715d67805454bcc1918360dc8ad50"
+  },
+  "manifest_sha256": "b9a5b0bfdb2b3728077050984322c20c2d2789aba7ea75f28c1b5adb04765b26",
+  "repository": "Oplatich-agent",
+  "schema": 1,
+  "source": "https://github.com/beoma-dev/engineering",
+  "version": "1.0.0"
+}

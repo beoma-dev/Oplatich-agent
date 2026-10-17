@@ -41,3 +41,6 @@ downloads/
 # поэтому пятно узкое: только *.bak*, а не .env.*
 .env.bak*
 *.env.bak
+
+# Versioned receipt of shared agent rules; other local JSON stays ignored.
+!/.shared-standards.lock.json
