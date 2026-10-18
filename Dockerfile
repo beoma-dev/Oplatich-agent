@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 # OCR для автопроверки счетов: Tesseract (rus) + poppler для PDF-сканов.
 RUN apt-get update && apt-get install -y --no-install-recommends \
