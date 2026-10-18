@@ -4,7 +4,7 @@
 # ни одной. Проверяется автоматически: шаг pip-audit в .github/workflows/ci.yml
 # (вручную — python -m pip_audit -r requirements.txt).
 # Telegram Bot (async)
-python-telegram-bot==21.9
+python-telegram-bot==22.8
 
 # Конфигурация и валидация
 pydantic==2.9.2
